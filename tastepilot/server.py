@@ -2,17 +2,33 @@
 
 Kept dependency-free so a judge can run the hosted-demo equivalent with
 nothing but Python 3.11+:  python -m tastepilot serve --port 8765
+
+Routes:
+  GET  /                       demo UI (chat + grouped plan + evidence viewer)
+  GET  /api/health             {"ok": true, "mode": ...}
+  POST /api/plan               {"text": ...} -> full plan result (agent.run)
+  GET  /api/evidence/<id>      one sealed Qloo response from a plan this
+                               server produced, plus its record's hash and
+                               chain validity — the evidence-record viewer
+                               backend. Unknown ids 404; nothing is served
+                               that was not sealed into a plan's record.
 """
 from __future__ import annotations
 
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import unquote, urlparse
+
+from .evidence import qloo_responses, verify_chain
 
 STATIC = Path(__file__).resolve().parent / "static"
 
 
 def make_handler(agent):
+    # response_id -> (record, response) for plans produced by this server.
+    evidence_cache: dict[str, tuple[dict, dict]] = {}
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):  # keep demo logs clean
             pass
@@ -24,18 +40,39 @@ def make_handler(agent):
             self.end_headers()
             self.wfile.write(body)
 
+        def _send_json(self, code, obj):
+            self._send(code, json.dumps(obj, ensure_ascii=False).encode(),
+                       "application/json; charset=utf-8")
+
         def do_GET(self):
-            if self.path in ("/", "/index.html"):
+            path = urlparse(self.path).path
+            if path in ("/", "/index.html"):
                 self._send(200, (STATIC / "index.html").read_bytes(),
                            "text/html; charset=utf-8")
-            elif self.path == "/api/health":
-                self._send(200, json.dumps({"ok": True, "mode": agent.mode}).encode(),
-                           "application/json")
+            elif path == "/api/health":
+                self._send_json(200, {"ok": True, "mode": agent.mode})
+            elif path.startswith("/api/evidence/"):
+                response_id = unquote(path[len("/api/evidence/"):])
+                hit = evidence_cache.get(response_id)
+                if hit is None:
+                    self._send_json(404, {"error": "unknown evidence id"})
+                    return
+                record, response = hit
+                self._send_json(200, {
+                    "response_id": response_id,
+                    "endpoint": response.get("endpoint"),
+                    "source": response.get("source"),
+                    "request": response.get("request"),
+                    "results": response.get("results"),
+                    "record_hash": record.get("record_hash"),
+                    "record_verdict": record.get("verdict"),
+                    "chain_valid": verify_chain(record),
+                })
             else:
                 self._send(404, b"not found", "text/plain")
 
         def do_POST(self):
-            if self.path != "/api/plan":
+            if urlparse(self.path).path != "/api/plan":
                 self._send(404, b"not found", "text/plain")
                 return
             try:
@@ -45,11 +82,12 @@ def make_handler(agent):
                 if not text:
                     raise ValueError("text is required")
                 result = agent.run(text)
-                self._send(200, json.dumps(result, ensure_ascii=False).encode(),
-                           "application/json; charset=utf-8")
+                record = result.get("evidence") or {}
+                for rid, resp in qloo_responses(record).items():
+                    evidence_cache[rid] = (record, resp)
+                self._send_json(200, result)
             except Exception as exc:
-                self._send(400, json.dumps({"error": str(exc)}).encode(),
-                           "application/json")
+                self._send_json(400, {"error": str(exc)})
 
     return Handler
 

@@ -4,15 +4,23 @@
 <meta charset="utf-8">
 <title>TastePilot — a taste-aware planning agent</title>
 <style>
-  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 760px; padding: 0 1rem; }
+  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 820px; padding: 0 1rem; }
   h1 { font-size: 1.5rem; } .sub { color: #555; }
   form { display: flex; gap: .5rem; margin: 1rem 0; }
   input { flex: 1; padding: .6rem; font-size: 1rem; }
   button { padding: .6rem 1rem; font-size: 1rem; cursor: pointer; }
+  h2.domain { font-size: 1.05rem; text-transform: capitalize; margin: 1.2rem 0 .2rem;
+              border-bottom: 2px solid #eee; padding-bottom: .2rem; }
   .card { border: 1px solid #ddd; border-radius: 8px; padding: .8rem 1rem; margin: .6rem 0; }
   .badge { font-size: .75rem; background: #eef6ee; border: 1px solid #9c9; border-radius: 4px; padding: .1rem .4rem; }
+  .badge.bad { background: #fdeeee; border-color: #d99; }
   .why { color: #333; } .meta { color: #777; font-size: .85rem; }
   #status { margin: .5rem 0; color: #555; }
+  .rejected { color: #a33; margin: .6rem 0; }
+  #viewer { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin-top: 1.5rem; display: none; }
+  #viewer pre { background: #f7f7f7; padding: .6rem; overflow-x: auto; font-size: .8rem; }
+  .evlink { color: #2563eb; cursor: pointer; text-decoration: underline; background: none;
+            border: none; padding: 0; font-size: .85rem; }
 </style>
 </head>
 <body>
@@ -25,34 +33,103 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
 </form>
 <div id="status"></div>
 <div id="out"></div>
+<section id="viewer" aria-label="Evidence record viewer">
+  <h2 style="margin-top:0">Evidence record</h2>
+  <div id="evlist"></div>
+  <pre id="evdetail"></pre>
+</section>
 <script>
+const statusEl = document.getElementById('status');
+const out = document.getElementById('out');
+const viewer = document.getElementById('viewer');
+const evlist = document.getElementById('evlist');
+const evdetail = document.getElementById('evdetail');
+
+async function showEvidence(responseId) {
+  evdetail.textContent = 'Loading evidence…';
+  const res = await fetch('/api/evidence/' + encodeURIComponent(responseId));
+  const data = await res.json();
+  evdetail.textContent = res.ok ? JSON.stringify(data, null, 1)
+                                : 'Error: ' + (data.error || res.status);
+}
+
+function card(item) {
+  const div = document.createElement('div');
+  div.className = 'card';
+  const v = item.verification || {};
+  const ok = v.admissible === true;
+  div.innerHTML = `<strong></strong> <span class="badge"></span>
+    <div class="why"></div>
+    <div class="meta"></div>
+    <button type="button" class="evlink">view evidence record</button>`;
+  div.querySelector('strong').textContent = item.entity.name;
+  const badge = div.querySelector('.badge');
+  badge.textContent = ok ? 'Qloo-traced ✓ · checker: ' + v.reason
+                         : 'checker: ' + (v.reason || 'unverified');
+  if (!ok) badge.classList.add('bad');
+  div.querySelector('.why').textContent = item.why;
+  div.querySelector('.meta').textContent =
+    `affinity ${item.affinity.toFixed(2)} · evidence ${item.evidence_ref}` +
+    (v.evidence ? ` · response affinity ${Number(v.evidence.affinity_in_response).toFixed(2)}` : '');
+  div.querySelector('.evlink').addEventListener('click', () => showEvidence(item.evidence_ref));
+  return div;
+}
+
+function renderEvidenceIndex(data) {
+  evlist.innerHTML = '';
+  const calls = (data.evidence.entries || []).filter(e => e.kind === 'qloo_call');
+  if (!calls.length) { viewer.style.display = 'none'; return; }
+  viewer.style.display = 'block';
+  evdetail.textContent = 'Select a response to inspect its sealed record.';
+  const head = document.createElement('div');
+  head.className = 'meta';
+  head.textContent = `${calls.length} sealed Qloo calls · record hash ${data.evidence.record_hash} · verdict ${data.evidence.verdict}`;
+  evlist.appendChild(head);
+  for (const e of calls) {
+    const r = e.response;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'evlink';
+    b.textContent = `${r.endpoint} · ${r.response_id} (${r.results.length} results)`;
+    b.addEventListener('click', () => showEvidence(r.response_id));
+    const row = document.createElement('div');
+    row.appendChild(b);
+    evlist.appendChild(row);
+  }
+}
+
 document.getElementById('f').addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = document.getElementById('q').value;
-  const status = document.getElementById('status');
-  const out = document.getElementById('out');
-  status.textContent = 'Planning…';
+  statusEl.textContent = 'Planning…';
   out.innerHTML = '';
+  viewer.style.display = 'none';
   const res = await fetch('/api/plan', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text})});
   const data = await res.json();
-  if (!res.ok) { status.textContent = 'Error: ' + (data.error || res.status); return; }
-  status.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
-  for (const item of data.items) {
-    const div = document.createElement('div');
-    div.className = 'card';
-    div.innerHTML = `<strong></strong> <span class="badge">Qloo-traced ✓</span>
-      <div class="why"></div>
-      <div class="meta"></div>`;
-    div.querySelector('strong').textContent = `[${item.domain}] ${item.entity.name}`;
-    div.querySelector('.why').textContent = item.why;
-    div.querySelector('.meta').textContent = `affinity ${item.affinity.toFixed(2)} · evidence ${item.evidence_ref}`;
-    out.appendChild(div);
+  if (!res.ok) { statusEl.textContent = 'Error: ' + (data.error || res.status); return; }
+  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
+  const groups = data.groups && data.groups.length
+    ? data.groups
+    : [{domain: 'plan', items: data.items}];
+  for (const group of groups) {
+    const h = document.createElement('h2');
+    h.className = 'domain';
+    h.textContent = group.domain;
+    out.appendChild(h);
+    for (const item of group.items) out.appendChild(card(item));
   }
-  if (data.rejected.length) {
+  if (data.rejected_details && data.rejected_details.length) {
     const div = document.createElement('div');
+    div.className = 'rejected';
+    div.textContent = 'Rejected by the evidence checker: ' +
+      data.rejected_details.map(r => `${r.name} (${r.reason})`).join(', ');
+    out.appendChild(div);
+  } else if (data.rejected.length) {
+    const div = document.createElement('div');
+    div.className = 'rejected';
     div.textContent = 'Rejected by the evidence checker: ' + data.rejected.join(', ');
     out.appendChild(div);
   }
+  renderEvidenceIndex(data);
 });
 </script>
 </body>

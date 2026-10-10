@@ -34,7 +34,20 @@
    ],
    "evidence_ref": "mock:insights:09f39fcb12ed8fac",
    "why": "Qloo's taste graph links A basement jazz bar with natural wine to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.92).",
-   "explanation_source": "template"
+   "explanation_source": "template",
+   "verification": {
+    "item": "A basement jazz bar with natural wine",
+    "entity_id": "fod_jazz_bar_nyc",
+    "domain": "food",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:09f39fcb12ed8fac",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.92
+    }
+   }
   },
   {
    "entity": {
@@ -57,7 +70,20 @@
    ],
    "evidence_ref": "mock:insights:4b3d8bcf04001e3b",
    "why": "Qloo's taste graph links West Village, New York to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.88).",
-   "explanation_source": "template"
+   "explanation_source": "template",
+   "verification": {
+    "item": "West Village, New York",
+    "entity_id": "plc_west_village",
+    "domain": "place",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:4b3d8bcf04001e3b",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.88
+    }
+   }
   },
   {
    "entity": {
@@ -81,7 +107,20 @@
    ],
    "evidence_ref": "mock:insights:f4db3ca15ae4b88d",
    "why": "Qloo's taste graph links Nujabes to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.84).",
-   "explanation_source": "template"
+   "explanation_source": "template",
+   "verification": {
+    "item": "Nujabes",
+    "entity_id": "art_nujabes",
+    "domain": "music",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:f4db3ca15ae4b88d",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.84
+    }
+   }
   },
   {
    "entity": {
@@ -104,19 +143,254 @@
    ],
    "evidence_ref": "mock:insights:e7ba7ad039f3736c",
    "why": "Qloo's taste graph links Lost in Translation to Kind of Blue (Miles Davis) (shared signals: quiet; affinity 0.77).",
-   "explanation_source": "template"
+   "explanation_source": "template",
+   "verification": {
+    "item": "Lost in Translation",
+    "entity_id": "mov_lost_translation",
+    "domain": "film",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:e7ba7ad039f3736c",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.77
+    }
+   }
+  }
+ ],
+ "groups": [
+  {
+   "domain": "food",
+   "items": [
+    {
+     "entity": {
+      "id": "fod_jazz_bar_nyc",
+      "name": "A basement jazz bar with natural wine",
+      "domain": "food",
+      "urn_type": "urn:entity:place",
+      "tags": [
+       "nyc",
+       "jazz",
+       "intimate",
+       "wine"
+      ],
+      "location": "New York"
+     },
+     "domain": "food",
+     "affinity": 0.92,
+     "shared_tags": [
+      "jazz"
+     ],
+     "evidence_ref": "mock:insights:09f39fcb12ed8fac",
+     "why": "Qloo's taste graph links A basement jazz bar with natural wine to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.92).",
+     "explanation_source": "template",
+     "verification": {
+      "item": "A basement jazz bar with natural wine",
+      "entity_id": "fod_jazz_bar_nyc",
+      "domain": "food",
+      "admissible": true,
+      "reason": "ok",
+      "evidence": {
+       "response_id": "mock:insights:09f39fcb12ed8fac",
+       "endpoint": "insights",
+       "source": "mock",
+       "affinity_in_response": 0.92
+      }
+     }
+    }
+   ]
+  },
+  {
+   "domain": "place",
+   "items": [
+    {
+     "entity": {
+      "id": "plc_west_village",
+      "name": "West Village, New York",
+      "domain": "place",
+      "urn_type": "urn:entity:place",
+      "tags": [
+       "nyc",
+       "walking",
+       "jazz",
+       "historic"
+      ],
+      "location": "New York"
+     },
+     "domain": "place",
+     "affinity": 0.88,
+     "shared_tags": [
+      "jazz"
+     ],
+     "evidence_ref": "mock:insights:4b3d8bcf04001e3b",
+     "why": "Qloo's taste graph links West Village, New York to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.88).",
+     "explanation_source": "template",
+     "verification": {
+      "item": "West Village, New York",
+      "entity_id": "plc_west_village",
+      "domain": "place",
+      "admissible": true,
+      "reason": "ok",
+      "evidence": {
+       "response_id": "mock:insights:4b3d8bcf04001e3b",
+       "endpoint": "insights",
+       "source": "mock",
+       "affinity_in_response": 0.88
+      }
+     }
+    }
+   ]
+  },
+  {
+   "domain": "music",
+   "items": [
+    {
+     "entity": {
+      "id": "art_nujabes",
+      "name": "Nujabes",
+      "domain": "music",
+      "urn_type": "urn:entity:artist",
+      "tags": [
+       "jazz",
+       "hip-hop",
+       "japanese",
+       "mellow",
+       "lo-fi"
+      ],
+      "location": null
+     },
+     "domain": "music",
+     "affinity": 0.84,
+     "shared_tags": [
+      "jazz"
+     ],
+     "evidence_ref": "mock:insights:f4db3ca15ae4b88d",
+     "why": "Qloo's taste graph links Nujabes to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.84).",
+     "explanation_source": "template",
+     "verification": {
+      "item": "Nujabes",
+      "entity_id": "art_nujabes",
+      "domain": "music",
+      "admissible": true,
+      "reason": "ok",
+      "evidence": {
+       "response_id": "mock:insights:f4db3ca15ae4b88d",
+       "endpoint": "insights",
+       "source": "mock",
+       "affinity_in_response": 0.84
+      }
+     }
+    }
+   ]
+  },
+  {
+   "domain": "film",
+   "items": [
+    {
+     "entity": {
+      "id": "mov_lost_translation",
+      "name": "Lost in Translation",
+      "domain": "film",
+      "urn_type": "urn:entity:movie",
+      "tags": [
+       "drama",
+       "tokyo",
+       "quiet",
+       "atmospheric"
+      ],
+      "location": null
+     },
+     "domain": "film",
+     "affinity": 0.77,
+     "shared_tags": [
+      "quiet"
+     ],
+     "evidence_ref": "mock:insights:e7ba7ad039f3736c",
+     "why": "Qloo's taste graph links Lost in Translation to Kind of Blue (Miles Davis) (shared signals: quiet; affinity 0.77).",
+     "explanation_source": "template",
+     "verification": {
+      "item": "Lost in Translation",
+      "entity_id": "mov_lost_translation",
+      "domain": "film",
+      "admissible": true,
+      "reason": "ok",
+      "evidence": {
+       "response_id": "mock:insights:e7ba7ad039f3736c",
+       "endpoint": "insights",
+       "source": "mock",
+       "affinity_in_response": 0.77
+      }
+     }
+    }
+   ]
   }
  ],
  "rejected": [],
+ "rejected_details": [],
  "checker": {
   "passed": true,
   "chain_valid": true,
-  "violations": []
+  "violations": [],
+  "items": [
+   {
+    "item": "A basement jazz bar with natural wine",
+    "entity_id": "fod_jazz_bar_nyc",
+    "domain": "food",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:09f39fcb12ed8fac",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.92
+    }
+   },
+   {
+    "item": "West Village, New York",
+    "entity_id": "plc_west_village",
+    "domain": "place",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:4b3d8bcf04001e3b",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.88
+    }
+   },
+   {
+    "item": "Nujabes",
+    "entity_id": "art_nujabes",
+    "domain": "music",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:f4db3ca15ae4b88d",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.84
+    }
+   },
+   {
+    "item": "Lost in Translation",
+    "entity_id": "mov_lost_translation",
+    "domain": "film",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:e7ba7ad039f3736c",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.77
+    }
+   }
+  ]
  },
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-10T12:35:32.343505+00:00",
+  "created_at": "2026-10-10T16:08:51.293740+00:00",
   "verdict": "PASS",
   "entries": [
    {

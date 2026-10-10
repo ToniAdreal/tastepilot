@@ -32,7 +32,20 @@
    "shared_tags": [],
    "evidence_ref": "mock:insights:55bedde15b70952a",
    "why": "Qloo's taste graph links Aesop to Amelie with affinity 0.70.",
-   "explanation_source": "template"
+   "explanation_source": "template",
+   "verification": {
+    "item": "Aesop",
+    "entity_id": "brd_aesop",
+    "domain": "brand",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:55bedde15b70952a",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.7
+    }
+   }
   },
   {
    "entity": {
@@ -56,7 +69,20 @@
    ],
    "evidence_ref": "mock:insights:54f8542c0ade0880",
    "why": "Qloo's taste graph links The Little Prince to Amelie (shared signals: french, whimsical; affinity 0.87).",
-   "explanation_source": "template"
+   "explanation_source": "template",
+   "verification": {
+    "item": "The Little Prince",
+    "entity_id": "bok_little_prince",
+    "domain": "book",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:54f8542c0ade0880",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.87
+    }
+   }
   },
   {
    "entity": {
@@ -78,7 +104,20 @@
    ],
    "evidence_ref": "mock:insights:c5adb07f69c3083a",
    "why": "Qloo's taste graph links Fleetwood Mac to Amelie (shared signals: warm; affinity 0.55).",
-   "explanation_source": "template"
+   "explanation_source": "template",
+   "verification": {
+    "item": "Fleetwood Mac",
+    "entity_id": "art_fleetwood",
+    "domain": "music",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:c5adb07f69c3083a",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.55
+    }
+   }
   },
   {
    "entity": {
@@ -101,19 +140,251 @@
    ],
    "evidence_ref": "mock:insights:c82f762365a87587",
    "why": "Qloo's taste graph links Midnight in Paris to Amelie (shared signals: romance; affinity 0.85).",
-   "explanation_source": "template"
+   "explanation_source": "template",
+   "verification": {
+    "item": "Midnight in Paris",
+    "entity_id": "mov_midnight_paris",
+    "domain": "film",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:c82f762365a87587",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.85
+    }
+   }
+  }
+ ],
+ "groups": [
+  {
+   "domain": "brand",
+   "items": [
+    {
+     "entity": {
+      "id": "brd_aesop",
+      "name": "Aesop",
+      "domain": "brand",
+      "urn_type": "urn:entity:brand",
+      "tags": [
+       "minimal",
+       "botanical",
+       "design",
+       "quiet"
+      ],
+      "location": null
+     },
+     "domain": "brand",
+     "affinity": 0.7,
+     "shared_tags": [],
+     "evidence_ref": "mock:insights:55bedde15b70952a",
+     "why": "Qloo's taste graph links Aesop to Amelie with affinity 0.70.",
+     "explanation_source": "template",
+     "verification": {
+      "item": "Aesop",
+      "entity_id": "brd_aesop",
+      "domain": "brand",
+      "admissible": true,
+      "reason": "ok",
+      "evidence": {
+       "response_id": "mock:insights:55bedde15b70952a",
+       "endpoint": "insights",
+       "source": "mock",
+       "affinity_in_response": 0.7
+      }
+     }
+    }
+   ]
+  },
+  {
+   "domain": "book",
+   "items": [
+    {
+     "entity": {
+      "id": "bok_little_prince",
+      "name": "The Little Prince",
+      "domain": "book",
+      "urn_type": "urn:entity:book",
+      "tags": [
+       "french",
+       "whimsical",
+       "philosophical",
+       "short"
+      ],
+      "location": null
+     },
+     "domain": "book",
+     "affinity": 0.87,
+     "shared_tags": [
+      "french",
+      "whimsical"
+     ],
+     "evidence_ref": "mock:insights:54f8542c0ade0880",
+     "why": "Qloo's taste graph links The Little Prince to Amelie (shared signals: french, whimsical; affinity 0.87).",
+     "explanation_source": "template",
+     "verification": {
+      "item": "The Little Prince",
+      "entity_id": "bok_little_prince",
+      "domain": "book",
+      "admissible": true,
+      "reason": "ok",
+      "evidence": {
+       "response_id": "mock:insights:54f8542c0ade0880",
+       "endpoint": "insights",
+       "source": "mock",
+       "affinity_in_response": 0.87
+      }
+     }
+    }
+   ]
+  },
+  {
+   "domain": "music",
+   "items": [
+    {
+     "entity": {
+      "id": "art_fleetwood",
+      "name": "Fleetwood Mac",
+      "domain": "music",
+      "urn_type": "urn:entity:artist",
+      "tags": [
+       "classic-rock",
+       "warm",
+       "nostalgic"
+      ],
+      "location": null
+     },
+     "domain": "music",
+     "affinity": 0.55,
+     "shared_tags": [
+      "warm"
+     ],
+     "evidence_ref": "mock:insights:c5adb07f69c3083a",
+     "why": "Qloo's taste graph links Fleetwood Mac to Amelie (shared signals: warm; affinity 0.55).",
+     "explanation_source": "template",
+     "verification": {
+      "item": "Fleetwood Mac",
+      "entity_id": "art_fleetwood",
+      "domain": "music",
+      "admissible": true,
+      "reason": "ok",
+      "evidence": {
+       "response_id": "mock:insights:c5adb07f69c3083a",
+       "endpoint": "insights",
+       "source": "mock",
+       "affinity_in_response": 0.55
+      }
+     }
+    }
+   ]
+  },
+  {
+   "domain": "film",
+   "items": [
+    {
+     "entity": {
+      "id": "mov_midnight_paris",
+      "name": "Midnight in Paris",
+      "domain": "film",
+      "urn_type": "urn:entity:movie",
+      "tags": [
+       "romance",
+       "paris",
+       "nostalgic",
+       "literary"
+      ],
+      "location": null
+     },
+     "domain": "film",
+     "affinity": 0.85,
+     "shared_tags": [
+      "romance"
+     ],
+     "evidence_ref": "mock:insights:c82f762365a87587",
+     "why": "Qloo's taste graph links Midnight in Paris to Amelie (shared signals: romance; affinity 0.85).",
+     "explanation_source": "template",
+     "verification": {
+      "item": "Midnight in Paris",
+      "entity_id": "mov_midnight_paris",
+      "domain": "film",
+      "admissible": true,
+      "reason": "ok",
+      "evidence": {
+       "response_id": "mock:insights:c82f762365a87587",
+       "endpoint": "insights",
+       "source": "mock",
+       "affinity_in_response": 0.85
+      }
+     }
+    }
+   ]
   }
  ],
  "rejected": [],
+ "rejected_details": [],
  "checker": {
   "passed": true,
   "chain_valid": true,
-  "violations": []
+  "violations": [],
+  "items": [
+   {
+    "item": "Aesop",
+    "entity_id": "brd_aesop",
+    "domain": "brand",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:55bedde15b70952a",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.7
+    }
+   },
+   {
+    "item": "The Little Prince",
+    "entity_id": "bok_little_prince",
+    "domain": "book",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:54f8542c0ade0880",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.87
+    }
+   },
+   {
+    "item": "Fleetwood Mac",
+    "entity_id": "art_fleetwood",
+    "domain": "music",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:c5adb07f69c3083a",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.55
+    }
+   },
+   {
+    "item": "Midnight in Paris",
+    "entity_id": "mov_midnight_paris",
+    "domain": "film",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:c82f762365a87587",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.85
+    }
+   }
+  ]
  },
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-10T12:35:32.222475+00:00",
+  "created_at": "2026-10-10T16:08:50.944917+00:00",
   "verdict": "PASS",
   "entries": [
    {

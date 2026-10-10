@@ -72,6 +72,23 @@ class TastePilotAgent:
         # Re-run the checker against the final sealed record for the report.
         _, _, final_report = checker.enforce(admissible, record)
         rejected_report = checker.check_plan(items, record) if items else final_report
+        # Per-item verification against the final record, so the UI can
+        # show — for every card — exactly which Qloo response backs it.
+        reports = checker.item_reports(items, record)
+        by_key = {(r["entity_id"], r["item"]): r for r in reports}
+        for item in admissible:
+            rep = by_key.get((item["entity"]["id"], item["entity"]["name"]))
+            item["verification"] = rep
+        rejected_details = [
+            {"name": r["item"], "domain": r["domain"], "reason": r["reason"]}
+            for r in reports if not r["admissible"]]
+        # Plan timeline: items grouped by domain, in the parser's domain
+        # order, so the UI renders sections instead of one flat list.
+        groups = []
+        for domain in parsed.domains:
+            members = [i for i in admissible if i["domain"] == domain]
+            if members:
+                groups.append({"domain": domain, "items": members})
         return {
             "request": text,
             "scenario": parsed.scenario,
@@ -80,9 +97,14 @@ class TastePilotAgent:
             "seeds": seed_names,
             "mode": self.mode,
             "items": admissible,
+            "groups": groups,
             "rejected": [i["entity"]["name"] for i in rejected],
+            "rejected_details": rejected_details,
             "checker": {"passed": final_report["passed"] and bool(admissible),
                         "chain_valid": final_report["chain_valid"],
-                        "violations": rejected_report["violations"]},
+                        "violations": rejected_report["violations"],
+                        "items": [by_key[(i["entity"]["id"],
+                                           i["entity"]["name"])]
+                                  for i in admissible]},
             "evidence": record,
         }

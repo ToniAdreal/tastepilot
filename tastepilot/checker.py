@@ -16,30 +16,63 @@ from .evidence import qloo_responses, verify_chain
 TOLERANCE = 1e-9
 
 
+def check_item(item: dict, record: dict,
+               responses: dict | None = None) -> dict:
+    """Per-item evidence report for one recommendation.
+
+    Returns {"item", "entity_id", "domain", "admissible", "reason",
+    "evidence"} where reason is "ok" for an admissible item or the same
+    violation code check_plan reports, and evidence summarises the cited
+    Qloo response (id, endpoint, source, affinity found in it) so a UI
+    can show a reader exactly what backs — or fails to back — the item.
+    This is a reporting view over the same deterministic rules; it never
+    changes an admissibility decision.
+    """
+    if responses is None:
+        responses = qloo_responses(record)
+    name = item.get("entity", {}).get("name")
+    report = {"item": name, "entity_id": item.get("entity", {}).get("id"),
+              "domain": item.get("domain"), "admissible": False,
+              "reason": "ok", "evidence": None}
+    ref = item.get("evidence_ref")
+    if not ref or ref not in responses:
+        report["reason"] = "missing_or_unknown_evidence_ref"
+        return report
+    resp = responses[ref]
+    report["evidence"] = {"response_id": ref, "endpoint": resp.get("endpoint"),
+                          "source": resp.get("source"),
+                          "affinity_in_response": None}
+    if resp.get("endpoint") != "insights":
+        report["reason"] = "evidence_ref_not_insights"
+        return report
+    match = next((r for r in resp["results"]
+                  if r["entity"]["id"] == item["entity"]["id"]), None)
+    if match is None:
+        report["reason"] = "entity_not_in_qloo_response"
+        return report
+    report["evidence"]["affinity_in_response"] = match["affinity"]
+    if abs(float(match["affinity"]) - float(item["affinity"])) > TOLERANCE:
+        report["reason"] = "affinity_mismatch"
+        return report
+    report["admissible"] = True
+    return report
+
+
+def item_reports(items: list[dict], record: dict) -> list[dict]:
+    """check_item for every item, sharing one response index."""
+    responses = qloo_responses(record)
+    return [check_item(item, record, responses) for item in items]
+
+
 def check_plan(items: list[dict], record: dict) -> dict:
     """Return {"chain_valid": bool, "violations": [...], "passed": bool}."""
     violations: list[dict] = []
     chain_valid = verify_chain(record)
     if not chain_valid:
         violations.append({"item": None, "reason": "evidence_chain_invalid"})
-    responses = qloo_responses(record)
-    for item in items:
-        ref = item.get("evidence_ref")
-        name = item.get("entity", {}).get("name")
-        if not ref or ref not in responses:
-            violations.append({"item": name, "reason": "missing_or_unknown_evidence_ref"})
-            continue
-        resp = responses[ref]
-        if resp.get("endpoint") != "insights":
-            violations.append({"item": name, "reason": "evidence_ref_not_insights"})
-            continue
-        match = next((r for r in resp["results"]
-                      if r["entity"]["id"] == item["entity"]["id"]), None)
-        if match is None:
-            violations.append({"item": name, "reason": "entity_not_in_qloo_response"})
-            continue
-        if abs(float(match["affinity"]) - float(item["affinity"])) > TOLERANCE:
-            violations.append({"item": name, "reason": "affinity_mismatch"})
+    for rep in item_reports(items, record):
+        if not rep["admissible"]:
+            violations.append({"item": rep["item"], "reason": rep["reason"]})
     return {"chain_valid": chain_valid, "violations": violations,
             "passed": chain_valid and not violations}
 

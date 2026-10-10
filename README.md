@@ -44,7 +44,8 @@ tastepilot/
   llm.py       explanation adapters: Nebius/Nemotron + deterministic template
   evidence.py  hash-chained, HMAC-signed evidence records (VerifyGate pattern)
   checker.py   deterministic evidence checker (the invariant enforcer)
-  server.py    stdlib HTTP demo server (chat + itinerary UI, JSON API)
+  server.py    stdlib HTTP demo server (chat + grouped itinerary UI,
+               per-item checker badges, evidence-record viewer endpoint)
   cli.py       plan / verify / serve commands
 tests/         unit + end-to-end tests, all green in mock (Judge) mode
 samples/       sample plans with their sealed evidence records
@@ -80,8 +81,13 @@ only ever sent as the `X-Api-Key` header; it is never logged or printed.
   sealed evidence record, and the checker report. Run the `verify`
   command above against it; then edit any affinity in the file and watch
   verification fail — that is the tamper-evidence working.
-* The web UI shows each recommendation with its affinity score and its
-  evidence reference, plus the checker's verdict for the plan.
+* The web UI groups the plan into a per-domain timeline; each card shows
+  its affinity, its evidence reference, and its own per-item checker
+  report (admissible + the exact reason, with the affinity found in the
+  cited Qloo response). An evidence-record viewer lists every sealed
+  Qloo call behind the plan and opens any of them
+  (`GET /api/evidence/<response_id>`) — request, results, record hash,
+  and chain validity included.
 
 ## Topics (for the public repo)
 
