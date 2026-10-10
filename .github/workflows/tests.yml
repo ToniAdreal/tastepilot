@@ -1,0 +1,28 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install test runner
+        # The application itself is standard-library only; pytest is the
+        # sole test-time dependency.
+        run: python -m pip install --upgrade pip pytest
+      - name: Run the full suite (Judge Mode, zero keys)
+        run: python -m pytest -q
+      - name: Verify the shipped samples against their sealed evidence
+        run: |
+          python -m tastepilot verify --record samples/plan_weekend_kyoto.json
+          python -m tastepilot verify --record samples/plan_gift_amelie.json
+          python -m tastepilot verify --record samples/plan_date_nyc.json

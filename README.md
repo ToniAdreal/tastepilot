@@ -121,6 +121,15 @@ baked into the image or the repo.
   (`GET /api/evidence/<response_id>`) — request, results, record hash,
   and chain validity included.
 
+## Hackathon submission
+
+[SUBMISSION.md](SUBMISSION.md) holds the Devpost submission text
+(project story, build notes, challenges, what's next) with the
+real-mode example, repo URL, and demo URL as marked slots to fill from
+the final runs before submitting. CI (`.github/workflows/tests.yml`)
+runs the full suite plus a `verify` pass over every shipped sample on
+Python 3.11 and 3.12.
+
 ## Topics (for the public repo)
 
 `qloo` `taste-ai` `agentic-ai` `recommender-systems` `evidence-verification`
