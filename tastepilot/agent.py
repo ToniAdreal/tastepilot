@@ -180,6 +180,8 @@ class TastePilotAgent:
             "seed_lists": parsed.seed_lists,
             "schedule": parsed.leg_dates,
             "date_warnings": parsed.date_warnings,
+            "transfers": parsed.transfers,
+            "travel_warnings": parsed.travel_warnings,
             "mode": self.mode,
             "explainer": explainer_summary,
             "items": admissible,

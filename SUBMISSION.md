@@ -50,6 +50,12 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    mentioned, the plan reports per-leg start/end/nights, and
    out-of-order, overlapping, or reversed legs are surfaced as
    schedule warnings — never silently repaired, never blocking.
+   Each leg change also passes an inter-leg travel-time feasibility
+   check: an offline door-to-door estimate (great-circle distance
+   between the leg cities; surface travel under 400 km, air travel
+   above) is compared against the window the schedule leaves for the
+   transfer, and tight or physically impossible transfers surface
+   as travel warnings in the same report-never-repair shape.
 3. **Calls Qloo** — seeds are resolved with `GET /search`, and
    cross-domain recommendations come from `GET /v2/insights`
    (`filter.type` + `signal.interests.entities`). Qloo is load-bearing:
@@ -141,8 +147,9 @@ stops being a liability and becomes pure upside.
 - Direct imports from external taste accounts (a Spotify playlist, a
   Letterboxd watchlist) feeding the same evidence-checked loop, on top
   of the built paste-a-list capture.
-- Inter-leg travel-time feasibility: checking the built date-aware
-  schedule against realistic transfer times between leg cities.
+- Live timetable data — real flight and train schedules replacing
+  the built offline transfer estimates behind the same feasibility
+  interface.
 - Account-owned share management (per-user link lists and dashboards)
   on top of the built expiry/revocation/persistence primitives.
 

@@ -43,6 +43,12 @@ tastepilot/
                multi-city legs: every city mentioned, in mention order —
                and date-aware legs: explicit / range / relative dates
                attached per leg, with ordering + pacing warnings)
+  travel.py    inter-leg travel-time feasibility: offline door-to-door
+               transfer estimates (haversine distance between leg
+               cities; surface under 400 km, air above) checked
+               against the schedule window each transfer is left —
+               ok / tight / infeasible / unknown, warnings surfaced
+               in the same report-never-repair shape as date warnings
   qloo.py      Qloo adapter: real client (hackathon API, X-Api-Key; bounded
                retries on 429/5xx + network errors, every failure surfaces
                as QlooError; tolerant payload-envelope parsing) + mock client
@@ -165,6 +171,19 @@ baked into the image or the repo.
   never block the plan. Dates are composition constraints only — the
   Qloo API has no date filter, so no date is ever sent to it; the
   evidence invariant is untouched.
+* Legs also pass a travel-time feasibility check: each inter-leg
+  transfer gets an offline door-to-door estimate (haversine distance
+  between the leg cities — surface travel under 400 km, air travel
+  with a flat airport overhead above that) compared against the
+  window the schedule leaves it (a next-day start leaves 24 h, a
+  same-day start 12 h, a start before the previous leg ends 0 h).
+  The plan reports `transfers` (estimate, window, and an
+  `ok`/`tight`/`infeasible`/`unknown` status — unknown when a leg
+  has no dates or a city has no coordinates, never guessed) plus
+  `travel_warnings` for tight or infeasible transfers, in the same
+  shape as `date_warnings`. Like dates, estimates are composition
+  constraints only: reported, never silently repaired, never
+  blocking, and never sent to Qloo.
 * Seeds can arrive as a pasted list, not just prose: a request like
   *"a weekend in Kyoto. Watchlist: Spirited Away, An Obscure Reel.
   Playlist: Kind of Blue; Bon Iver"* contributes every list item as a

@@ -43,6 +43,14 @@ and the raw date text it used; cross-leg problems are reported as
 ``end_before_start``) instead of being silently repaired. Dates are
 composition constraints only — the Qloo API has no date filter, so
 nothing date-shaped is ever sent to it.
+
+Inter-leg travel-time feasibility: the schedule is also checked
+against offline door-to-door transfer estimates between leg cities
+(see ``travel``): the parser reports ``transfers`` (one estimate per
+consecutive pair of legs, with its schedule window and an
+``ok``/``tight``/``infeasible``/``unknown`` status) and
+``travel_warnings`` for tight or infeasible transfers — same
+report-never-repair doctrine as ``date_warnings``.
 """
 from __future__ import annotations
 
@@ -52,6 +60,7 @@ from datetime import date as _date
 from datetime import timedelta
 
 from . import fixtures
+from .travel import assess_transfers
 
 CITIES = ["Kyoto", "New York", "NYC", "Paris", "Tokyo", "London",
           "Los Angeles", "Berlin", "Seoul", "Osaka"]
@@ -113,6 +122,14 @@ class ParsedRequest:
     leg_dates: list[dict] = field(default_factory=list)
     # Cross-leg schedule problems: [{"code", "location", "detail"}].
     date_warnings: list[dict] = field(default_factory=list)
+    # Inter-leg transfer estimates (see travel.assess_transfers):
+    # [{"from", "to", "distance_km", "mode", "travel_hours",
+    # "gap_days", "window_hours", "status", "detail"}].
+    transfers: list[dict] = field(default_factory=list)
+    # Tight / infeasible transfers, same shape as date_warnings:
+    # [{"code", "location", "detail"}] with codes transfer_tight /
+    # transfer_infeasible.
+    travel_warnings: list[dict] = field(default_factory=list)
 
 
 def _clean_list_item(raw: str) -> str | None:
@@ -428,9 +445,12 @@ def parse_request(text: str,
             seed_names.append(q)
     leg_dates, date_warnings = assign_leg_dates(
         text, locations, reference_date or _date.today())
+    transfers, travel_warnings = assess_transfers(leg_dates)
     return ParsedRequest(text=text, scenario=scenario,
                          domains=list(SCENARIOS[scenario]["domains"]),
                          location=location, locations=locations,
                          seed_names=seed_names, quoted=quoted,
                          seed_lists=seed_lists, leg_dates=leg_dates,
-                         date_warnings=date_warnings)
+                         date_warnings=date_warnings,
+                         transfers=transfers,
+                         travel_warnings=travel_warnings)

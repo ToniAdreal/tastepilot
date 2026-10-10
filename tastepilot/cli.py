@@ -141,6 +141,12 @@ def main(argv: list[str] | None = None) -> int:
     for warning in result.get("date_warnings", []):
         print(f"  schedule warning [{warning['code']}] "
               f"{warning['location'] or 'anywhere'}: {warning['detail']}")
+    for transfer in result.get("transfers", []):
+        print(f"  transfer: {transfer['detail']} "
+              f"· status={transfer['status']}")
+    for warning in result.get("travel_warnings", []):
+        print(f"  travel warning [{warning['code']}] "
+              f"{warning['location'] or 'anywhere'}: {warning['detail']}")
     for item in result["items"]:
         print(f"  [{item['domain']}] {item['entity']['name']} "
               f"(affinity {item['affinity']:.2f}) — {item['why']}")

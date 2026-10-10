@@ -201,7 +201,13 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   const warnSum = data.date_warnings && data.date_warnings.length
     ? ` · Schedule warnings: ${data.date_warnings.length}`
     : '';
-  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${legsSum}${warnSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
+  const transferSum = data.transfers && data.transfers.length
+    ? ` · Transfers: ${data.transfers.map(t => `${t.from} → ${t.to} ~${t.travel_hours}h (${t.status})`).join(', ')}`
+    : '';
+  const travelWarnSum = data.travel_warnings && data.travel_warnings.length
+    ? ` · Travel warnings: ${data.travel_warnings.length}`
+    : '';
+  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${legsSum}${warnSum}${transferSum}${travelWarnSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
   const renderGroups = (groups) => {
     for (const group of groups) {
       const h = document.createElement('h3');
@@ -231,6 +237,20 @@ document.getElementById('f').addEventListener('submit', async (e) => {
     div.className = 'rejected';
     div.textContent = 'Schedule warnings: ' +
       data.date_warnings.map(w => `${w.code} (${w.location || 'anywhere'}): ${w.detail}`).join('; ');
+    out.appendChild(div);
+  }
+  if (data.transfers && data.transfers.length) {
+    const div = document.createElement('div');
+    div.className = 'meta';
+    div.textContent = 'Inter-leg transfers (offline door-to-door estimates): ' +
+      data.transfers.map(t => `${t.detail} — ${t.status}`).join('; ');
+    out.appendChild(div);
+  }
+  if (data.travel_warnings && data.travel_warnings.length) {
+    const div = document.createElement('div');
+    div.className = 'rejected';
+    div.textContent = 'Travel warnings: ' +
+      data.travel_warnings.map(w => `${w.code} (${w.location || 'anywhere'}): ${w.detail}`).join('; ');
     out.appendChild(div);
   }
   if (data.rejected_details && data.rejected_details.length) {

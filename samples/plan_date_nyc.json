@@ -25,6 +25,8 @@
   }
  ],
  "date_warnings": [],
+ "transfers": [],
+ "travel_warnings": [],
  "mode": "mock",
  "explainer": {
   "source": "template",
@@ -635,7 +637,7 @@
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-10T21:39:59.881877+00:00",
+  "created_at": "2026-10-10T22:08:35.185078+00:00",
   "verdict": "PASS",
   "entries": [
    {
