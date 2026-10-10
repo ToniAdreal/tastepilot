@@ -58,7 +58,11 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    recommendation. And because a plan is just JSON, anyone can audit
    one they did not produce: the UI's "Verify a shared plan" panel
    recomputes the chain and every checker verdict from the sealed
-   record alone — the record's own verdict is never trusted.
+   record alone — the record's own verdict is never trusted. Plans
+   also travel as shareable verification links: a plan can be stored
+   under a content-addressed id, and anyone opening the link gets the
+   plan back with its verification recomputed — storing grants a plan
+   no trust, so a tampered shared plan still fails by link.
 
 **[FINALIZE: one real-mode example — a plan produced against the live
 Qloo API, with its item count and checker verdict.]**
@@ -123,8 +127,8 @@ stops being a liability and becomes pure upside.
 - Richer seed capture (paste a playlist, a reading list, a watchlist)
   feeding the same evidence-checked loop.
 - Multi-city trip composition with per-leg taste continuity.
-- Shareable verification links, so a plan's audit result travels with
-  the plan instead of needing the JSON pasted by hand.
+- Persistent shared-plan storage with expiry and revocation, so
+  verification links outlive the demo process that issued them.
 
 ## Built with
 

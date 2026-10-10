@@ -53,6 +53,10 @@ the reason recorded (the demo never goes down because the LLM did).
    UI's "Verify a shared plan" panel → `PASS` with every item `ok`;
    edit one affinity in the pasted JSON and re-verify → `FAIL` with
    `affinity_mismatch`.
+6. Share-link probe: create a shareable link for a generated plan (or
+   for the pasted sample) and open it in a fresh tab → the shared plan
+   loads with its verification recomputed to `PASS`. (Links live in the
+   server process — a restart clears them, oldest-evicted after 128.)
 
 ## Notes
 

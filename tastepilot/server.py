@@ -20,6 +20,19 @@ Routes:
                                back as an untrusted claim, never used.
                                This is how anyone holding a shared plan
                                JSON re-checks it in the browser.
+  POST /api/share              a plan JSON (same shape as /api/verify)
+                               -> {"share_id", "url", "verify_url"}: the
+                               plan is stored under a content-addressed
+                               id (SHA-256 of its canonical JSON), so
+                               anyone with the link /?share=<id> can
+                               fetch and re-verify it without pasting
+                               JSON by hand. Storing never trusts the
+                               plan: verification is always recomputed.
+  GET  /api/share/<id>         the stored plan JSON (404 if unknown or
+                               evicted from the bounded share store).
+  GET  /api/share/<id>/verify  the recomputed chain + per-item checker
+                               verdict for the stored plan — exactly the
+                               /api/verify report, plus the share id.
 
 Hardening (Oct 21–24 milestone):
   * Request bodies are capped (``MAX_BODY_BYTES``) and plan text is capped
@@ -31,13 +44,17 @@ Hardening (Oct 21–24 milestone):
     no-referrer, a CSP that only allows this page's own inline UI code)
     and API responses are ``Cache-Control: no-store``.
   * The evidence cache is bounded (``MAX_EVIDENCE_RECORDS``, oldest
-    evicted first) so a long-lived hosted demo cannot grow without limit.
+    evicted first) so a long-lived hosted demo cannot grow without limit;
+    the shared-plan store behind verification links is bounded the same
+    way (``MAX_SHARED_PLANS``).
   * ``serve()`` takes an explicit host: local runs keep the safe
     127.0.0.1 default; hosted deployments pass ``--host 0.0.0.0`` and the
     port from the platform's ``PORT`` env var (see DEPLOY.md).
 """
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -55,6 +72,8 @@ MAX_VERIFY_BODY_BYTES = 524_288  # a submitted plan + sealed record (~25 KiB
                                  # but stays bounded like every other input
 MAX_TEXT_CHARS = 2_000           # matches the agent-level guard
 MAX_EVIDENCE_RECORDS = 512       # sealed responses kept for the viewer
+MAX_SHARED_PLANS = 128           # shared plans kept for link verification
+MAX_SHARE_BODY_BYTES = MAX_VERIFY_BODY_BYTES  # a shared plan is a plan
 
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
@@ -67,10 +86,65 @@ SECURITY_HEADERS = {
 }
 
 
-def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS):
+def share_id_for(payload: dict) -> str:
+    """Content-addressed id for a plan payload: SHA-256 (truncated to
+    32 hex chars) of its canonical JSON. Identical plans share an id —
+    storing the same plan twice is idempotent — and the id reveals
+    nothing beyond the plan itself, which the link holder can fetch."""
+    canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False,
+                           separators=(",", ":")).encode()
+    return hashlib.sha256(canonical).hexdigest()[:32]
+
+
+def validate_plan_payload(payload) -> str | None:
+    """Shape gate shared by /api/verify and /api/share.
+
+    Returns an error string for a malformed payload, else None. This is
+    a shape check only — it never judges the plan's evidence, which the
+    checker recomputes separately on every read."""
+    if not isinstance(payload, dict):
+        return "plan must be a JSON object"
+    record = payload.get("evidence", payload)
+    if not isinstance(record, dict) or \
+            not isinstance(record.get("entries"), list):
+        return "evidence record missing or malformed"
+    items = payload.get("items", [])
+    if not isinstance(items, list) or \
+            any(not isinstance(i, dict) for i in items):
+        return "items must be a list of objects"
+    return None
+
+
+def verification_report(payload: dict) -> dict:
+    """Recompute the chain + per-item checker verdict for a payload.
+
+    The payload must already have passed validate_plan_payload. The
+    record's own verdict field is echoed only as an untrusted claim.
+    Raises the checker's malformed-input errors for the caller to map
+    to a 400."""
+    record = payload.get("evidence", payload)
+    items = payload.get("items", [])
+    report = check_plan(items, record)
+    return {
+        "chain_valid": report["chain_valid"],
+        "passed": report["passed"],
+        "violations": report["violations"],
+        "items": item_reports(items, record),
+        "item_count": len(items),
+        "sealed_responses": len(qloo_responses(record)),
+        "record_verdict": record.get("verdict"),
+    }
+
+
+def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
+                 max_shared_plans: int = MAX_SHARED_PLANS):
     # response_id -> (record, response) for plans produced by this server,
     # bounded FIFO: the oldest sealed responses are evicted first.
     evidence_cache: OrderedDict[str, tuple[dict, dict]] = OrderedDict()
+    # share_id -> plan payload, bounded FIFO like the evidence cache: a
+    # long-lived hosted demo cannot accumulate shared plans without
+    # limit, and an evicted id simply 404s like an unknown one.
+    shared_plans: OrderedDict[str, dict] = OrderedDict()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):  # keep demo logs clean
@@ -99,6 +173,27 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS):
             elif path == "/api/health":
                 self._send_json(200, {"ok": True, "mode": agent.mode,
                                       "explainer": agent.explainer_info})
+            elif path.startswith("/api/share/"):
+                rest = unquote(path[len("/api/share/"):])
+                want_verify = rest.endswith("/verify")
+                share_id = rest[:-len("/verify")] if want_verify else rest
+                plan = shared_plans.get(share_id)
+                if plan is None or "/" in share_id:
+                    self._send_json(404, {"error": "unknown share id"})
+                    return
+                shared_plans.move_to_end(share_id)
+                if not want_verify:
+                    self._send_json(200, plan)
+                    return
+                try:
+                    report = verification_report(plan)
+                except (KeyError, TypeError, ValueError, AttributeError,
+                        IndexError):
+                    self._send_json(400, {"error": "malformed plan or "
+                                                   "evidence record"})
+                    return
+                report["share_id"] = share_id
+                self._send_json(200, report)
             elif path.startswith("/api/evidence/"):
                 response_id = unquote(path[len("/api/evidence/"):])
                 hit = evidence_cache.get(response_id)
@@ -144,47 +239,68 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS):
             except (json.JSONDecodeError, UnicodeDecodeError):
                 self._send_json(400, {"error": "invalid JSON body"})
                 return
-            if not isinstance(payload, dict):
-                self._send_json(400, {"error": "plan must be a JSON object"})
-                return
-            record = payload.get("evidence", payload)
-            items = payload.get("items", [])
-            if not isinstance(record, dict) or \
-                    not isinstance(record.get("entries"), list):
-                self._send_json(400,
-                                {"error": "evidence record missing or malformed"})
-                return
-            if not isinstance(items, list) or \
-                    any(not isinstance(i, dict) for i in items):
-                self._send_json(400,
-                                {"error": "items must be a list of objects"})
+            error = validate_plan_payload(payload)
+            if error is not None:
+                self._send_json(400, {"error": error})
                 return
             try:
-                report = check_plan(items, record)
-                reports = item_reports(items, record)
-                sealed = len(qloo_responses(record))
+                report = verification_report(payload)
             except (KeyError, TypeError, ValueError, AttributeError,
                     IndexError):
                 self._send_json(400,
                                 {"error": "malformed plan or evidence record"})
                 return
-            self._send_json(200, {
-                "chain_valid": report["chain_valid"],
-                "passed": report["passed"],
-                "violations": report["violations"],
-                "items": reports,
-                "item_count": len(items),
-                "sealed_responses": sealed,
-                # Informational only: what the record claims about
-                # itself. The verdicts above are recomputed, never read
-                # from this field.
-                "record_verdict": record.get("verdict"),
+            # Informational only: record_verdict is what the record
+            # claims about itself. The verdicts above are recomputed,
+            # never read from that field.
+            self._send_json(200, report)
+
+        def _handle_share(self):
+            """Store a plan under its content-addressed share id.
+
+            The payload is untrusted input, held to exactly the verify
+            endpoint's caps and shape gate. Storing grants the plan no
+            trust: every fetch-by-link verification recomputes the
+            chain and checker verdicts from the sealed record."""
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_SHARE_BODY_BYTES:
+                self._send_json(413, {"error": "plan too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            error = validate_plan_payload(payload)
+            if error is not None:
+                self._send_json(400, {"error": error})
+                return
+            share_id = share_id_for(payload)
+            shared_plans[share_id] = copy.deepcopy(payload)
+            shared_plans.move_to_end(share_id)
+            while len(shared_plans) > max_shared_plans:
+                shared_plans.popitem(last=False)
+            self._send_json(201, {
+                "share_id": share_id,
+                "url": f"/?share={share_id}",
+                "verify_url": f"/api/share/{share_id}/verify",
             })
 
         def do_POST(self):
             path = urlparse(self.path).path
             if path == "/api/verify":
                 self._handle_verify()
+                return
+            if path == "/api/share":
+                self._handle_share()
                 return
             if path != "/api/plan":
                 self._send(404, b"not found", "text/plain")

@@ -35,6 +35,7 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
   <button type="submit">Plan</button>
 </form>
 <div id="status"></div>
+<div style="margin:.5rem 0"><button type="button" id="sharebtn" style="display:none">Create shareable verification link</button> <span id="shareout" class="meta"></span></div>
 <div id="out"></div>
 <section id="viewer" aria-label="Evidence record viewer">
   <h2 style="margin-top:0">Evidence record</h2>
@@ -49,7 +50,11 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
   own verdict is never trusted. Edit any affinity in the pasted JSON and
   watch verification fail.</p>
   <textarea id="vtext" rows="6" placeholder='{"items": [...], "evidence": {...}}'></textarea>
-  <div style="margin-top:.5rem"><button type="button" id="vbtn">Verify plan</button></div>
+  <div style="margin-top:.5rem"><button type="button" id="vbtn">Verify plan</button>
+  <button type="button" id="sbtn">Create shareable link for this plan</button></div>
+  <p class="meta">A shareable link stores the plan on this server under a
+  content-addressed id; anyone opening it gets the plan back with its
+  verification recomputed — the audit travels with the plan, no pasting.</p>
   <div id="vout"></div>
 </section>
 <script>
@@ -58,6 +63,48 @@ const out = document.getElementById('out');
 const viewer = document.getElementById('viewer');
 const evlist = document.getElementById('evlist');
 const evdetail = document.getElementById('evdetail');
+const sharebtn = document.getElementById('sharebtn');
+const shareout = document.getElementById('shareout');
+let lastPlan = null;
+
+async function createShareLink(payload) {
+  const res = await fetch('/api/share', {method: 'POST',
+    headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.status);
+  return location.origin + data.url;
+}
+
+function showShareLink(el, link) {
+  el.textContent = 'Shareable verification link: ';
+  const a = document.createElement('a');
+  a.href = link; a.textContent = link;
+  el.appendChild(a);
+}
+
+sharebtn.addEventListener('click', async () => {
+  if (!lastPlan) return;
+  shareout.textContent = 'Creating link…';
+  try { showShareLink(shareout, await createShareLink(lastPlan)); }
+  catch (err) { shareout.textContent = 'Error: ' + err.message; }
+});
+
+function verifyLines(data) {
+  const lines = [
+    `Verification: ${data.passed ? 'PASS' : 'FAIL'} · evidence chain valid: ${data.chain_valid}` +
+    ` · ${data.item_count} item(s) against ${data.sealed_responses} sealed Qloo response(s)` +
+    (data.record_verdict ? ` · record claims verdict: ${data.record_verdict} (recomputed, not trusted)` : ''),
+  ];
+  for (const r of data.items) {
+    lines.push(`${r.admissible ? '✓' : '✗'} ${r.item} (${r.domain}) — checker: ${r.reason}`);
+  }
+  for (const v of data.violations) {
+    if (v.item === null || !data.items.some(r => r.item === v.item)) {
+      lines.push(`✗ ${v.reason}`);
+    }
+  }
+  return lines;
+}
 
 async function showEvidence(responseId) {
   evdetail.textContent = 'Loading evidence…';
@@ -125,6 +172,9 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   const res = await fetch('/api/plan', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text})});
   const data = await res.json();
   if (!res.ok) { statusEl.textContent = 'Error: ' + (data.error || res.status); return; }
+  lastPlan = data;
+  sharebtn.style.display = '';
+  shareout.textContent = '';
   const exSum = data.explainer
     ? ` · Explanations: ${data.explainer.source}` +
       (data.explainer.model ? ` (${data.explainer.model})` : '') +
@@ -164,21 +214,38 @@ document.getElementById('vbtn').addEventListener('click', async () => {
     headers: {'Content-Type': 'application/json'}, body: raw});
   const data = await res.json();
   if (!res.ok) { vout.textContent = 'Error: ' + (data.error || res.status); return; }
-  const lines = [
-    `Verification: ${data.passed ? 'PASS' : 'FAIL'} · evidence chain valid: ${data.chain_valid}` +
-    ` · ${data.item_count} item(s) against ${data.sealed_responses} sealed Qloo response(s)` +
-    (data.record_verdict ? ` · record claims verdict: ${data.record_verdict} (recomputed, not trusted)` : ''),
-  ];
-  for (const r of data.items) {
-    lines.push(`${r.admissible ? '✓' : '✗'} ${r.item} (${r.domain}) — checker: ${r.reason}`);
-  }
-  for (const v of data.violations) {
-    if (v.item === null || !data.items.some(r => r.item === v.item)) {
-      lines.push(`✗ ${v.reason}`);
-    }
-  }
-  vout.textContent = lines.join('\n');
+  vout.textContent = verifyLines(data).join('\n');
 });
+
+document.getElementById('sbtn').addEventListener('click', async () => {
+  const vout = document.getElementById('vout');
+  let payload;
+  try { payload = JSON.parse(document.getElementById('vtext').value); }
+  catch (err) { vout.textContent = 'Error: invalid JSON — paste a plan first.'; return; }
+  vout.textContent = 'Creating link…';
+  try {
+    vout.textContent = '';
+    showShareLink(vout, await createShareLink(payload));
+  } catch (err) { vout.textContent = 'Error: ' + err.message; }
+});
+
+// Opening a shareable link (/?share=<id>): fetch the stored plan, fill
+// the verify box with it, and show its recomputed verification.
+(async () => {
+  const shareId = new URLSearchParams(location.search).get('share');
+  if (!shareId) return;
+  const vout = document.getElementById('vout');
+  vout.textContent = 'Loading shared plan…';
+  const planRes = await fetch('/api/share/' + encodeURIComponent(shareId));
+  const plan = await planRes.json();
+  if (!planRes.ok) { vout.textContent = 'Error: ' + (plan.error || planRes.status); return; }
+  document.getElementById('vtext').value = JSON.stringify(plan);
+  const res = await fetch('/api/share/' + encodeURIComponent(shareId) + '/verify');
+  const data = await res.json();
+  if (!res.ok) { vout.textContent = 'Error: ' + (data.error || res.status); return; }
+  vout.textContent = 'Shared plan ' + shareId + '\n' + verifyLines(data).join('\n');
+  document.getElementById('verifybox').scrollIntoView();
+})();
 </script>
 </body>
 </html>

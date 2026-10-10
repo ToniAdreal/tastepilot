@@ -49,8 +49,10 @@ tastepilot/
   server.py    stdlib HTTP demo server (chat + grouped itinerary UI,
                per-item checker badges, explanation provenance,
                evidence-record viewer endpoint, browser plan-verification
-               endpoint for shared plan JSON; hardened: input caps,
-               security headers, bounded evidence cache, leak-free 500s)
+               endpoint for shared plan JSON, shareable verification
+               links (content-addressed plan store, verify-by-link);
+               hardened: input caps, security headers, bounded caches,
+               leak-free 500s)
   smoke.py     real-mode smoke check: one search + one insights call,
                payload-shape validation, both sealed + chain re-verified
   cli.py       plan / smoke / verify / serve commands
@@ -139,6 +141,14 @@ baked into the image or the repo.
   as an untrusted claim, never used). Submitted records are untrusted
   input — size-capped, shape-validated, and malformed records get a 400,
   never a crash.
+* Plans also travel as shareable verification links: `POST /api/share`
+  stores a plan under a content-addressed id (SHA-256 of its canonical
+  JSON — storing the same plan twice is idempotent), and opening
+  `/?share=<id>` fetches it back (`GET /api/share/<id>`) with its
+  verification recomputed (`GET /api/share/<id>/verify`). The store is
+  bounded (128 plans, oldest evicted — an evicted link simply 404s),
+  and storing a plan grants it no trust: a tampered stored plan still
+  FAILs by link, with its claimed verdict echoed as a claim only.
 
 ## Hackathon submission
 
