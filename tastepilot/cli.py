@@ -1,6 +1,7 @@
 """TastePilot CLI.
 
   python -m tastepilot plan "<request>" [--mode mock|real|auto] [--out plan.json]
+                             [--import-file taste-export.csv|json|txt ...]
   python -m tastepilot smoke [--mode real|auto|mock] [--query Q] [--domain D]
                              [--out smoke.json]
   python -m tastepilot verify --record plan.json
@@ -27,6 +28,7 @@ from pathlib import Path
 from .agent import TastePilotAgent
 from .checker import check_plan
 from .evidence import verify_chain
+from .imports import load_import
 from .llm import NebiusExplainer, TemplateExplainer
 from .models import DOMAIN_URNS
 from .qloo import QlooError, make_client
@@ -46,6 +48,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("text")
     p.add_argument("--mode", default="mock", choices=["mock", "real", "auto"])
     p.add_argument("--llm", default="template", choices=["template", "nebius"])
+    p.add_argument("--import-file", action="append", default=[],
+                   dest="import_files", metavar="FILE",
+                   help="import seeds from an exported taste file "
+                        "(Spotify JSON / Letterboxd or Goodreads CSV / "
+                        "generic CSV, JSON, or text list); repeatable")
     p.add_argument("--out")
     k = sub.add_parser("smoke")
     k.add_argument("--mode", default="real", choices=["mock", "real", "auto"])
@@ -117,8 +124,15 @@ def main(argv: list[str] | None = None) -> int:
     except QlooError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    imported = []
+    for import_path in getattr(args, "import_files", []) or []:
+        try:
+            imported.append(load_import(import_path))
+        except ValueError as exc:
+            print(f"error: import failed: {exc}", file=sys.stderr)
+            return 2
     try:
-        result = agent.run(args.text)
+        result = agent.run(args.text, imported=imported)
     except QlooError as exc:
         # A live-API failure mid-plan (after the client's retries) is a
         # clean error + exit 2, never a traceback — same contract as the
@@ -132,6 +146,9 @@ def main(argv: list[str] | None = None) -> int:
           f"items={len(result['items'])} rejected={len(result['rejected'])} "
           f"checker_passed={result['checker']['passed']} "
           f"chain_valid={result['checker']['chain_valid']}")
+    for imp in result.get("imports", []):
+        print(f"  import: {imp['source_file']} ({imp['format']}) "
+              f"— {len(imp['items'])} seed(s)")
     for entry in result.get("schedule", []):
         if entry.get("start"):
             print(f"  schedule: {entry['location'] or 'anywhere'} "

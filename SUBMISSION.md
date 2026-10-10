@@ -38,7 +38,12 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    the seed entities you named. Seeds can also arrive as a pasted
    list — a watchlist, a playlist, a reading list — and every item
    becomes a seed, including titles outside the demo catalogue, which
-   are passed verbatim to Qloo search.
+   are passed verbatim to Qloo search. Seeds can also arrive as an
+   exported taste file the user downloaded from their own accounts —
+   a Spotify playlist export, a Letterboxd watchlist CSV, a Goodreads
+   library CSV (or a generic CSV/JSON/text list) — parsed entirely
+   offline by `plan --import-file`, with the file's format and items
+   recorded as provenance in the plan; no account login is involved.
 2. **Plans** by decomposing the scenario into taste domains (film,
    music, food, places, books, brands, destinations). A request naming
    several cities composes a multi-city trip: each city is a leg,
@@ -144,9 +149,9 @@ stops being a liability and becomes pure upside.
 
 ## What's next for TastePilot
 
-- Direct imports from external taste accounts (a Spotify playlist, a
-  Letterboxd watchlist) feeding the same evidence-checked loop, on top
-  of the built paste-a-list capture.
+- Live connections to external taste accounts (OAuth-linked Spotify /
+  Letterboxd sync) on top of the built export-file imports, so seeds
+  refresh themselves instead of arriving as a downloaded file.
 - Live timetable data — real flight and train schedules replacing
   the built offline transfer estimates behind the same feasibility
   interface.

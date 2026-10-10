@@ -71,6 +71,11 @@ tastepilot/
                leak-free 500s)
   smoke.py     real-mode smoke check: one search + one insights call,
                payload-shape validation, both sealed + chain re-verified
+  imports.py   external taste-file imports: Spotify playlist-export JSON,
+               Letterboxd / Goodreads CSV, generic CSV/JSON/text lists —
+               parsed offline (no account login, no network) into seeds
+               with format + item provenance; size/item caps, categorised
+               errors, basename-only recording
   cli.py       plan / smoke / verify / serve commands
 tests/         unit + end-to-end tests, all green in mock (Judge) mode
 samples/       sample plans with their sealed evidence records
@@ -184,6 +189,21 @@ baked into the image or the repo.
   shape as `date_warnings`. Like dates, estimates are composition
   constraints only: reported, never silently repaired, never
   blocking, and never sent to Qloo.
+* Seeds can also arrive as an exported taste file: `plan --import-file
+  <file>` parses a file the user downloaded from their own accounts —
+  a Spotify playlist export (JSON), a Letterboxd watchlist or a
+  Goodreads library (CSV), or a generic CSV/JSON/text list — entirely
+  offline, with no account login and no network call. Every imported
+  title becomes a seed through the same sealed search → insights →
+  checker path as a typed seed (an import names a title; it grants it
+  no trust), catalogue titles canonicalise exactly as pasted-list
+  titles do, and unknown titles pass verbatim to Qloo search. The plan
+  reports the imports it used (`imports`: source-file basename —
+  never a path — detected format, and per-item provenance with the
+  creator and domain hint), the CLI prints one `import:` line per
+  file, and malformed files fail cleanly with a categorised error
+  (`bad_json`, `no_items`, `too_large`, …) and exit code 2. Files are
+  capped at 1 MiB and 200 items.
 * Seeds can arrive as a pasted list, not just prose: a request like
   *"a weekend in Kyoto. Watchlist: Spirited Away, An Obscure Reel.
   Playlist: Kind of Blue; Bon Iver"* contributes every list item as a

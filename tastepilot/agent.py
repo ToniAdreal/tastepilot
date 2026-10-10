@@ -28,9 +28,14 @@ class TastePilotAgent:
         return {"source": getattr(self.explainer, "source", "template"),
                 "model": getattr(self.explainer, "model", None)}
 
-    def _resolve_seeds(self, parsed, log: EvidenceLog) -> tuple[list[str], list[str]]:
+    def _resolve_seeds(self, parsed, log: EvidenceLog,
+                       extra_names: list[str] | None = None) -> tuple[list[str], list[str]]:
         """Resolve named seeds to entity ids via Qloo search (logged)."""
-        names = parsed.seed_names or DEFAULT_SEEDS
+        names = list(parsed.seed_names)
+        for name in extra_names or []:
+            if name not in names and name not in (parsed.locations or []):
+                names.append(name)
+        names = names or DEFAULT_SEEDS
         ids: list[str] = []
         resolved_names: list[str] = []
         for name in names:
@@ -44,7 +49,7 @@ class TastePilotAgent:
                 resolved_names.append(pick.entity.name)
         return ids, resolved_names
 
-    def run(self, text: str, reference_date=None) -> dict:
+    def run(self, text: str, reference_date=None, imported=None) -> dict:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("text is required")
         if len(text) > MAX_TEXT_CHARS:
@@ -53,8 +58,22 @@ class TastePilotAgent:
         # Friday") and year-less explicit dates; None = today. Tests
         # pass a fixed date so plans stay deterministic.
         parsed = parse_request(text, reference_date=reference_date)
+        # External taste-file imports (see imports.py): each imported
+        # title becomes a seed through the SAME sealed search ->
+        # insights -> checker path as a typed seed — an import grants
+        # a title no trust, it only names it. Provenance (basename +
+        # format + items, never a path) is carried into the plan.
+        imports_prov: list[dict] = []
+        extra_names: list[str] = []
+        for imp in imported or []:
+            imports_prov.append({
+                "source_file": imp.get("source_file", "import"),
+                "format": imp.get("format", "unknown"),
+                "items": imp.get("items", [])})
+            extra_names.extend(imp.get("seed_names", []))
         log = EvidenceLog(request_text=text, mode=self.mode)
-        seed_ids, seed_names = self._resolve_seeds(parsed, log)
+        seed_ids, seed_names = self._resolve_seeds(parsed, log,
+                                                   extra_names=extra_names)
         items: list[dict] = []
         llm_calls: list[dict] = []
         # Multi-city composition: one leg per mentioned city (mention
@@ -178,6 +197,7 @@ class TastePilotAgent:
             "domains": parsed.domains,
             "seeds": seed_names,
             "seed_lists": parsed.seed_lists,
+            "imports": imports_prov,
             "schedule": parsed.leg_dates,
             "date_warnings": parsed.date_warnings,
             "transfers": parsed.transfers,

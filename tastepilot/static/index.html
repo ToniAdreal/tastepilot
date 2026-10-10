@@ -192,6 +192,9 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   const listSum = data.seed_lists && data.seed_lists.length
     ? ` · Lists: ${data.seed_lists.map(l => `${l.label} (${l.items.length})`).join(', ')}`
     : '';
+  const importSum = data.imports && data.imports.length
+    ? ` · Imports: ${data.imports.map(i => `${i.source_file} (${i.format}, ${i.items.length})`).join(', ')}`
+    : '';
   const legLabel = (l) => (l.location || 'anywhere') +
     (l.start ? ` (${l.start}${l.end ? ' – ' + l.end : ''}` +
       `${l.nights != null ? `, ${l.nights} night${l.nights === 1 ? '' : 's'}` : ''})` : '');
@@ -207,7 +210,7 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   const travelWarnSum = data.travel_warnings && data.travel_warnings.length
     ? ` · Travel warnings: ${data.travel_warnings.length}`
     : '';
-  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${legsSum}${warnSum}${transferSum}${travelWarnSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
+  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${importSum}${legsSum}${warnSum}${transferSum}${travelWarnSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
   const renderGroups = (groups) => {
     for (const group of groups) {
       const h = document.createElement('h3');
