@@ -1,6 +1,8 @@
 """TastePilot CLI.
 
   python -m tastepilot plan "<request>" [--mode mock|real|auto] [--out plan.json]
+  python -m tastepilot smoke [--mode real|auto|mock] [--query Q] [--domain D]
+                             [--out smoke.json]
   python -m tastepilot verify --record plan.json
   python -m tastepilot serve [--host 127.0.0.1] [--port 8765]
                              [--mode mock|auto] [--llm template|nebius]
@@ -20,7 +22,9 @@ from .agent import TastePilotAgent
 from .checker import check_plan
 from .evidence import verify_chain
 from .llm import NebiusExplainer, TemplateExplainer
+from .models import DOMAIN_URNS
 from .qloo import QlooError, make_client
+from .smoke import DEFAULT_DOMAIN, DEFAULT_QUERY, run_smoke
 
 
 def _agent_for(mode: str, llm: str) -> TastePilotAgent:
@@ -37,6 +41,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--mode", default="mock", choices=["mock", "real", "auto"])
     p.add_argument("--llm", default="template", choices=["template", "nebius"])
     p.add_argument("--out")
+    k = sub.add_parser("smoke")
+    k.add_argument("--mode", default="real", choices=["mock", "real", "auto"])
+    k.add_argument("--query", default=DEFAULT_QUERY)
+    k.add_argument("--domain", default=DEFAULT_DOMAIN,
+                   choices=sorted(DOMAIN_URNS))
+    k.add_argument("--out")
     v = sub.add_parser("verify")
     v.add_argument("--record", required=True)
     s = sub.add_parser("serve")
@@ -59,6 +69,27 @@ def main(argv: list[str] | None = None) -> int:
             else int(os.environ.get("PORT", "8765"))
         serve(agent, port=port, host=args.host)
         return 0
+    if args.cmd == "smoke":
+        try:
+            client = make_client(args.mode)
+        except QlooError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        report = run_smoke(client, query=args.query, target_domain=args.domain)
+        if args.out:
+            Path(args.out).write_text(
+                json.dumps(report, indent=1, ensure_ascii=False),
+                encoding="utf-8")
+        for step in report["steps"]:
+            shape = step.get("shape") or {}
+            count = shape.get("result_count", "-")
+            print(f"  [{step['name']}] ok={step['ok']} "
+                  f"reason={step['reason']} results={count}")
+        print(f"smoke source={report['source']} "
+              f"passed={report['passed']} "
+              f"chain_valid={report['evidence']['chain_valid']} "
+              f"sealed={report['evidence']['sealed_responses']}")
+        return 0 if report["passed"] else 1
     if args.cmd == "verify":
         data = json.loads(Path(args.record).read_text(encoding="utf-8"))
         record = data.get("evidence", data)

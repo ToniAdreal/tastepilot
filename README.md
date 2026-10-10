@@ -48,7 +48,9 @@ tastepilot/
                per-item checker badges, explanation provenance,
                evidence-record viewer endpoint; hardened: input caps,
                security headers, bounded evidence cache, leak-free 500s)
-  cli.py       plan / verify / serve commands
+  smoke.py     real-mode smoke check: one search + one insights call,
+               payload-shape validation, both sealed + chain re-verified
+  cli.py       plan / smoke / verify / serve commands
 tests/         unit + end-to-end tests, all green in mock (Judge) mode
 samples/       sample plans with their sealed evidence records
 ```
@@ -79,8 +81,18 @@ or in a gitignored `.env` next to this README, `chmod 600`), the same loop
 runs against `https://hackathon.api.qloo.com`:
 
 ```bash
+python3 -m tastepilot smoke --mode real   # first: one search + one insights
+                                          # call, shape-checked and sealed
 python3 -m tastepilot plan "a first date in New York, we love Kind of Blue" --mode real --llm nebius
 ```
+
+The smoke check is the key-arrival ritual: it validates the live payload
+shape (non-empty results, entity ids/names present, sane affinities),
+seals both calls into the hash-chained evidence log, and re-verifies the
+chain before reporting pass/fail — so a payload-shape drift is diagnosed
+per step instead of surfacing as a failed plan. `--out smoke.json` saves
+the full report including the sealed evidence record. It also runs
+against the mock client (`--mode mock`) for zero-key testing.
 
 `--mode auto` picks real when a key exists and mock otherwise. The key is
 only ever sent as the `X-Api-Key` header; it is never logged or printed.
