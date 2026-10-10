@@ -131,6 +131,7 @@ class TastePilotAgent:
             "location": parsed.location,
             "domains": parsed.domains,
             "seeds": seed_names,
+            "seed_lists": parsed.seed_lists,
             "mode": self.mode,
             "explainer": explainer_summary,
             "items": admissible,

@@ -37,7 +37,9 @@ TastePilot turns a natural-language plan — *"a slow weekend in Kyoto"*,
 
 ```
 tastepilot/
-  parser.py    deterministic request parsing (scenario / location / seeds)
+  parser.py    deterministic request parsing (scenario / location / seeds,
+               incl. richer seed capture from pasted labelled lists —
+               watchlist / playlist / reading list, bulleted or delimited)
   qloo.py      Qloo adapter: real client (hackathon API, X-Api-Key; bounded
                retries on 429/5xx + network errors, every failure surfaces
                as QlooError; tolerant payload-envelope parsing) + mock client
@@ -136,6 +138,15 @@ baked into the image or the repo.
   Qloo call behind the plan and opens any of them
   (`GET /api/evidence/<response_id>`) — request, results, record hash,
   and chain validity included.
+* Seeds can arrive as a pasted list, not just prose: a request like
+  *"a weekend in Kyoto. Watchlist: Spirited Away, An Obscure Reel.
+  Playlist: Kind of Blue; Bon Iver"* contributes every list item as a
+  seed — catalogue titles under their canonical name, unknown titles
+  verbatim to Qloo search (in real mode they are not limited to the
+  demo catalogue). The plan reports the lists it captured
+  (`seed_lists`: label + items) and the UI status line names them.
+  Delimiters are commas, semicolons, bullets, and newlines only —
+  `and` never splits, so "Klara and the Sun" stays one seed.
 * Anyone holding a plan JSON can re-verify it in the browser: the UI's
   "Verify a shared plan" panel posts it to `POST /api/verify`, which
   recomputes the hash chain and every per-item checker verdict from the

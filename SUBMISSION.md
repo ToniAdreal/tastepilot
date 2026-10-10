@@ -35,7 +35,10 @@ Spirited Away and Kind of Blue"*, *"a first date in NYC"*, *"a birthday
 gift shortlist for someone who loves Amélie"*. TastePilot:
 
 1. **Parses** the request deterministically — scenario, location, and
-   the seed entities you named.
+   the seed entities you named. Seeds can also arrive as a pasted
+   list — a watchlist, a playlist, a reading list — and every item
+   becomes a seed, including titles outside the demo catalogue, which
+   are passed verbatim to Qloo search.
 2. **Plans** by decomposing the scenario into taste domains (film,
    music, food, places, books, brands, destinations).
 3. **Calls Qloo** — seeds are resolved with `GET /search`, and
@@ -126,8 +129,9 @@ stops being a liability and becomes pure upside.
 
 ## What's next for TastePilot
 
-- Richer seed capture (paste a playlist, a reading list, a watchlist)
-  feeding the same evidence-checked loop.
+- Direct imports from external taste accounts (a Spotify playlist, a
+  Letterboxd watchlist) feeding the same evidence-checked loop, on top
+  of the built paste-a-list capture.
 - Multi-city trip composition with per-leg taste continuity.
 - Account-owned share management (per-user link lists and dashboards)
   on top of the built expiry/revocation/persistence primitives.

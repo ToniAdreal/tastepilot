@@ -189,7 +189,10 @@ document.getElementById('f').addEventListener('submit', async (e) => {
       (data.explainer.model ? ` (${data.explainer.model})` : '') +
       (data.explainer.fallback ? ` · ${data.explainer.fallback} template fallback(s)` : '')
     : '';
-  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
+  const listSum = data.seed_lists && data.seed_lists.length
+    ? ` · Lists: ${data.seed_lists.map(l => `${l.label} (${l.items.length})`).join(', ')}`
+    : '';
+  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
   const groups = data.groups && data.groups.length
     ? data.groups
     : [{domain: 'plan', items: data.items}];

@@ -13,6 +13,7 @@
   "Spirited Away",
   "Kind of Blue (Miles Davis)"
  ],
+ "seed_lists": [],
  "mode": "mock",
  "explainer": {
   "source": "template",
@@ -702,7 +703,7 @@
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-10T16:43:18.504030+00:00",
+  "created_at": "2026-10-10T20:38:34.478363+00:00",
   "verdict": "PASS",
   "entries": [
    {
