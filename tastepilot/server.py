@@ -12,10 +12,26 @@ Routes:
                                chain validity — the evidence-record viewer
                                backend. Unknown ids 404; nothing is served
                                that was not sealed into a plan's record.
+
+Hardening (Oct 21–24 milestone):
+  * Request bodies are capped (``MAX_BODY_BYTES``) and plan text is capped
+    (``MAX_TEXT_CHARS``, enforced again inside the agent) — oversize
+    requests get 413, malformed JSON / missing text gets 400, and an
+    unexpected agent failure gets a generic 500 that never leaks the
+    internal exception text.
+  * Every response carries security headers (nosniff, frame denial,
+    no-referrer, a CSP that only allows this page's own inline UI code)
+    and API responses are ``Cache-Control: no-store``.
+  * The evidence cache is bounded (``MAX_EVIDENCE_RECORDS``, oldest
+    evicted first) so a long-lived hosted demo cannot grow without limit.
+  * ``serve()`` takes an explicit host: local runs keep the safe
+    127.0.0.1 default; hosted deployments pass ``--host 0.0.0.0`` and the
+    port from the platform's ``PORT`` env var (see DEPLOY.md).
 """
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -24,10 +40,25 @@ from .evidence import qloo_responses, verify_chain
 
 STATIC = Path(__file__).resolve().parent / "static"
 
+MAX_BODY_BYTES = 16_384          # a plan request is a short JSON object
+MAX_TEXT_CHARS = 2_000           # matches the agent-level guard
+MAX_EVIDENCE_RECORDS = 512       # sealed responses kept for the viewer
 
-def make_handler(agent):
-    # response_id -> (record, response) for plans produced by this server.
-    evidence_cache: dict[str, tuple[dict, dict]] = {}
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    # The demo UI is a single self-contained page with inline style/script;
+    # everything else defaults to same-origin only.
+    "Content-Security-Policy":
+        "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'",
+}
+
+
+def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS):
+    # response_id -> (record, response) for plans produced by this server,
+    # bounded FIFO: the oldest sealed responses are evicted first.
+    evidence_cache: OrderedDict[str, tuple[dict, dict]] = OrderedDict()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):  # keep demo logs clean
@@ -37,6 +68,10 @@ def make_handler(agent):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
+            for name, value in SECURITY_HEADERS.items():
+                self.send_header(name, value)
+            if ctype.startswith("application/json"):
+                self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
 
@@ -76,25 +111,64 @@ def make_handler(agent):
             if urlparse(self.path).path != "/api/plan":
                 self._send(404, b"not found", "text/plain")
                 return
+            raw_length = self.headers.get("Content-Length")
             try:
-                length = int(self.headers.get("Content-Length", "0"))
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_BODY_BYTES:
+                # Reject on the declared size alone; never read the body.
+                self._send_json(413, {"error": "request body too large"})
+                return
+            try:
                 payload = json.loads(self.rfile.read(length) or b"{}")
-                text = str(payload.get("text", "")).strip()
-                if not text:
-                    raise ValueError("text is required")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            if not isinstance(payload, dict) or \
+                    not isinstance(payload.get("text"), str):
+                self._send_json(400, {"error": "text is required"})
+                return
+            text = payload["text"].strip()
+            if not text:
+                self._send_json(400, {"error": "text is required"})
+                return
+            if len(text) > MAX_TEXT_CHARS:
+                self._send_json(413, {"error": "text too long"})
+                return
+            try:
                 result = agent.run(text)
-                record = result.get("evidence") or {}
-                for rid, resp in qloo_responses(record).items():
-                    evidence_cache[rid] = (record, resp)
-                self._send_json(200, result)
-            except Exception as exc:
+            except ValueError as exc:  # caller-fixable input problem
                 self._send_json(400, {"error": str(exc)})
+                return
+            except Exception:  # never leak internal detail to the client
+                self._send_json(500, {"error": "internal error"})
+                return
+            record = result.get("evidence") or {}
+            for rid, resp in qloo_responses(record).items():
+                evidence_cache[rid] = (record, resp)
+                evidence_cache.move_to_end(rid)
+                while len(evidence_cache) > max_evidence_records:
+                    evidence_cache.popitem(last=False)
+            self._send_json(200, result)
+
+        def _method_not_allowed(self):
+            self._send_json(405, {"error": "method not allowed"})
+
+        do_PUT = _method_not_allowed
+        do_PATCH = _method_not_allowed
+        do_DELETE = _method_not_allowed
 
     return Handler
 
 
-def serve(agent, port: int = 8765) -> None:
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(agent))
-    print(f"TastePilot listening on http://127.0.0.1:{port} "
-          f"(mode={agent.mode}, explainer={agent.explainer_info['source']})")
+def serve(agent, port: int = 8765, host: str = "127.0.0.1") -> None:
+    server = ThreadingHTTPServer((host, port), make_handler(agent))
+    print(f"TastePilot listening on http://{host}:{port} "
+          f"(mode={agent.mode}, explainer={agent.explainer_info['source']})",
+          flush=True)  # hosted log streams must see startup immediately
     server.serve_forever()

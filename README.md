@@ -46,7 +46,8 @@ tastepilot/
   checker.py   deterministic evidence checker (the invariant enforcer)
   server.py    stdlib HTTP demo server (chat + grouped itinerary UI,
                per-item checker badges, explanation provenance,
-               evidence-record viewer endpoint)
+               evidence-record viewer endpoint; hardened: input caps,
+               security headers, bounded evidence cache, leak-free 500s)
   cli.py       plan / verify / serve commands
 tests/         unit + end-to-end tests, all green in mock (Judge) mode
 samples/       sample plans with their sealed evidence records
@@ -83,6 +84,16 @@ python3 -m tastepilot plan "a first date in New York, we love Kind of Blue" --mo
 
 `--mode auto` picks real when a key exists and mock otherwise. The key is
 only ever sent as the `X-Api-Key` header; it is never logged or printed.
+
+## Hosted demo
+
+The demo deploys as a single dependency-free process — see
+[DEPLOY.md](DEPLOY.md) for the Docker image (non-root, healthchecked,
+`PORT`-aware), the PaaS `Procfile` start command, the environment
+variables, and a post-deploy smoke checklist. A public demo runs in
+Judge Mode (mock Qloo, zero keys) unless the operator supplies
+`QLOO_API_KEY` through the platform's secret store; the key is never
+baked into the image or the repo.
 
 ## Demo
 

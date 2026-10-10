@@ -13,6 +13,7 @@ from .parser import DEFAULT_SEEDS, parse_request
 from .qloo import MockQlooClient
 
 ITEMS_PER_DOMAIN = 2
+MAX_TEXT_CHARS = 2_000  # defense in depth: the server enforces the same cap
 
 
 class TastePilotAgent:
@@ -44,6 +45,10 @@ class TastePilotAgent:
         return ids, resolved_names
 
     def run(self, text: str) -> dict:
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("text is required")
+        if len(text) > MAX_TEXT_CHARS:
+            raise ValueError("text too long")
         parsed = parse_request(text)
         log = EvidenceLog(request_text=text, mode=self.mode)
         seed_ids, seed_names = self._resolve_seeds(parsed, log)

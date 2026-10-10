@@ -2,12 +2,17 @@
 
   python -m tastepilot plan "<request>" [--mode mock|real|auto] [--out plan.json]
   python -m tastepilot verify --record plan.json
-  python -m tastepilot serve [--port 8765] [--mode mock|auto] [--llm template|nebius]
+  python -m tastepilot serve [--host 127.0.0.1] [--port 8765]
+                             [--mode mock|auto] [--llm template|nebius]
+
+For hosted deployments the port defaults to the platform's ``PORT``
+environment variable when ``--port`` is not given (see DEPLOY.md).
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -35,7 +40,10 @@ def main(argv: list[str] | None = None) -> int:
     v = sub.add_parser("verify")
     v.add_argument("--record", required=True)
     s = sub.add_parser("serve")
-    s.add_argument("--port", type=int, default=8765)
+    s.add_argument("--host", default="127.0.0.1",
+                   help="bind host (hosted deployments: 0.0.0.0)")
+    s.add_argument("--port", type=int, default=None,
+                   help="bind port (default: $PORT or 8765)")
     s.add_argument("--mode", default="mock", choices=["mock", "auto"])
     s.add_argument("--llm", default="template", choices=["template", "nebius"])
     args = ap.parse_args(argv)
@@ -47,7 +55,9 @@ def main(argv: list[str] | None = None) -> int:
         except QlooError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
-        serve(agent, port=args.port)
+        port = args.port if args.port is not None \
+            else int(os.environ.get("PORT", "8765"))
+        serve(agent, port=port, host=args.host)
         return 0
     if args.cmd == "verify":
         data = json.loads(Path(args.record).read_text(encoding="utf-8"))

@@ -1,0 +1,59 @@
+# Deploying the TastePilot demo
+
+The demo is a single dependency-free Python process (standard library
+only), so any container or PaaS host that runs Python 3.11+ can serve it.
+Judge Mode (mock Qloo adapter, deterministic template explanations) needs
+**zero keys** and is the default posture for a public demo URL.
+
+## Option A — Docker (any container host)
+
+```bash
+docker build -t tastepilot .
+docker run -p 8765:8765 tastepilot
+# open http://127.0.0.1:8765 — health: GET /api/health
+```
+
+The image runs as a non-root user, carries a `/api/health` healthcheck,
+and binds `0.0.0.0`; the port comes from the `PORT` environment variable
+(platforms that assign a port work unchanged).
+
+## Option B — PaaS (Procfile)
+
+Hosts that honour a `Procfile` (or an equivalent start command) can run:
+
+```
+web: python3 -m tastepilot serve --host 0.0.0.0 --mode auto
+```
+
+No build/install step is required — there are no dependencies.
+
+## Environment variables
+
+| Variable | Required | Meaning |
+|---|---|---|
+| `PORT` | no | Bind port (default 8765). Set by most platforms automatically. |
+| `QLOO_API_KEY` | no | When set (platform secret store only), `--mode auto` serves **real** Qloo responses; when unset it serves mock Judge Mode. Never bake the key into an image or commit it — `.env` is gitignored and dockerignored. |
+| `TASTEPILOT_SIGNING_KEY` | no | Overrides the development HMAC key for evidence records. |
+
+For live Nemotron explanations instead of the deterministic template,
+append `--llm nebius` to the start command; every explanation records
+its provenance, and any Nebius failure falls back to the template with
+the reason recorded (the demo never goes down because the LLM did).
+
+## Post-deploy smoke checklist
+
+1. `GET /api/health` → `{"ok": true, "mode": "mock"|"real", "explainer": {...}}`
+2. `POST /api/plan` with `{"text": "a slow weekend in Kyoto, I love Spirited Away"}`
+   → items present, `checker.passed: true`, `checker.chain_valid: true`.
+3. Open `/` and confirm the plan renders grouped by domain, each card
+   shows its checker badge, and the evidence viewer opens a record.
+4. Oversize probe: a `POST /api/plan` body over 16 KiB → `413`
+   (hardening is live, not just written down).
+
+## Notes
+
+* The evidence viewer only serves responses sealed into plans this
+  server process produced, and the in-process cache is bounded
+  (512 records, oldest evicted) — restarting the demo clears it.
+* Demo data is fictional; public copy describes the build truthfully as
+  Toni Adreal's entry, built with AI assistance.
