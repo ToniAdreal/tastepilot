@@ -38,7 +38,9 @@ TastePilot turns a natural-language plan — *"a slow weekend in Kyoto"*,
 ```
 tastepilot/
   parser.py    deterministic request parsing (scenario / location / seeds)
-  qloo.py      Qloo adapter: real client (hackathon API, X-Api-Key) + mock client
+  qloo.py      Qloo adapter: real client (hackathon API, X-Api-Key; bounded
+               retries on 429/5xx + network errors, every failure surfaces
+               as QlooError; tolerant payload-envelope parsing) + mock client
   fixtures.py  deterministic mock taste graph (fictional demo data, labelled mock)
   agent.py     the agent loop: parse -> plan -> Qloo calls -> compose -> verify
   llm.py       explanation adapters: Nebius/Nemotron + deterministic template
@@ -96,6 +98,15 @@ against the mock client (`--mode mock`) for zero-key testing.
 
 `--mode auto` picks real when a key exists and mock otherwise. The key is
 only ever sent as the `X-Api-Key` header; it is never logged or printed.
+
+The real client is built to survive a flaky hackathon endpoint: transient
+failures (HTTP 429/5xx, timeouts, connection resets) are retried with
+backoff, auth errors fail immediately, and every failure surfaces as a
+`QlooError` — so the smoke check reports it per step and `plan` exits
+cleanly with code 2 instead of dumping a traceback. Result parsing
+tolerates the API's payload envelopes (flat or nested entity rows,
+`properties` fields, string or missing affinities) without masking
+genuine shape drift, which the smoke check still flags field by field.
 
 ## Hosted demo
 

@@ -18,6 +18,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -129,52 +131,137 @@ class MockQlooClient:
                             "insights", request, results, self.source, len(results))
 
 
+#: HTTP statuses worth retrying: rate limiting and transient server-side
+#: failures. Auth/validation errors (400/401/403/404) fail immediately —
+#: retrying them cannot succeed and only delays the diagnosis.
+TRANSIENT_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
 class RealQlooClient:
     """Live hackathon API client (urllib, no SDK). Transport is injectable
-    for tests; the API key is only ever placed in the X-Api-Key header."""
+    for tests; the API key is only ever placed in the X-Api-Key header.
+
+    Resilience: transient failures — HTTP 429/5xx and transport-level
+    network errors (timeout, DNS, connection reset, surfaced by urllib as
+    ``URLError``/``OSError``) — are retried up to ``max_attempts`` total
+    attempts with exponential backoff through the injectable ``sleeper``
+    (tests record the delays instead of sleeping). Every failure mode
+    ultimately raises :class:`QlooError` — never a raw urllib exception —
+    so the smoke check and the agent loop can report it uniformly, and
+    no error message ever contains the API key (it lives only in the
+    header, and errors carry just the path, status, or exception type).
+    """
 
     source = "real"
 
-    def __init__(self, api_key: str, base_url: str = HACKATHON_BASE, transport=None):
+    def __init__(self, api_key: str, base_url: str = HACKATHON_BASE, transport=None,
+                 max_attempts: int = 3, sleeper=None):
         if not api_key:
             raise QlooError("QLOO_API_KEY is required for the real client")
         self._api_key = api_key
         self.base_url = base_url.rstrip("/")
         self._transport = transport  # callable(method, url, headers) -> (status, dict)
+        self.max_attempts = max(1, max_attempts)
+        self._sleeper = sleeper or time.sleep
+
+    def _backoff(self, attempt: int) -> None:
+        self._sleeper(min(0.5 * (2 ** attempt), 4.0))
 
     def _get(self, path: str, params: dict) -> dict:
         url = self.base_url + path + "?" + urllib.parse.urlencode(
             {k: v for k, v in params.items() if v is not None})
         headers = {"X-Api-Key": self._api_key, "accept": "application/json"}
-        if self._transport is not None:
-            status, payload = self._transport("GET", url, headers)
-        else:
-            req = urllib.request.Request(url, headers=headers, method="GET")
+        last_error: QlooError | None = None
+        for attempt in range(self.max_attempts):
             try:
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    status, payload = resp.status, json.loads(resp.read().decode("utf-8"))
-            except urllib.error.HTTPError as e:  # pragma: no cover - live path
-                raise QlooError(f"Qloo API HTTP {e.code} on {path}") from e
-        if status != 200:
+                if self._transport is not None:
+                    status, payload = self._transport("GET", url, headers)
+                else:
+                    req = urllib.request.Request(url, headers=headers, method="GET")
+                    try:
+                        with urllib.request.urlopen(req, timeout=30) as resp:
+                            status = resp.status
+                            payload = json.loads(resp.read().decode("utf-8"))
+                    except urllib.error.HTTPError as e:  # live path
+                        status, payload = e.code, {}
+            except (urllib.error.URLError, OSError) as exc:
+                # Transient network failure (URLError covers timeouts and
+                # DNS; ConnectionError/TimeoutError are OSError subclasses).
+                # The message names only the path and the exception type —
+                # a URLError's own text can embed the full request URL.
+                last_error = QlooError(
+                    f"Qloo API network error ({type(exc).__name__}) on {path}")
+                if attempt + 1 < self.max_attempts:
+                    self._backoff(attempt)
+                    continue
+                raise last_error from exc
+            if status == 200:
+                return payload
+            if status in TRANSIENT_STATUSES and attempt + 1 < self.max_attempts:
+                self._backoff(attempt)
+                continue
             raise QlooError(f"Qloo API HTTP {status} on {path}")
-        return payload
+        raise last_error or QlooError(f"Qloo API request failed on {path}")
 
     @staticmethod
-    def _parse_entities(payload: dict, domain_hint: str | None = None) -> list[ScoredEntity]:
-        rows = payload.get("results") or payload.get("entities") or []
+    def _rows(payload: dict) -> list:
+        """Result rows from any documented payload envelope: a flat
+        ``results``/``entities``/``data`` list, or ``results`` as an
+        object wrapping its ``entities``."""
+        if not isinstance(payload, dict):
+            return []
+        rows = payload.get("results")
+        if isinstance(rows, dict):
+            rows = rows.get("entities") or rows.get("results") or []
+        if not isinstance(rows, list):
+            rows = payload.get("entities") or payload.get("data") or []
+        return rows if isinstance(rows, list) else []
+
+    @staticmethod
+    def _affinity(row: dict) -> float:
+        """Affinity from ``affinity`` then ``score``; string numbers are
+        coerced, and a missing/unparseable value falls back to 0.5 rather
+        than crashing the parse — the smoke check's shape validation is
+        what flags systematic drift, per-field."""
+        for key in ("affinity", "score"):
+            value = row.get(key)
+            if value is None:
+                continue
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+        return 0.5
+
+    @classmethod
+    def _parse_entities(cls, payload: dict, domain_hint: str | None = None) -> list[ScoredEntity]:
         out: list[ScoredEntity] = []
-        for row in rows:
+        for row in cls._rows(payload):
             if not isinstance(row, dict):
                 continue
-            urn = row.get("type") or row.get("entity_type") or ""
+            nested = row.get("entity")
+            nested = nested if isinstance(nested, dict) else {}
+            # Entity fields may sit at the top level or nested under an
+            # "entity" object (with the score at the top level); fields
+            # may also live under "properties". Top level wins on ties.
+            merged = {**nested,
+                      **{k: v for k, v in row.items() if k != "entity"}}
+            props = merged.get("properties") or {}
+            urn = merged.get("type") or merged.get("entity_type") or ""
             domain = URN_DOMAINS.get(urn, domain_hint or "place")
-            props = row.get("properties") or {}
-            ent = Entity(id=str(row.get("entity_id") or row.get("id") or row.get("name", "")),
-                         name=str(row.get("name", "unknown")),
+            # Deliberately faithful fallbacks: an explicitly empty name
+            # stays empty and a missing id stays missing, so the smoke
+            # check's shape validation can still flag that exact drift
+            # instead of the parser silently repairing it.
+            raw_name = merged.get("name", props.get("name"))
+            name = "unknown" if raw_name is None else str(raw_name)
+            ent = Entity(id=str(merged.get("entity_id") or merged.get("id")
+                                or (raw_name or "")),
+                         name=name,
                          domain=domain,
-                         tags=tuple(row.get("tags") or props.get("tags") or ()),
-                         location=props.get("location"))
-            out.append(ScoredEntity(ent, float(row.get("affinity", row.get("score", 0.5)))))
+                         tags=tuple(merged.get("tags") or props.get("tags") or ()),
+                         location=props.get("location") or merged.get("location"))
+            out.append(ScoredEntity(ent, cls._affinity(merged)))
         return out
 
     def search(self, query: str, limit: int = 10) -> QlooResponse:

@@ -102,7 +102,14 @@ def main(argv: list[str] | None = None) -> int:
     except QlooError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    result = agent.run(args.text)
+    try:
+        result = agent.run(args.text)
+    except QlooError as exc:
+        # A live-API failure mid-plan (after the client's retries) is a
+        # clean error + exit 2, never a traceback — same contract as the
+        # smoke and serve paths.
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     text = json.dumps(result, indent=1, ensure_ascii=False)
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
