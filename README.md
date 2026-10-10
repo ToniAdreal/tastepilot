@@ -45,7 +45,8 @@ tastepilot/
   evidence.py  hash-chained, HMAC-signed evidence records (VerifyGate pattern)
   checker.py   deterministic evidence checker (the invariant enforcer)
   server.py    stdlib HTTP demo server (chat + grouped itinerary UI,
-               per-item checker badges, evidence-record viewer endpoint)
+               per-item checker badges, explanation provenance,
+               evidence-record viewer endpoint)
   cli.py       plan / verify / serve commands
 tests/         unit + end-to-end tests, all green in mock (Judge) mode
 samples/       sample plans with their sealed evidence records
@@ -61,6 +62,14 @@ python3 -m tastepilot plan "a slow weekend in Kyoto, I love Spirited Away and Ki
 python3 -m tastepilot serve --port 8765    # demo UI at http://127.0.0.1:8765
 python3 -m tastepilot verify --record samples/plan_weekend_kyoto.json
 ```
+
+Live LLM explanations in the demo: add `--llm nebius` to `plan` or
+`serve` and the "why this fits" lines are written by Nemotron via Nebius
+Token Factory. Every item carries its explanation provenance (source,
+model, token usage — or the recorded reason when Nebius was unavailable
+and the deterministic template took over), the plan reports an explainer
+summary, and `GET /api/health` names the live explainer. Without the
+flag the demo stays in deterministic template mode.
 
 ## Real mode
 

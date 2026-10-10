@@ -5,7 +5,7 @@ nothing but Python 3.11+:  python -m tastepilot serve --port 8765
 
 Routes:
   GET  /                       demo UI (chat + grouped plan + evidence viewer)
-  GET  /api/health             {"ok": true, "mode": ...}
+  GET  /api/health             {"ok": true, "mode": ..., "explainer": {...}}
   POST /api/plan               {"text": ...} -> full plan result (agent.run)
   GET  /api/evidence/<id>      one sealed Qloo response from a plan this
                                server produced, plus its record's hash and
@@ -50,7 +50,8 @@ def make_handler(agent):
                 self._send(200, (STATIC / "index.html").read_bytes(),
                            "text/html; charset=utf-8")
             elif path == "/api/health":
-                self._send_json(200, {"ok": True, "mode": agent.mode})
+                self._send_json(200, {"ok": True, "mode": agent.mode,
+                                      "explainer": agent.explainer_info})
             elif path.startswith("/api/evidence/"):
                 response_id = unquote(path[len("/api/evidence/"):])
                 hit = evidence_cache.get(response_id)
@@ -94,5 +95,6 @@ def make_handler(agent):
 
 def serve(agent, port: int = 8765) -> None:
     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(agent))
-    print(f"TastePilot listening on http://127.0.0.1:{port} (mode={agent.mode})")
+    print(f"TastePilot listening on http://127.0.0.1:{port} "
+          f"(mode={agent.mode}, explainer={agent.explainer_info['source']})")
     server.serve_forever()

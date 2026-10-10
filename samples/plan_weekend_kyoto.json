@@ -14,6 +14,14 @@
   "Kind of Blue (Miles Davis)"
  ],
  "mode": "mock",
+ "explainer": {
+  "source": "template",
+  "model": null,
+  "items_explained": 7,
+  "llm_written": 0,
+  "template_written": 7,
+  "fallback": 0
+ },
  "items": [
   {
    "entity": {
@@ -37,6 +45,9 @@
    "evidence_ref": "mock:insights:b9a4c61b25bc0cc3",
    "why": "Qloo's taste graph links Kyoto to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.90).",
    "explanation_source": "template",
+   "explanation": {
+    "source": "template"
+   },
    "verification": {
     "item": "Kyoto",
     "entity_id": "dst_kyoto",
@@ -73,6 +84,9 @@
    "evidence_ref": "mock:insights:e0c12c8b917168bc",
    "why": "Qloo's taste graph links Gion, Kyoto to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.88).",
    "explanation_source": "template",
+   "explanation": {
+    "source": "template"
+   },
    "verification": {
     "item": "Gion, Kyoto",
     "entity_id": "plc_gion",
@@ -109,6 +123,9 @@
    "evidence_ref": "mock:insights:e0c12c8b917168bc",
    "why": "Qloo's taste graph links Arashiyama Bamboo Grove to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.82).",
    "explanation_source": "template",
+   "explanation": {
+    "source": "template"
+   },
    "verification": {
     "item": "Arashiyama Bamboo Grove",
     "entity_id": "plc_arashiyama",
@@ -145,6 +162,9 @@
    "evidence_ref": "mock:insights:d8a221de4e7b1a6f",
    "why": "Qloo's taste graph links A quiet ramen counter in Gion to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.86).",
    "explanation_source": "template",
+   "explanation": {
+    "source": "template"
+   },
    "verification": {
     "item": "A quiet ramen counter in Gion",
     "entity_id": "fod_ramen_kyoto",
@@ -181,6 +201,9 @@
    "evidence_ref": "mock:insights:d8a221de4e7b1a6f",
    "why": "Qloo's taste graph links A lantern-lit izakaya in Pontocho Alley to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.80).",
    "explanation_source": "template",
+   "explanation": {
+    "source": "template"
+   },
    "verification": {
     "item": "A lantern-lit izakaya in Pontocho Alley",
     "entity_id": "fod_izakaya",
@@ -218,6 +241,9 @@
    "evidence_ref": "mock:insights:ff76955a2e7a6af6",
    "why": "Qloo's taste graph links Nujabes to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.91).",
    "explanation_source": "template",
+   "explanation": {
+    "source": "template"
+   },
    "verification": {
     "item": "Nujabes",
     "entity_id": "art_nujabes",
@@ -254,6 +280,9 @@
    "evidence_ref": "mock:insights:4c85c1b73b6f70dd",
    "why": "Qloo's taste graph links Lost in Translation to Spirited Away, Kind of Blue (Miles Davis) (shared signals: quiet; affinity 0.77).",
    "explanation_source": "template",
+   "explanation": {
+    "source": "template"
+   },
    "verification": {
     "item": "Lost in Translation",
     "entity_id": "mov_lost_translation",
@@ -295,6 +324,9 @@
      "evidence_ref": "mock:insights:b9a4c61b25bc0cc3",
      "why": "Qloo's taste graph links Kyoto to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.90).",
      "explanation_source": "template",
+     "explanation": {
+      "source": "template"
+     },
      "verification": {
       "item": "Kyoto",
       "entity_id": "dst_kyoto",
@@ -336,6 +368,9 @@
      "evidence_ref": "mock:insights:e0c12c8b917168bc",
      "why": "Qloo's taste graph links Gion, Kyoto to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.88).",
      "explanation_source": "template",
+     "explanation": {
+      "source": "template"
+     },
      "verification": {
       "item": "Gion, Kyoto",
       "entity_id": "plc_gion",
@@ -372,6 +407,9 @@
      "evidence_ref": "mock:insights:e0c12c8b917168bc",
      "why": "Qloo's taste graph links Arashiyama Bamboo Grove to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.82).",
      "explanation_source": "template",
+     "explanation": {
+      "source": "template"
+     },
      "verification": {
       "item": "Arashiyama Bamboo Grove",
       "entity_id": "plc_arashiyama",
@@ -413,6 +451,9 @@
      "evidence_ref": "mock:insights:d8a221de4e7b1a6f",
      "why": "Qloo's taste graph links A quiet ramen counter in Gion to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.86).",
      "explanation_source": "template",
+     "explanation": {
+      "source": "template"
+     },
      "verification": {
       "item": "A quiet ramen counter in Gion",
       "entity_id": "fod_ramen_kyoto",
@@ -449,6 +490,9 @@
      "evidence_ref": "mock:insights:d8a221de4e7b1a6f",
      "why": "Qloo's taste graph links A lantern-lit izakaya in Pontocho Alley to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.80).",
      "explanation_source": "template",
+     "explanation": {
+      "source": "template"
+     },
      "verification": {
       "item": "A lantern-lit izakaya in Pontocho Alley",
       "entity_id": "fod_izakaya",
@@ -491,6 +535,9 @@
      "evidence_ref": "mock:insights:ff76955a2e7a6af6",
      "why": "Qloo's taste graph links Nujabes to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.91).",
      "explanation_source": "template",
+     "explanation": {
+      "source": "template"
+     },
      "verification": {
       "item": "Nujabes",
       "entity_id": "art_nujabes",
@@ -532,6 +579,9 @@
      "evidence_ref": "mock:insights:4c85c1b73b6f70dd",
      "why": "Qloo's taste graph links Lost in Translation to Spirited Away, Kind of Blue (Miles Davis) (shared signals: quiet; affinity 0.77).",
      "explanation_source": "template",
+     "explanation": {
+      "source": "template"
+     },
      "verification": {
       "item": "Lost in Translation",
       "entity_id": "mov_lost_translation",
@@ -652,7 +702,7 @@
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-10T16:08:50.724465+00:00",
+  "created_at": "2026-10-10T16:43:18.504030+00:00",
   "verdict": "PASS",
   "entries": [
    {

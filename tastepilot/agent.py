@@ -21,6 +21,12 @@ class TastePilotAgent:
         self.explainer = explainer or TemplateExplainer()
         self.mode = getattr(self.qloo, "source", "mock")
 
+    @property
+    def explainer_info(self) -> dict:
+        """Which explainer is live in this agent (demo/health surface)."""
+        return {"source": getattr(self.explainer, "source", "template"),
+                "model": getattr(self.explainer, "model", None)}
+
     def _resolve_seeds(self, parsed, log: EvidenceLog) -> tuple[list[str], list[str]]:
         """Resolve named seeds to entity ids via Qloo search (logged)."""
         names = parsed.seed_names or DEFAULT_SEEDS
@@ -58,8 +64,18 @@ class TastePilotAgent:
                     why, meta = self.explainer.explain(seed_names, item)
                     item["why"] = why
                     item["explanation_source"] = meta.get("source")
+                    # Full provenance, not just the source string: the UI
+                    # and judges must see which model worded each "why"
+                    # line — and, on fallback, that Nebius was attempted
+                    # and why the deterministic template took over.
+                    item["explanation"] = {
+                        k: meta[k] for k in ("source", "model", "fallback_from",
+                                             "fallback_reason", "usage")
+                        if meta.get(k) is not None}
                     if meta.get("source") != "template" or meta.get("fallback_from"):
-                        llm_calls.append({"purpose": "explain", **meta})
+                        llm_calls.append({"purpose": "explain",
+                                          "item": scored.entity.name,
+                                          "domain": domain, **meta})
                     items.append(item)
         for call in llm_calls:
             log.add_llm_call(call)
@@ -89,6 +105,21 @@ class TastePilotAgent:
             members = [i for i in admissible if i["domain"] == domain]
             if members:
                 groups.append({"domain": domain, "items": members})
+        # Plan-level explainer summary over the admitted items only:
+        # how many "why" lines the live LLM actually wrote, how many the
+        # template wrote, and how many are recorded Nebius fallbacks.
+        explainer_summary = {
+            **self.explainer_info,
+            "items_explained": len(admissible),
+            "llm_written": sum(1 for i in admissible
+                               if i["explanation"].get("source") != "template"),
+            "template_written": sum(
+                1 for i in admissible
+                if i["explanation"].get("source") == "template"
+                and not i["explanation"].get("fallback_from")),
+            "fallback": sum(1 for i in admissible
+                            if i["explanation"].get("fallback_from")),
+        }
         return {
             "request": text,
             "scenario": parsed.scenario,
@@ -96,6 +127,7 @@ class TastePilotAgent:
             "domains": parsed.domains,
             "seeds": seed_names,
             "mode": self.mode,
+            "explainer": explainer_summary,
             "items": admissible,
             "groups": groups,
             "rejected": [i["entity"]["name"] for i in rejected],

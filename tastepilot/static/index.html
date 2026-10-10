@@ -68,9 +68,14 @@ function card(item) {
                          : 'checker: ' + (v.reason || 'unverified');
   if (!ok) badge.classList.add('bad');
   div.querySelector('.why').textContent = item.why;
+  const ex = item.explanation || {source: item.explanation_source || 'template'};
+  const exLine = ` · why by ${ex.source}` +
+    (ex.model ? ` (${ex.model})` : '') +
+    (ex.fallback_from ? ` · ${ex.fallback_from} unavailable (${ex.fallback_reason || 'error'}) — template fallback` : '');
   div.querySelector('.meta').textContent =
     `affinity ${item.affinity.toFixed(2)} · evidence ${item.evidence_ref}` +
-    (v.evidence ? ` · response affinity ${Number(v.evidence.affinity_in_response).toFixed(2)}` : '');
+    (v.evidence ? ` · response affinity ${Number(v.evidence.affinity_in_response).toFixed(2)}` : '') +
+    exLine;
   div.querySelector('.evlink').addEventListener('click', () => showEvidence(item.evidence_ref));
   return div;
 }
@@ -106,7 +111,12 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   const res = await fetch('/api/plan', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text})});
   const data = await res.json();
   if (!res.ok) { statusEl.textContent = 'Error: ' + (data.error || res.status); return; }
-  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
+  const exSum = data.explainer
+    ? ` · Explanations: ${data.explainer.source}` +
+      (data.explainer.model ? ` (${data.explainer.model})` : '') +
+      (data.explainer.fallback ? ` · ${data.explainer.fallback} template fallback(s)` : '')
+    : '';
+  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
   const groups = data.groups && data.groups.length
     ? data.groups
     : [{domain: 'plan', items: data.items}];

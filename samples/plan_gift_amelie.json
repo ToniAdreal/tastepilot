@@ -12,6 +12,14 @@
   "Amelie"
  ],
  "mode": "mock",
+ "explainer": {
+  "source": "template",
+  "model": null,
+  "items_explained": 4,
+  "llm_written": 0,
+  "template_written": 4,
+  "fallback": 0
+ },
  "items": [
   {
    "entity": {
@@ -33,6 +41,9 @@
    "evidence_ref": "mock:insights:55bedde15b70952a",
    "why": "Qloo's taste graph links Aesop to Amelie with affinity 0.70.",
    "explanation_source": "template",
+   "explanation": {
+    "source": "template"
+   },
    "verification": {
     "item": "Aesop",
     "entity_id": "brd_aesop",
@@ -70,6 +81,9 @@
    "evidence_ref": "mock:insights:54f8542c0ade0880",
    "why": "Qloo's taste graph links The Little Prince to Amelie (shared signals: french, whimsical; affinity 0.87).",
    "explanation_source": "template",
+   "explanation": {
+    "source": "template"
+   },
    "verification": {
     "item": "The Little Prince",
     "entity_id": "bok_little_prince",
@@ -105,6 +119,9 @@
    "evidence_ref": "mock:insights:c5adb07f69c3083a",
    "why": "Qloo's taste graph links Fleetwood Mac to Amelie (shared signals: warm; affinity 0.55).",
    "explanation_source": "template",
+   "explanation": {
+    "source": "template"
+   },
    "verification": {
     "item": "Fleetwood Mac",
     "entity_id": "art_fleetwood",
@@ -141,6 +158,9 @@
    "evidence_ref": "mock:insights:c82f762365a87587",
    "why": "Qloo's taste graph links Midnight in Paris to Amelie (shared signals: romance; affinity 0.85).",
    "explanation_source": "template",
+   "explanation": {
+    "source": "template"
+   },
    "verification": {
     "item": "Midnight in Paris",
     "entity_id": "mov_midnight_paris",
@@ -180,6 +200,9 @@
      "evidence_ref": "mock:insights:55bedde15b70952a",
      "why": "Qloo's taste graph links Aesop to Amelie with affinity 0.70.",
      "explanation_source": "template",
+     "explanation": {
+      "source": "template"
+     },
      "verification": {
       "item": "Aesop",
       "entity_id": "brd_aesop",
@@ -222,6 +245,9 @@
      "evidence_ref": "mock:insights:54f8542c0ade0880",
      "why": "Qloo's taste graph links The Little Prince to Amelie (shared signals: french, whimsical; affinity 0.87).",
      "explanation_source": "template",
+     "explanation": {
+      "source": "template"
+     },
      "verification": {
       "item": "The Little Prince",
       "entity_id": "bok_little_prince",
@@ -262,6 +288,9 @@
      "evidence_ref": "mock:insights:c5adb07f69c3083a",
      "why": "Qloo's taste graph links Fleetwood Mac to Amelie (shared signals: warm; affinity 0.55).",
      "explanation_source": "template",
+     "explanation": {
+      "source": "template"
+     },
      "verification": {
       "item": "Fleetwood Mac",
       "entity_id": "art_fleetwood",
@@ -303,6 +332,9 @@
      "evidence_ref": "mock:insights:c82f762365a87587",
      "why": "Qloo's taste graph links Midnight in Paris to Amelie (shared signals: romance; affinity 0.85).",
      "explanation_source": "template",
+     "explanation": {
+      "source": "template"
+     },
      "verification": {
       "item": "Midnight in Paris",
       "entity_id": "mov_midnight_paris",
@@ -384,7 +416,7 @@
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-10T16:08:50.944917+00:00",
+  "created_at": "2026-10-10T16:43:18.711536+00:00",
   "verdict": "PASS",
   "entries": [
    {

@@ -16,10 +16,17 @@ from pathlib import Path
 
 DEFAULT_MODEL = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
 NEBIUS_CLI = Path.home() / "workspace/skills/nebius-token-factory/bin/nebius_tf.py"
+# Nemotron is a reasoning model: it spends completion tokens on its
+# reasoning trace before the answer. A 300-token budget was observed
+# live (2026-10-10) to end at finish_reason="length" with content=null
+# on every call — the sentence never got written. 1200 leaves room for
+# the trace plus the one-sentence answer.
+MAX_TOKENS = 1200
 
 
 class TemplateExplainer:
     source = "template"
+    model = None
 
     def explain(self, seed_names: list[str], item: dict) -> tuple[str, dict]:
         ent = item["entity"]
@@ -42,6 +49,7 @@ class NebiusExplainer:
         self.model = model
         self.cli_path = Path(cli_path)
         self._runner = runner  # callable(argv) -> (returncode, stdout) for tests
+        self.timeout = timeout
         self._fallback = TemplateExplainer()
 
     def explain(self, seed_names: list[str], item: dict) -> tuple[str, dict]:
@@ -57,7 +65,8 @@ class NebiusExplainer:
         )
         try:
             argv = ["python3", str(self.cli_path), "chat", "--model", self.model,
-                    "--prompt", prompt, "--max-tokens", "300", "--temperature", "0.3"]
+                    "--prompt", prompt, "--max-tokens", str(MAX_TOKENS),
+                    "--temperature", "0.3"]
             if self._runner is not None:
                 rc, out = self._runner(argv)
             else:

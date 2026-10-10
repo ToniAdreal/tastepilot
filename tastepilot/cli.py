@@ -2,7 +2,7 @@
 
   python -m tastepilot plan "<request>" [--mode mock|real|auto] [--out plan.json]
   python -m tastepilot verify --record plan.json
-  python -m tastepilot serve [--port 8765] [--mode mock|auto]
+  python -m tastepilot serve [--port 8765] [--mode mock|auto] [--llm template|nebius]
 """
 from __future__ import annotations
 
@@ -37,11 +37,16 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("serve")
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--mode", default="mock", choices=["mock", "auto"])
+    s.add_argument("--llm", default="template", choices=["template", "nebius"])
     args = ap.parse_args(argv)
 
     if args.cmd == "serve":
         from .server import serve
-        agent = _agent_for(args.mode, "template")
+        try:
+            agent = _agent_for(args.mode, args.llm)
+        except QlooError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         serve(agent, port=args.port)
         return 0
     if args.cmd == "verify":
