@@ -15,6 +15,11 @@ the Sun" survives intact. A labelled list ends at the next label, at a
 blank line after bulleted items, at the first non-bullet line after
 bulleted items, or — on the label's own line — at the end of the
 sentence, so trailing prose is never mistaken for a seed.
+
+Multi-city trips: every known city the request mentions is a leg, in
+mention order (``locations``); ``location`` stays the first leg for
+callers that only need one. The agent plans each leg separately with
+the same resolved seeds — per-leg taste continuity by construction.
 """
 from __future__ import annotations
 
@@ -69,6 +74,9 @@ class ParsedRequest:
     scenario: str
     domains: list[str]
     location: str | None
+    # Every city mentioned, canonicalised, in mention order — the legs
+    # of a multi-city trip. ``location`` is always ``locations[0]``.
+    locations: list[str] = field(default_factory=list)
     seed_names: list[str] = field(default_factory=list)
     quoted: list[str] = field(default_factory=list)
     # Provenance for richer seed capture: [{"label": ..., "items": [...]}]
@@ -136,6 +144,21 @@ def _canonical_seed_name(item: str) -> str:
     return item
 
 
+def extract_locations(text: str) -> list[str]:
+    """Known cities mentioned in the request, canonicalised and in
+    mention order (aliases dedupe: "NYC" and "New York" are one leg)."""
+    low = text.lower()
+    hits: list[tuple[int, str]] = []
+    for city in CITIES:
+        for m in re.finditer(r"\b" + re.escape(city.lower()) + r"\b", low):
+            hits.append((m.start(), CITY_CANON.get(city, city)))
+    locations: list[str] = []
+    for _, canon in sorted(hits):
+        if canon not in locations:
+            locations.append(canon)
+    return locations
+
+
 def parse_request(text: str) -> ParsedRequest:
     low = text.lower()
     scenario = "generic"
@@ -143,15 +166,12 @@ def parse_request(text: str) -> ParsedRequest:
         if name != "generic" and any(k in low for k in spec["keywords"]):
             scenario = name
             break
-    location = None
-    for city in CITIES:
-        if city.lower() in low:
-            location = CITY_CANON.get(city, city)
-            break
-    if location is None:
+    locations = extract_locations(text)
+    if not locations:
         m = re.search(r"\bin\s+([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)?)", text)
         if m:
-            location = m.group(1)
+            locations = [m.group(1)]
+    location = locations[0] if locations else None
     seed_names: list[str] = []
     for name, ent in fixtures.BY_NAME.items():
         short = ent.name.split(" (")[0].lower()
@@ -166,14 +186,17 @@ def parse_request(text: str) -> ParsedRequest:
             canonical = _canonical_seed_name(item)
             if canonical not in seed_names:
                 seed_names.append(canonical)
-    # A bare location mention ("...in Kyoto") is not a taste seed.
-    if location and location in seed_names:
-        seed_names.remove(location)
+    # A bare location mention ("...in Kyoto") is not a taste seed —
+    # for any leg of the trip, not just the first.
+    for loc in locations:
+        if loc in seed_names:
+            seed_names.remove(loc)
     quoted = re.findall(r'["\u201c]([^"\u201d]{2,60})["\u201d]', text)
     for q in quoted:
         if q not in seed_names:
             seed_names.append(q)
     return ParsedRequest(text=text, scenario=scenario,
                          domains=list(SCENARIOS[scenario]["domains"]),
-                         location=location, seed_names=seed_names, quoted=quoted,
+                         location=location, locations=locations,
+                         seed_names=seed_names, quoted=quoted,
                          seed_lists=seed_lists)

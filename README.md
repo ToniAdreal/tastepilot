@@ -37,14 +37,18 @@ TastePilot turns a natural-language plan — *"a slow weekend in Kyoto"*,
 
 ```
 tastepilot/
-  parser.py    deterministic request parsing (scenario / location / seeds,
+  parser.py    deterministic request parsing (scenario / locations / seeds,
                incl. richer seed capture from pasted labelled lists —
-               watchlist / playlist / reading list, bulleted or delimited)
+               watchlist / playlist / reading list, bulleted or delimited —
+               and multi-city legs: every city mentioned, in mention order)
   qloo.py      Qloo adapter: real client (hackathon API, X-Api-Key; bounded
                retries on 429/5xx + network errors, every failure surfaces
                as QlooError; tolerant payload-envelope parsing) + mock client
   fixtures.py  deterministic mock taste graph (fictional demo data, labelled mock)
   agent.py     the agent loop: parse -> plan -> Qloo calls -> compose -> verify
+               (multi-city: one leg per city, same resolved seeds for every
+               leg — taste continuity — with per-leg location-filtered
+               Qloo calls sealed separately)
   llm.py       explanation adapters: Nebius/Nemotron + deterministic template
   evidence.py  hash-chained, HMAC-signed evidence records (VerifyGate pattern)
   checker.py   deterministic evidence checker (the invariant enforcer)
@@ -138,6 +142,16 @@ baked into the image or the repo.
   Qloo call behind the plan and opens any of them
   (`GET /api/evidence/<response_id>`) — request, results, record hash,
   and chain validity included.
+* A request naming several cities becomes a multi-city trip: each
+  city is a leg, planned in mention order with the same resolved seeds
+  (your taste carries across legs) but its own location-filtered Qloo
+  calls — so the Kyoto leg cites Kyoto-filtered responses and the Paris
+  leg cites Paris-filtered ones, and a location-agnostic pick (a record
+  you would love anywhere) may appear once per leg, each time traced to
+  that leg's own response. The plan reports `locations` and `legs`
+  (per-leg domain groups alongside the flat `groups`), every item
+  carries its leg in `location`, and the UI renders one section per leg
+  with a `Legs: Kyoto → Paris` status line.
 * Seeds can arrive as a pasted list, not just prose: a request like
   *"a weekend in Kyoto. Watchlist: Spirited Away, An Obscure Reel.
   Playlist: Kind of Blue; Bon Iver"* contributes every list item as a

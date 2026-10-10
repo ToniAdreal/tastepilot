@@ -40,7 +40,12 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    becomes a seed, including titles outside the demo catalogue, which
    are passed verbatim to Qloo search.
 2. **Plans** by decomposing the scenario into taste domains (film,
-   music, food, places, books, brands, destinations).
+   music, food, places, books, brands, destinations). A request naming
+   several cities composes a multi-city trip: each city is a leg,
+   planned in mention order with the same resolved seeds — your taste
+   carries across legs — while each leg's Qloo calls are
+   location-filtered and sealed separately, so a leg's items cite that
+   leg's own responses.
 3. **Calls Qloo** — seeds are resolved with `GET /search`, and
    cross-domain recommendations come from `GET /v2/insights`
    (`filter.type` + `signal.interests.entities`). Qloo is load-bearing:
@@ -132,7 +137,8 @@ stops being a liability and becomes pure upside.
 - Direct imports from external taste accounts (a Spotify playlist, a
   Letterboxd watchlist) feeding the same evidence-checked loop, on top
   of the built paste-a-list capture.
-- Multi-city trip composition with per-leg taste continuity.
+- Date-aware legs: per-leg dates, ordering, and pacing constraints
+  on top of the built multi-city composition.
 - Account-owned share management (per-user link lists and dashboards)
   on top of the built expiry/revocation/persistence primitives.
 

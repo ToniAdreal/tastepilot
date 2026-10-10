@@ -54,34 +54,44 @@ class TastePilotAgent:
         seed_ids, seed_names = self._resolve_seeds(parsed, log)
         items: list[dict] = []
         llm_calls: list[dict] = []
+        # Multi-city composition: one leg per mentioned city (mention
+        # order), planned with the SAME resolved seed ids — the user's
+        # taste carries across legs by construction, while each leg's
+        # Qloo calls are location-filtered and sealed separately, so a
+        # leg's items cite that leg's own responses. A request with no
+        # city is a single location-less leg.
+        leg_locations = parsed.locations or [None]
         if seed_ids:
-            for domain in parsed.domains:
-                resp = self.qloo.insights(seed_ids, domain,
-                                           limit=ITEMS_PER_DOMAIN + 2,
-                                           location=parsed.location)
-                log.add_qloo_call(resp.to_dict())
-                for scored in resp.results[:ITEMS_PER_DOMAIN]:
-                    item = {"entity": scored.entity.to_dict(),
-                            "domain": domain,
-                            "affinity": scored.affinity,
-                            "shared_tags": list(scored.shared_tags),
-                            "evidence_ref": resp.response_id}
-                    why, meta = self.explainer.explain(seed_names, item)
-                    item["why"] = why
-                    item["explanation_source"] = meta.get("source")
-                    # Full provenance, not just the source string: the UI
-                    # and judges must see which model worded each "why"
-                    # line — and, on fallback, that Nebius was attempted
-                    # and why the deterministic template took over.
-                    item["explanation"] = {
-                        k: meta[k] for k in ("source", "model", "fallback_from",
-                                             "fallback_reason", "usage")
-                        if meta.get(k) is not None}
-                    if meta.get("source") != "template" or meta.get("fallback_from"):
-                        llm_calls.append({"purpose": "explain",
-                                          "item": scored.entity.name,
-                                          "domain": domain, **meta})
-                    items.append(item)
+            for leg_location in leg_locations:
+                for domain in parsed.domains:
+                    resp = self.qloo.insights(seed_ids, domain,
+                                               limit=ITEMS_PER_DOMAIN + 2,
+                                               location=leg_location)
+                    log.add_qloo_call(resp.to_dict())
+                    for scored in resp.results[:ITEMS_PER_DOMAIN]:
+                        item = {"entity": scored.entity.to_dict(),
+                                "domain": domain,
+                                "location": leg_location,
+                                "affinity": scored.affinity,
+                                "shared_tags": list(scored.shared_tags),
+                                "evidence_ref": resp.response_id}
+                        why, meta = self.explainer.explain(seed_names, item)
+                        item["why"] = why
+                        item["explanation_source"] = meta.get("source")
+                        # Full provenance, not just the source string: the UI
+                        # and judges must see which model worded each "why"
+                        # line — and, on fallback, that Nebius was attempted
+                        # and why the deterministic template took over.
+                        item["explanation"] = {
+                            k: meta[k] for k in ("source", "model", "fallback_from",
+                                                 "fallback_reason", "usage")
+                            if meta.get(k) is not None}
+                        if meta.get("source") != "template" or meta.get("fallback_from"):
+                            llm_calls.append({"purpose": "explain",
+                                              "item": scored.entity.name,
+                                              "domain": domain,
+                                              "location": leg_location, **meta})
+                        items.append(item)
         for call in llm_calls:
             log.add_llm_call(call)
         # Seal with a provisional verdict, verify, then re-seal honestly:
@@ -96,9 +106,15 @@ class TastePilotAgent:
         # Per-item verification against the final record, so the UI can
         # show — for every card — exactly which Qloo response backs it.
         reports = checker.item_reports(items, record)
-        by_key = {(r["entity_id"], r["item"]): r for r in reports}
+        # Keyed by evidence ref as well as entity: in a multi-city plan
+        # the same entity legitimately appears once per leg, citing a
+        # different (per-leg) Qloo response each time.
+        by_key = {(r["entity_id"], r["item"],
+                   (r["evidence"] or {}).get("response_id")): r
+                  for r in reports}
         for item in admissible:
-            rep = by_key.get((item["entity"]["id"], item["entity"]["name"]))
+            rep = by_key.get((item["entity"]["id"], item["entity"]["name"],
+                              item["evidence_ref"]))
             item["verification"] = rep
         rejected_details = [
             {"name": r["item"], "domain": r["domain"], "reason": r["reason"]}
@@ -110,6 +126,21 @@ class TastePilotAgent:
             members = [i for i in admissible if i["domain"] == domain]
             if members:
                 groups.append({"domain": domain, "items": members})
+        # The same grouping per leg, in mention order, for multi-city
+        # plans (a single-city plan has exactly one leg). A leg with no
+        # admitted items is omitted, mirroring how empty domain groups
+        # are omitted above.
+        legs = []
+        for leg_location in leg_locations:
+            leg_groups = []
+            for domain in parsed.domains:
+                members = [i for i in admissible
+                           if i["domain"] == domain
+                           and i["location"] == leg_location]
+                if members:
+                    leg_groups.append({"domain": domain, "items": members})
+            if leg_groups:
+                legs.append({"location": leg_location, "groups": leg_groups})
         # Plan-level explainer summary over the admitted items only:
         # how many "why" lines the live LLM actually wrote, how many the
         # template wrote, and how many are recorded Nebius fallbacks.
@@ -129,6 +160,7 @@ class TastePilotAgent:
             "request": text,
             "scenario": parsed.scenario,
             "location": parsed.location,
+            "locations": parsed.locations,
             "domains": parsed.domains,
             "seeds": seed_names,
             "seed_lists": parsed.seed_lists,
@@ -136,13 +168,15 @@ class TastePilotAgent:
             "explainer": explainer_summary,
             "items": admissible,
             "groups": groups,
+            "legs": legs,
             "rejected": [i["entity"]["name"] for i in rejected],
             "rejected_details": rejected_details,
             "checker": {"passed": final_report["passed"] and bool(admissible),
                         "chain_valid": final_report["chain_valid"],
                         "violations": rejected_report["violations"],
                         "items": [by_key[(i["entity"]["id"],
-                                           i["entity"]["name"])]
+                                           i["entity"]["name"],
+                                           i["evidence_ref"])]
                                   for i in admissible]},
             "evidence": record,
         }

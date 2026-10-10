@@ -2,6 +2,7 @@
  "request": "I need a birthday gift shortlist for someone who loves Amelie",
  "scenario": "gift",
  "location": null,
+ "locations": [],
  "domains": [
   "brand",
   "book",
@@ -37,6 +38,7 @@
     "location": null
    },
    "domain": "brand",
+   "location": null,
    "affinity": 0.7,
    "shared_tags": [],
    "evidence_ref": "mock:insights:55bedde15b70952a",
@@ -74,6 +76,7 @@
     "location": null
    },
    "domain": "book",
+   "location": null,
    "affinity": 0.87,
    "shared_tags": [
     "french",
@@ -113,6 +116,7 @@
     "location": null
    },
    "domain": "music",
+   "location": null,
    "affinity": 0.55,
    "shared_tags": [
     "warm"
@@ -152,6 +156,7 @@
     "location": null
    },
    "domain": "film",
+   "location": null,
    "affinity": 0.85,
    "shared_tags": [
     "romance"
@@ -196,6 +201,7 @@
       "location": null
      },
      "domain": "brand",
+     "location": null,
      "affinity": 0.7,
      "shared_tags": [],
      "evidence_ref": "mock:insights:55bedde15b70952a",
@@ -238,6 +244,7 @@
       "location": null
      },
      "domain": "book",
+     "location": null,
      "affinity": 0.87,
      "shared_tags": [
       "french",
@@ -282,6 +289,7 @@
       "location": null
      },
      "domain": "music",
+     "location": null,
      "affinity": 0.55,
      "shared_tags": [
       "warm"
@@ -326,6 +334,7 @@
       "location": null
      },
      "domain": "film",
+     "location": null,
      "affinity": 0.85,
      "shared_tags": [
       "romance"
@@ -349,6 +358,191 @@
        "affinity_in_response": 0.85
       }
      }
+    }
+   ]
+  }
+ ],
+ "legs": [
+  {
+   "location": null,
+   "groups": [
+    {
+     "domain": "brand",
+     "items": [
+      {
+       "entity": {
+        "id": "brd_aesop",
+        "name": "Aesop",
+        "domain": "brand",
+        "urn_type": "urn:entity:brand",
+        "tags": [
+         "minimal",
+         "botanical",
+         "design",
+         "quiet"
+        ],
+        "location": null
+       },
+       "domain": "brand",
+       "location": null,
+       "affinity": 0.7,
+       "shared_tags": [],
+       "evidence_ref": "mock:insights:55bedde15b70952a",
+       "why": "Qloo's taste graph links Aesop to Amelie with affinity 0.70.",
+       "explanation_source": "template",
+       "explanation": {
+        "source": "template"
+       },
+       "verification": {
+        "item": "Aesop",
+        "entity_id": "brd_aesop",
+        "domain": "brand",
+        "admissible": true,
+        "reason": "ok",
+        "evidence": {
+         "response_id": "mock:insights:55bedde15b70952a",
+         "endpoint": "insights",
+         "source": "mock",
+         "affinity_in_response": 0.7
+        }
+       }
+      }
+     ]
+    },
+    {
+     "domain": "book",
+     "items": [
+      {
+       "entity": {
+        "id": "bok_little_prince",
+        "name": "The Little Prince",
+        "domain": "book",
+        "urn_type": "urn:entity:book",
+        "tags": [
+         "french",
+         "whimsical",
+         "philosophical",
+         "short"
+        ],
+        "location": null
+       },
+       "domain": "book",
+       "location": null,
+       "affinity": 0.87,
+       "shared_tags": [
+        "french",
+        "whimsical"
+       ],
+       "evidence_ref": "mock:insights:54f8542c0ade0880",
+       "why": "Qloo's taste graph links The Little Prince to Amelie (shared signals: french, whimsical; affinity 0.87).",
+       "explanation_source": "template",
+       "explanation": {
+        "source": "template"
+       },
+       "verification": {
+        "item": "The Little Prince",
+        "entity_id": "bok_little_prince",
+        "domain": "book",
+        "admissible": true,
+        "reason": "ok",
+        "evidence": {
+         "response_id": "mock:insights:54f8542c0ade0880",
+         "endpoint": "insights",
+         "source": "mock",
+         "affinity_in_response": 0.87
+        }
+       }
+      }
+     ]
+    },
+    {
+     "domain": "music",
+     "items": [
+      {
+       "entity": {
+        "id": "art_fleetwood",
+        "name": "Fleetwood Mac",
+        "domain": "music",
+        "urn_type": "urn:entity:artist",
+        "tags": [
+         "classic-rock",
+         "warm",
+         "nostalgic"
+        ],
+        "location": null
+       },
+       "domain": "music",
+       "location": null,
+       "affinity": 0.55,
+       "shared_tags": [
+        "warm"
+       ],
+       "evidence_ref": "mock:insights:c5adb07f69c3083a",
+       "why": "Qloo's taste graph links Fleetwood Mac to Amelie (shared signals: warm; affinity 0.55).",
+       "explanation_source": "template",
+       "explanation": {
+        "source": "template"
+       },
+       "verification": {
+        "item": "Fleetwood Mac",
+        "entity_id": "art_fleetwood",
+        "domain": "music",
+        "admissible": true,
+        "reason": "ok",
+        "evidence": {
+         "response_id": "mock:insights:c5adb07f69c3083a",
+         "endpoint": "insights",
+         "source": "mock",
+         "affinity_in_response": 0.55
+        }
+       }
+      }
+     ]
+    },
+    {
+     "domain": "film",
+     "items": [
+      {
+       "entity": {
+        "id": "mov_midnight_paris",
+        "name": "Midnight in Paris",
+        "domain": "film",
+        "urn_type": "urn:entity:movie",
+        "tags": [
+         "romance",
+         "paris",
+         "nostalgic",
+         "literary"
+        ],
+        "location": null
+       },
+       "domain": "film",
+       "location": null,
+       "affinity": 0.85,
+       "shared_tags": [
+        "romance"
+       ],
+       "evidence_ref": "mock:insights:c82f762365a87587",
+       "why": "Qloo's taste graph links Midnight in Paris to Amelie (shared signals: romance; affinity 0.85).",
+       "explanation_source": "template",
+       "explanation": {
+        "source": "template"
+       },
+       "verification": {
+        "item": "Midnight in Paris",
+        "entity_id": "mov_midnight_paris",
+        "domain": "film",
+        "admissible": true,
+        "reason": "ok",
+        "evidence": {
+         "response_id": "mock:insights:c82f762365a87587",
+         "endpoint": "insights",
+         "source": "mock",
+         "affinity_in_response": 0.85
+        }
+       }
+      }
+     ]
     }
    ]
   }
@@ -417,7 +611,7 @@
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-10T20:38:34.654415+00:00",
+  "created_at": "2026-10-10T21:09:07.211460+00:00",
   "verdict": "PASS",
   "entries": [
    {

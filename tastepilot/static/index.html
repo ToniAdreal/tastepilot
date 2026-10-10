@@ -192,16 +192,33 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   const listSum = data.seed_lists && data.seed_lists.length
     ? ` · Lists: ${data.seed_lists.map(l => `${l.label} (${l.items.length})`).join(', ')}`
     : '';
-  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
-  const groups = data.groups && data.groups.length
-    ? data.groups
-    : [{domain: 'plan', items: data.items}];
-  for (const group of groups) {
-    const h = document.createElement('h2');
-    h.className = 'domain';
-    h.textContent = group.domain;
-    out.appendChild(h);
-    for (const item of group.items) out.appendChild(card(item));
+  const legsSum = data.legs && data.legs.length > 1
+    ? ` · Legs: ${data.legs.map(l => l.location || 'anywhere').join(' → ')}`
+    : '';
+  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${legsSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
+  const renderGroups = (groups) => {
+    for (const group of groups) {
+      const h = document.createElement('h3');
+      h.className = 'domain';
+      h.textContent = group.domain;
+      out.appendChild(h);
+      for (const item of group.items) out.appendChild(card(item));
+    }
+  };
+  if (data.legs && data.legs.length > 1) {
+    // Multi-city: one section per leg (mention order), each with its
+    // own domain groups — every leg's items cite that leg's Qloo calls.
+    for (const leg of data.legs) {
+      const h = document.createElement('h2');
+      h.className = 'leg';
+      h.textContent = leg.location || 'Anywhere';
+      out.appendChild(h);
+      renderGroups(leg.groups);
+    }
+  } else {
+    renderGroups(data.groups && data.groups.length
+      ? data.groups
+      : [{domain: 'plan', items: data.items}]);
   }
   if (data.rejected_details && data.rejected_details.length) {
     const div = document.createElement('div');
