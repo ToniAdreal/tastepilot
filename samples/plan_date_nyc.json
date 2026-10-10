@@ -1,0 +1,310 @@
+{
+ "request": "a first date in New York, we both love Kind of Blue",
+ "scenario": "date",
+ "location": "New York",
+ "domains": [
+  "food",
+  "place",
+  "music",
+  "film"
+ ],
+ "seeds": [
+  "Kind of Blue (Miles Davis)"
+ ],
+ "mode": "mock",
+ "items": [
+  {
+   "entity": {
+    "id": "fod_jazz_bar_nyc",
+    "name": "A basement jazz bar with natural wine",
+    "domain": "food",
+    "urn_type": "urn:entity:place",
+    "tags": [
+     "nyc",
+     "jazz",
+     "intimate",
+     "wine"
+    ],
+    "location": "New York"
+   },
+   "domain": "food",
+   "affinity": 0.92,
+   "shared_tags": [
+    "jazz"
+   ],
+   "evidence_ref": "mock:insights:09f39fcb12ed8fac",
+   "why": "Qloo's taste graph links A basement jazz bar with natural wine to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.92).",
+   "explanation_source": "template"
+  },
+  {
+   "entity": {
+    "id": "plc_west_village",
+    "name": "West Village, New York",
+    "domain": "place",
+    "urn_type": "urn:entity:place",
+    "tags": [
+     "nyc",
+     "walking",
+     "jazz",
+     "historic"
+    ],
+    "location": "New York"
+   },
+   "domain": "place",
+   "affinity": 0.88,
+   "shared_tags": [
+    "jazz"
+   ],
+   "evidence_ref": "mock:insights:4b3d8bcf04001e3b",
+   "why": "Qloo's taste graph links West Village, New York to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.88).",
+   "explanation_source": "template"
+  },
+  {
+   "entity": {
+    "id": "art_nujabes",
+    "name": "Nujabes",
+    "domain": "music",
+    "urn_type": "urn:entity:artist",
+    "tags": [
+     "jazz",
+     "hip-hop",
+     "japanese",
+     "mellow",
+     "lo-fi"
+    ],
+    "location": null
+   },
+   "domain": "music",
+   "affinity": 0.84,
+   "shared_tags": [
+    "jazz"
+   ],
+   "evidence_ref": "mock:insights:f4db3ca15ae4b88d",
+   "why": "Qloo's taste graph links Nujabes to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.84).",
+   "explanation_source": "template"
+  },
+  {
+   "entity": {
+    "id": "mov_lost_translation",
+    "name": "Lost in Translation",
+    "domain": "film",
+    "urn_type": "urn:entity:movie",
+    "tags": [
+     "drama",
+     "tokyo",
+     "quiet",
+     "atmospheric"
+    ],
+    "location": null
+   },
+   "domain": "film",
+   "affinity": 0.77,
+   "shared_tags": [
+    "quiet"
+   ],
+   "evidence_ref": "mock:insights:e7ba7ad039f3736c",
+   "why": "Qloo's taste graph links Lost in Translation to Kind of Blue (Miles Davis) (shared signals: quiet; affinity 0.77).",
+   "explanation_source": "template"
+  }
+ ],
+ "rejected": [],
+ "checker": {
+  "passed": true,
+  "chain_valid": true,
+  "violations": []
+ },
+ "evidence": {
+  "tool": "tastepilot",
+  "version": "0.1.0",
+  "created_at": "2026-10-10T12:35:32.343505+00:00",
+  "verdict": "PASS",
+  "entries": [
+   {
+    "kind": "header",
+    "hash": "ceaee52f53fcebbf1941cbd97531901371bf1262a1e2f32fdc4ed4f458ab401f",
+    "request_text": "a first date in New York, we both love Kind of Blue",
+    "mode": "mock"
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "64ba40a914511ba4aae89934d597477f3579db1c3a3ae0fe2f84b3152dea050e",
+    "response": {
+     "response_id": "mock:search:6d368715e1962a1e",
+     "endpoint": "search",
+     "source": "mock",
+     "request": {
+      "query": "Kind of Blue (Miles Davis)",
+      "limit": 5
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "art_kind_of_blue",
+        "name": "Kind of Blue (Miles Davis)",
+        "domain": "music",
+        "urn_type": "urn:entity:artist",
+        "tags": [
+         "jazz",
+         "modal",
+         "quiet",
+         "classic"
+        ],
+        "location": null
+       },
+       "affinity": 1.0,
+       "shared_tags": []
+      }
+     ]
+    }
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "247c700895467bb5794eaa9a183e16bc07934edb89e6b2cff6e336627ba0b91a",
+    "response": {
+     "response_id": "mock:insights:09f39fcb12ed8fac",
+     "endpoint": "insights",
+     "source": "mock",
+     "request": {
+      "filter.type": "urn:entity:place",
+      "signal.interests.entities": "art_kind_of_blue",
+      "take": 4,
+      "location": "New York"
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "fod_jazz_bar_nyc",
+        "name": "A basement jazz bar with natural wine",
+        "domain": "food",
+        "urn_type": "urn:entity:place",
+        "tags": [
+         "nyc",
+         "jazz",
+         "intimate",
+         "wine"
+        ],
+        "location": "New York"
+       },
+       "affinity": 0.92,
+       "shared_tags": [
+        "jazz"
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "c3bf7cf9030c3225d4356a7b8c2a7a9ba2c8b63bf7421f3c6109b414a8ebed0e",
+    "response": {
+     "response_id": "mock:insights:4b3d8bcf04001e3b",
+     "endpoint": "insights",
+     "source": "mock",
+     "request": {
+      "filter.type": "urn:entity:place",
+      "signal.interests.entities": "art_kind_of_blue",
+      "take": 4,
+      "location": "New York"
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "plc_west_village",
+        "name": "West Village, New York",
+        "domain": "place",
+        "urn_type": "urn:entity:place",
+        "tags": [
+         "nyc",
+         "walking",
+         "jazz",
+         "historic"
+        ],
+        "location": "New York"
+       },
+       "affinity": 0.88,
+       "shared_tags": [
+        "jazz"
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "6243fa97a0cba4901ff584e9d7d9544f1669605b80d3ebc5622516eb70b9fb44",
+    "response": {
+     "response_id": "mock:insights:f4db3ca15ae4b88d",
+     "endpoint": "insights",
+     "source": "mock",
+     "request": {
+      "filter.type": "urn:entity:artist",
+      "signal.interests.entities": "art_kind_of_blue",
+      "take": 4,
+      "location": "New York"
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "art_nujabes",
+        "name": "Nujabes",
+        "domain": "music",
+        "urn_type": "urn:entity:artist",
+        "tags": [
+         "jazz",
+         "hip-hop",
+         "japanese",
+         "mellow",
+         "lo-fi"
+        ],
+        "location": null
+       },
+       "affinity": 0.84,
+       "shared_tags": [
+        "jazz"
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "b8c438d697c398e64574d5f0eedcf7e94b3ceaf4735398b2f87b83c9baeb006b",
+    "response": {
+     "response_id": "mock:insights:e7ba7ad039f3736c",
+     "endpoint": "insights",
+     "source": "mock",
+     "request": {
+      "filter.type": "urn:entity:movie",
+      "signal.interests.entities": "art_kind_of_blue",
+      "take": 4,
+      "location": "New York"
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "mov_lost_translation",
+        "name": "Lost in Translation",
+        "domain": "film",
+        "urn_type": "urn:entity:movie",
+        "tags": [
+         "drama",
+         "tokyo",
+         "quiet",
+         "atmospheric"
+        ],
+        "location": null
+       },
+       "affinity": 0.77,
+       "shared_tags": [
+        "quiet"
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "record_hash": "1579e7e7da7b8ebe809779267ecf33d0ce1fe703327861ee14e6c505f98136ae",
+  "signature": "1004311a1944851f8050bb5cd82cf695acd8b9abcb9fe11f610fcd0e0e070a33",
+  "signing_key_is_default_dev_key": true
+ }
+}

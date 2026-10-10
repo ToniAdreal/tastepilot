@@ -1,0 +1,304 @@
+{
+ "request": "I need a birthday gift shortlist for someone who loves Amelie",
+ "scenario": "gift",
+ "location": null,
+ "domains": [
+  "brand",
+  "book",
+  "music",
+  "film"
+ ],
+ "seeds": [
+  "Amelie"
+ ],
+ "mode": "mock",
+ "items": [
+  {
+   "entity": {
+    "id": "brd_aesop",
+    "name": "Aesop",
+    "domain": "brand",
+    "urn_type": "urn:entity:brand",
+    "tags": [
+     "minimal",
+     "botanical",
+     "design",
+     "quiet"
+    ],
+    "location": null
+   },
+   "domain": "brand",
+   "affinity": 0.7,
+   "shared_tags": [],
+   "evidence_ref": "mock:insights:55bedde15b70952a",
+   "why": "Qloo's taste graph links Aesop to Amelie with affinity 0.70.",
+   "explanation_source": "template"
+  },
+  {
+   "entity": {
+    "id": "bok_little_prince",
+    "name": "The Little Prince",
+    "domain": "book",
+    "urn_type": "urn:entity:book",
+    "tags": [
+     "french",
+     "whimsical",
+     "philosophical",
+     "short"
+    ],
+    "location": null
+   },
+   "domain": "book",
+   "affinity": 0.87,
+   "shared_tags": [
+    "french",
+    "whimsical"
+   ],
+   "evidence_ref": "mock:insights:54f8542c0ade0880",
+   "why": "Qloo's taste graph links The Little Prince to Amelie (shared signals: french, whimsical; affinity 0.87).",
+   "explanation_source": "template"
+  },
+  {
+   "entity": {
+    "id": "art_fleetwood",
+    "name": "Fleetwood Mac",
+    "domain": "music",
+    "urn_type": "urn:entity:artist",
+    "tags": [
+     "classic-rock",
+     "warm",
+     "nostalgic"
+    ],
+    "location": null
+   },
+   "domain": "music",
+   "affinity": 0.55,
+   "shared_tags": [
+    "warm"
+   ],
+   "evidence_ref": "mock:insights:c5adb07f69c3083a",
+   "why": "Qloo's taste graph links Fleetwood Mac to Amelie (shared signals: warm; affinity 0.55).",
+   "explanation_source": "template"
+  },
+  {
+   "entity": {
+    "id": "mov_midnight_paris",
+    "name": "Midnight in Paris",
+    "domain": "film",
+    "urn_type": "urn:entity:movie",
+    "tags": [
+     "romance",
+     "paris",
+     "nostalgic",
+     "literary"
+    ],
+    "location": null
+   },
+   "domain": "film",
+   "affinity": 0.85,
+   "shared_tags": [
+    "romance"
+   ],
+   "evidence_ref": "mock:insights:c82f762365a87587",
+   "why": "Qloo's taste graph links Midnight in Paris to Amelie (shared signals: romance; affinity 0.85).",
+   "explanation_source": "template"
+  }
+ ],
+ "rejected": [],
+ "checker": {
+  "passed": true,
+  "chain_valid": true,
+  "violations": []
+ },
+ "evidence": {
+  "tool": "tastepilot",
+  "version": "0.1.0",
+  "created_at": "2026-10-10T12:35:32.222475+00:00",
+  "verdict": "PASS",
+  "entries": [
+   {
+    "kind": "header",
+    "hash": "788f1e1a4c39e97a1008e2238f9f89fa3fab9f0c35a4db2bf9a810ec900a4e29",
+    "request_text": "I need a birthday gift shortlist for someone who loves Amelie",
+    "mode": "mock"
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "a4230a8214d8cbf229025ff4bb02c9f1eb96c0a4d8a6bbe5d39e4eff7bb91629",
+    "response": {
+     "response_id": "mock:search:f098dbb26dac13fd",
+     "endpoint": "search",
+     "source": "mock",
+     "request": {
+      "query": "Amelie",
+      "limit": 5
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "mov_amelie",
+        "name": "Amelie",
+        "domain": "film",
+        "urn_type": "urn:entity:movie",
+        "tags": [
+         "romance",
+         "french",
+         "whimsical",
+         "warm"
+        ],
+        "location": null
+       },
+       "affinity": 1.0,
+       "shared_tags": []
+      }
+     ]
+    }
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "99e53ea0d84a2e21b94bd609a118146558939cc52992f151fc7dc496ae2ac54f",
+    "response": {
+     "response_id": "mock:insights:55bedde15b70952a",
+     "endpoint": "insights",
+     "source": "mock",
+     "request": {
+      "filter.type": "urn:entity:brand",
+      "signal.interests.entities": "mov_amelie",
+      "take": 4,
+      "location": null
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "brd_aesop",
+        "name": "Aesop",
+        "domain": "brand",
+        "urn_type": "urn:entity:brand",
+        "tags": [
+         "minimal",
+         "botanical",
+         "design",
+         "quiet"
+        ],
+        "location": null
+       },
+       "affinity": 0.7,
+       "shared_tags": []
+      }
+     ]
+    }
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "cac662d1348b7b6f79bcb0fe4d0466e39e07efe469e650ac9424c929547c302a",
+    "response": {
+     "response_id": "mock:insights:54f8542c0ade0880",
+     "endpoint": "insights",
+     "source": "mock",
+     "request": {
+      "filter.type": "urn:entity:book",
+      "signal.interests.entities": "mov_amelie",
+      "take": 4,
+      "location": null
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "bok_little_prince",
+        "name": "The Little Prince",
+        "domain": "book",
+        "urn_type": "urn:entity:book",
+        "tags": [
+         "french",
+         "whimsical",
+         "philosophical",
+         "short"
+        ],
+        "location": null
+       },
+       "affinity": 0.87,
+       "shared_tags": [
+        "french",
+        "whimsical"
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "b513d63500fd4125421735681be38a4e8a06574e9bd94c0c7da4155b41f77ff5",
+    "response": {
+     "response_id": "mock:insights:c5adb07f69c3083a",
+     "endpoint": "insights",
+     "source": "mock",
+     "request": {
+      "filter.type": "urn:entity:artist",
+      "signal.interests.entities": "mov_amelie",
+      "take": 4,
+      "location": null
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "art_fleetwood",
+        "name": "Fleetwood Mac",
+        "domain": "music",
+        "urn_type": "urn:entity:artist",
+        "tags": [
+         "classic-rock",
+         "warm",
+         "nostalgic"
+        ],
+        "location": null
+       },
+       "affinity": 0.55,
+       "shared_tags": [
+        "warm"
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "aa3b24df05ac5e0bb19f3198b199a899509a9278f813160a67278b7421082594",
+    "response": {
+     "response_id": "mock:insights:c82f762365a87587",
+     "endpoint": "insights",
+     "source": "mock",
+     "request": {
+      "filter.type": "urn:entity:movie",
+      "signal.interests.entities": "mov_amelie",
+      "take": 4,
+      "location": null
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "mov_midnight_paris",
+        "name": "Midnight in Paris",
+        "domain": "film",
+        "urn_type": "urn:entity:movie",
+        "tags": [
+         "romance",
+         "paris",
+         "nostalgic",
+         "literary"
+        ],
+        "location": null
+       },
+       "affinity": 0.85,
+       "shared_tags": [
+        "romance"
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "record_hash": "86cd4177c47309f488a51afcd4e9d16551460cad8d89b4b64d6d9dffe70a863a",
+  "signature": "3b8940e2e0da46c53b41bdd3cde52d2e4cdfa4ce180d69076c341525744fbc56",
+  "signing_key_is_default_dev_key": true
+ }
+}

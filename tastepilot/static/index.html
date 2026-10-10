@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TastePilot — a taste-aware planning agent</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 760px; padding: 0 1rem; }
+  h1 { font-size: 1.5rem; } .sub { color: #555; }
+  form { display: flex; gap: .5rem; margin: 1rem 0; }
+  input { flex: 1; padding: .6rem; font-size: 1rem; }
+  button { padding: .6rem 1rem; font-size: 1rem; cursor: pointer; }
+  .card { border: 1px solid #ddd; border-radius: 8px; padding: .8rem 1rem; margin: .6rem 0; }
+  .badge { font-size: .75rem; background: #eef6ee; border: 1px solid #9c9; border-radius: 4px; padding: .1rem .4rem; }
+  .why { color: #333; } .meta { color: #777; font-size: .85rem; }
+  #status { margin: .5rem 0; color: #555; }
+</style>
+</head>
+<body>
+<h1>TastePilot</h1>
+<p class="sub">Tell me a plan and what you love. Every recommendation below traces to a
+Qloo taste-graph response — sealed in a hash-chained evidence log and checked before it reaches you.</p>
+<form id="f">
+  <input id="q" placeholder='e.g. a slow weekend in Kyoto — I love Spirited Away and Kind of Blue' size="60">
+  <button type="submit">Plan</button>
+</form>
+<div id="status"></div>
+<div id="out"></div>
+<script>
+document.getElementById('f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = document.getElementById('q').value;
+  const status = document.getElementById('status');
+  const out = document.getElementById('out');
+  status.textContent = 'Planning…';
+  out.innerHTML = '';
+  const res = await fetch('/api/plan', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text})});
+  const data = await res.json();
+  if (!res.ok) { status.textContent = 'Error: ' + (data.error || res.status); return; }
+  status.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
+  for (const item of data.items) {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = `<strong></strong> <span class="badge">Qloo-traced ✓</span>
+      <div class="why"></div>
+      <div class="meta"></div>`;
+    div.querySelector('strong').textContent = `[${item.domain}] ${item.entity.name}`;
+    div.querySelector('.why').textContent = item.why;
+    div.querySelector('.meta').textContent = `affinity ${item.affinity.toFixed(2)} · evidence ${item.evidence_ref}`;
+    out.appendChild(div);
+  }
+  if (data.rejected.length) {
+    const div = document.createElement('div');
+    div.textContent = 'Rejected by the evidence checker: ' + data.rejected.join(', ');
+    out.appendChild(div);
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,488 @@
+{
+ "request": "a slow weekend in Kyoto, I love Spirited Away and Kind of Blue",
+ "scenario": "weekend",
+ "location": "Kyoto",
+ "domains": [
+  "destination",
+  "place",
+  "food",
+  "music",
+  "film"
+ ],
+ "seeds": [
+  "Spirited Away",
+  "Kind of Blue (Miles Davis)"
+ ],
+ "mode": "mock",
+ "items": [
+  {
+   "entity": {
+    "id": "dst_kyoto",
+    "name": "Kyoto",
+    "domain": "destination",
+    "urn_type": "urn:entity:destination",
+    "tags": [
+     "japanese",
+     "historic",
+     "quiet",
+     "walking"
+    ],
+    "location": "Kyoto"
+   },
+   "domain": "destination",
+   "affinity": 0.9,
+   "shared_tags": [
+    "japanese"
+   ],
+   "evidence_ref": "mock:insights:b9a4c61b25bc0cc3",
+   "why": "Qloo's taste graph links Kyoto to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.90).",
+   "explanation_source": "template"
+  },
+  {
+   "entity": {
+    "id": "plc_gion",
+    "name": "Gion, Kyoto",
+    "domain": "place",
+    "urn_type": "urn:entity:place",
+    "tags": [
+     "kyoto",
+     "historic",
+     "quiet",
+     "japanese"
+    ],
+    "location": "Kyoto"
+   },
+   "domain": "place",
+   "affinity": 0.88,
+   "shared_tags": [
+    "japanese"
+   ],
+   "evidence_ref": "mock:insights:e0c12c8b917168bc",
+   "why": "Qloo's taste graph links Gion, Kyoto to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.88).",
+   "explanation_source": "template"
+  },
+  {
+   "entity": {
+    "id": "plc_arashiyama",
+    "name": "Arashiyama Bamboo Grove",
+    "domain": "place",
+    "urn_type": "urn:entity:place",
+    "tags": [
+     "kyoto",
+     "nature",
+     "quiet",
+     "japanese"
+    ],
+    "location": "Kyoto"
+   },
+   "domain": "place",
+   "affinity": 0.82,
+   "shared_tags": [
+    "japanese"
+   ],
+   "evidence_ref": "mock:insights:e0c12c8b917168bc",
+   "why": "Qloo's taste graph links Arashiyama Bamboo Grove to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.82).",
+   "explanation_source": "template"
+  },
+  {
+   "entity": {
+    "id": "fod_ramen_kyoto",
+    "name": "A quiet ramen counter in Gion",
+    "domain": "food",
+    "urn_type": "urn:entity:place",
+    "tags": [
+     "kyoto",
+     "ramen",
+     "japanese",
+     "intimate"
+    ],
+    "location": "Kyoto"
+   },
+   "domain": "food",
+   "affinity": 0.86,
+   "shared_tags": [
+    "japanese"
+   ],
+   "evidence_ref": "mock:insights:d8a221de4e7b1a6f",
+   "why": "Qloo's taste graph links A quiet ramen counter in Gion to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.86).",
+   "explanation_source": "template"
+  },
+  {
+   "entity": {
+    "id": "fod_izakaya",
+    "name": "A lantern-lit izakaya in Pontocho Alley",
+    "domain": "food",
+    "urn_type": "urn:entity:place",
+    "tags": [
+     "kyoto",
+     "japanese",
+     "warm",
+     "walking"
+    ],
+    "location": "Kyoto"
+   },
+   "domain": "food",
+   "affinity": 0.8,
+   "shared_tags": [
+    "japanese"
+   ],
+   "evidence_ref": "mock:insights:d8a221de4e7b1a6f",
+   "why": "Qloo's taste graph links A lantern-lit izakaya in Pontocho Alley to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.80).",
+   "explanation_source": "template"
+  },
+  {
+   "entity": {
+    "id": "art_nujabes",
+    "name": "Nujabes",
+    "domain": "music",
+    "urn_type": "urn:entity:artist",
+    "tags": [
+     "jazz",
+     "hip-hop",
+     "japanese",
+     "mellow",
+     "lo-fi"
+    ],
+    "location": null
+   },
+   "domain": "music",
+   "affinity": 0.91,
+   "shared_tags": [
+    "japanese"
+   ],
+   "evidence_ref": "mock:insights:ff76955a2e7a6af6",
+   "why": "Qloo's taste graph links Nujabes to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.91).",
+   "explanation_source": "template"
+  },
+  {
+   "entity": {
+    "id": "mov_lost_translation",
+    "name": "Lost in Translation",
+    "domain": "film",
+    "urn_type": "urn:entity:movie",
+    "tags": [
+     "drama",
+     "tokyo",
+     "quiet",
+     "atmospheric"
+    ],
+    "location": null
+   },
+   "domain": "film",
+   "affinity": 0.77,
+   "shared_tags": [
+    "quiet"
+   ],
+   "evidence_ref": "mock:insights:4c85c1b73b6f70dd",
+   "why": "Qloo's taste graph links Lost in Translation to Spirited Away, Kind of Blue (Miles Davis) (shared signals: quiet; affinity 0.77).",
+   "explanation_source": "template"
+  }
+ ],
+ "rejected": [],
+ "checker": {
+  "passed": true,
+  "chain_valid": true,
+  "violations": []
+ },
+ "evidence": {
+  "tool": "tastepilot",
+  "version": "0.1.0",
+  "created_at": "2026-10-10T12:35:32.114309+00:00",
+  "verdict": "PASS",
+  "entries": [
+   {
+    "kind": "header",
+    "hash": "76a0a2bf48a2774319bc8dcaef9fc991b2c5f802368498837358ba6a87c5779e",
+    "request_text": "a slow weekend in Kyoto, I love Spirited Away and Kind of Blue",
+    "mode": "mock"
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "dbad56eb7eaf58183c3d67c17d929d181601854135610329e28dafca333be031",
+    "response": {
+     "response_id": "mock:search:99d1390916369112",
+     "endpoint": "search",
+     "source": "mock",
+     "request": {
+      "query": "Spirited Away",
+      "limit": 5
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "mov_spirited_away",
+        "name": "Spirited Away",
+        "domain": "film",
+        "urn_type": "urn:entity:movie",
+        "tags": [
+         "animation",
+         "fantasy",
+         "japanese",
+         "whimsical",
+         "hand-drawn"
+        ],
+        "location": null
+       },
+       "affinity": 1.0,
+       "shared_tags": []
+      }
+     ]
+    }
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "31c85eec81365eff6cedc4a9d8d8383d1c77781f118e71aaebee744ebb480da4",
+    "response": {
+     "response_id": "mock:search:6d368715e1962a1e",
+     "endpoint": "search",
+     "source": "mock",
+     "request": {
+      "query": "Kind of Blue (Miles Davis)",
+      "limit": 5
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "art_kind_of_blue",
+        "name": "Kind of Blue (Miles Davis)",
+        "domain": "music",
+        "urn_type": "urn:entity:artist",
+        "tags": [
+         "jazz",
+         "modal",
+         "quiet",
+         "classic"
+        ],
+        "location": null
+       },
+       "affinity": 1.0,
+       "shared_tags": []
+      }
+     ]
+    }
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "2819100c602847c15c2ae7ad7b581a5ea6c76d073019e30989fbf026cc2a3b1f",
+    "response": {
+     "response_id": "mock:insights:b9a4c61b25bc0cc3",
+     "endpoint": "insights",
+     "source": "mock",
+     "request": {
+      "filter.type": "urn:entity:destination",
+      "signal.interests.entities": "mov_spirited_away,art_kind_of_blue",
+      "take": 4,
+      "location": "Kyoto"
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "dst_kyoto",
+        "name": "Kyoto",
+        "domain": "destination",
+        "urn_type": "urn:entity:destination",
+        "tags": [
+         "japanese",
+         "historic",
+         "quiet",
+         "walking"
+        ],
+        "location": "Kyoto"
+       },
+       "affinity": 0.9,
+       "shared_tags": [
+        "japanese"
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "70c2d349efae0cc48dc2a601a2a265423d75ddaf050ee570a6d15941bdcfd7c3",
+    "response": {
+     "response_id": "mock:insights:e0c12c8b917168bc",
+     "endpoint": "insights",
+     "source": "mock",
+     "request": {
+      "filter.type": "urn:entity:place",
+      "signal.interests.entities": "mov_spirited_away,art_kind_of_blue",
+      "take": 4,
+      "location": "Kyoto"
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "plc_gion",
+        "name": "Gion, Kyoto",
+        "domain": "place",
+        "urn_type": "urn:entity:place",
+        "tags": [
+         "kyoto",
+         "historic",
+         "quiet",
+         "japanese"
+        ],
+        "location": "Kyoto"
+       },
+       "affinity": 0.88,
+       "shared_tags": [
+        "japanese"
+       ]
+      },
+      {
+       "entity": {
+        "id": "plc_arashiyama",
+        "name": "Arashiyama Bamboo Grove",
+        "domain": "place",
+        "urn_type": "urn:entity:place",
+        "tags": [
+         "kyoto",
+         "nature",
+         "quiet",
+         "japanese"
+        ],
+        "location": "Kyoto"
+       },
+       "affinity": 0.82,
+       "shared_tags": [
+        "japanese"
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "f82098dde08ccea6230f31bc029d9a2e76a5f17db53964ae2d34a15569586c6d",
+    "response": {
+     "response_id": "mock:insights:d8a221de4e7b1a6f",
+     "endpoint": "insights",
+     "source": "mock",
+     "request": {
+      "filter.type": "urn:entity:place",
+      "signal.interests.entities": "mov_spirited_away,art_kind_of_blue",
+      "take": 4,
+      "location": "Kyoto"
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "fod_ramen_kyoto",
+        "name": "A quiet ramen counter in Gion",
+        "domain": "food",
+        "urn_type": "urn:entity:place",
+        "tags": [
+         "kyoto",
+         "ramen",
+         "japanese",
+         "intimate"
+        ],
+        "location": "Kyoto"
+       },
+       "affinity": 0.86,
+       "shared_tags": [
+        "japanese"
+       ]
+      },
+      {
+       "entity": {
+        "id": "fod_izakaya",
+        "name": "A lantern-lit izakaya in Pontocho Alley",
+        "domain": "food",
+        "urn_type": "urn:entity:place",
+        "tags": [
+         "kyoto",
+         "japanese",
+         "warm",
+         "walking"
+        ],
+        "location": "Kyoto"
+       },
+       "affinity": 0.8,
+       "shared_tags": [
+        "japanese"
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "a6f5b270ab53b922b4a12dacb4dfaa6ca8c5061911feaed66a8ceee6ec74cf29",
+    "response": {
+     "response_id": "mock:insights:ff76955a2e7a6af6",
+     "endpoint": "insights",
+     "source": "mock",
+     "request": {
+      "filter.type": "urn:entity:artist",
+      "signal.interests.entities": "mov_spirited_away,art_kind_of_blue",
+      "take": 4,
+      "location": "Kyoto"
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "art_nujabes",
+        "name": "Nujabes",
+        "domain": "music",
+        "urn_type": "urn:entity:artist",
+        "tags": [
+         "jazz",
+         "hip-hop",
+         "japanese",
+         "mellow",
+         "lo-fi"
+        ],
+        "location": null
+       },
+       "affinity": 0.91,
+       "shared_tags": [
+        "japanese"
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "kind": "qloo_call",
+    "hash": "7eee74ed72fcfa620066392b4645746b59eb0f909addefd988378d52d9f5634d",
+    "response": {
+     "response_id": "mock:insights:4c85c1b73b6f70dd",
+     "endpoint": "insights",
+     "source": "mock",
+     "request": {
+      "filter.type": "urn:entity:movie",
+      "signal.interests.entities": "mov_spirited_away,art_kind_of_blue",
+      "take": 4,
+      "location": "Kyoto"
+     },
+     "results": [
+      {
+       "entity": {
+        "id": "mov_lost_translation",
+        "name": "Lost in Translation",
+        "domain": "film",
+        "urn_type": "urn:entity:movie",
+        "tags": [
+         "drama",
+         "tokyo",
+         "quiet",
+         "atmospheric"
+        ],
+        "location": null
+       },
+       "affinity": 0.77,
+       "shared_tags": [
+        "quiet"
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "record_hash": "712a3f52fb73e7cfbd94a823e06ea0b0b7d8e9313a9a86d89959547141f89730",
+  "signature": "b3519c51abf348fb74a10324680be8ee5cceaa3d4280f7d4a166b98b34ca531b",
+  "signing_key_is_default_dev_key": true
+ }
+}
