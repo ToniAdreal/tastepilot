@@ -60,7 +60,13 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    between the leg cities; surface travel under 400 km, air travel
    above) is compared against the window the schedule leaves for the
    transfer, and tight or physically impossible transfers surface
-   as travel warnings in the same report-never-repair shape.
+   as travel warnings in the same report-never-repair shape. The
+   estimate source is pluggable: a timetable file the user supplies
+   (the scheduled flights and trains they are actually considering,
+   parsed entirely offline) replaces the estimate for the city pairs
+   it covers, and every transfer records which source judged it —
+   a scheduled duration is never presented as an estimate, or vice
+   versa.
 3. **Calls Qloo** — seeds are resolved with `GET /search`, and
    cross-domain recommendations come from `GET /v2/insights`
    (`filter.type` + `signal.interests.entities`). Qloo is load-bearing:
@@ -152,9 +158,10 @@ stops being a liability and becomes pure upside.
 - Live connections to external taste accounts (OAuth-linked Spotify /
   Letterboxd sync) on top of the built export-file imports, so seeds
   refresh themselves instead of arriving as a downloaded file.
-- Live timetable data — real flight and train schedules replacing
-  the built offline transfer estimates behind the same feasibility
-  interface.
+- Live timetable APIs — real flight and train schedule APIs
+  replacing the built file-based timetable provider behind the same
+  feasibility interface, so scheduled services refresh themselves
+  instead of arriving as a supplied file.
 - Account-owned share management (per-user link lists and dashboards)
   on top of the built expiry/revocation/persistence primitives.
 

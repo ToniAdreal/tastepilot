@@ -2,6 +2,7 @@
 
   python -m tastepilot plan "<request>" [--mode mock|real|auto] [--out plan.json]
                              [--import-file taste-export.csv|json|txt ...]
+                             [--timetable-file services.json|csv ...]
   python -m tastepilot smoke [--mode real|auto|mock] [--query Q] [--domain D]
                              [--out smoke.json]
   python -m tastepilot verify --record plan.json
@@ -33,6 +34,7 @@ from .llm import NebiusExplainer, TemplateExplainer
 from .models import DOMAIN_URNS
 from .qloo import QlooError, make_client
 from .smoke import DEFAULT_DOMAIN, DEFAULT_QUERY, run_smoke
+from .timetable import load_timetable
 
 
 def _agent_for(mode: str, llm: str) -> TastePilotAgent:
@@ -53,6 +55,12 @@ def main(argv: list[str] | None = None) -> int:
                    help="import seeds from an exported taste file "
                         "(Spotify JSON / Letterboxd or Goodreads CSV / "
                         "generic CSV, JSON, or text list); repeatable")
+    p.add_argument("--timetable-file", action="append", default=[],
+                   dest="timetable_files", metavar="FILE",
+                   help="scheduled inter-leg services from a timetable "
+                        "file (JSON or CSV: from, to, duration); pairs "
+                        "it covers are judged on the scheduled duration "
+                        "instead of the offline estimate; repeatable")
     p.add_argument("--out")
     k = sub.add_parser("smoke")
     k.add_argument("--mode", default="real", choices=["mock", "real", "auto"])
@@ -131,8 +139,16 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             print(f"error: import failed: {exc}", file=sys.stderr)
             return 2
+    timetables = []
+    for timetable_path in getattr(args, "timetable_files", []) or []:
+        try:
+            timetables.append(load_timetable(timetable_path))
+        except ValueError as exc:
+            print(f"error: timetable failed: {exc}", file=sys.stderr)
+            return 2
     try:
-        result = agent.run(args.text, imported=imported)
+        result = agent.run(args.text, imported=imported,
+                           timetables=timetables)
     except QlooError as exc:
         # A live-API failure mid-plan (after the client's retries) is a
         # clean error + exit 2, never a traceback — same contract as the
@@ -149,6 +165,11 @@ def main(argv: list[str] | None = None) -> int:
     for imp in result.get("imports", []):
         print(f"  import: {imp['source_file']} ({imp['format']}) "
               f"— {len(imp['items'])} seed(s)")
+    for tt in result.get("timetable", []):
+        matched = sum(1 for t in result.get("transfers", [])
+                      if t.get("source") == "timetable_file")
+        print(f"  timetable: {tt['source_file']} ({tt['format']}) "
+              f"— {tt['entries']} service(s), {matched} matched")
     for entry in result.get("schedule", []):
         if entry.get("start"):
             print(f"  schedule: {entry['location'] or 'anywhere'} "
@@ -160,7 +181,8 @@ def main(argv: list[str] | None = None) -> int:
               f"{warning['location'] or 'anywhere'}: {warning['detail']}")
     for transfer in result.get("transfers", []):
         print(f"  transfer: {transfer['detail']} "
-              f"· status={transfer['status']}")
+              f"· status={transfer['status']} "
+              f"· source={transfer.get('source', 'offline_estimate')}")
     for warning in result.get("travel_warnings", []):
         print(f"  travel warning [{warning['code']}] "
               f"{warning['location'] or 'anywhere'}: {warning['detail']}")

@@ -407,7 +407,8 @@ def assign_leg_dates(text: str, locations: list[str],
 
 
 def parse_request(text: str,
-                  reference_date: _date | None = None) -> ParsedRequest:
+                  reference_date: _date | None = None,
+                  timetable_provider=None) -> ParsedRequest:
     low = text.lower()
     scenario = "generic"
     for name, spec in SCENARIOS.items():
@@ -445,7 +446,8 @@ def parse_request(text: str,
             seed_names.append(q)
     leg_dates, date_warnings = assign_leg_dates(
         text, locations, reference_date or _date.today())
-    transfers, travel_warnings = assess_transfers(leg_dates)
+    transfers, travel_warnings = assess_transfers(
+        leg_dates, provider=timetable_provider)
     return ParsedRequest(text=text, scenario=scenario,
                          domains=list(SCENARIOS[scenario]["domains"]),
                          location=location, locations=locations,

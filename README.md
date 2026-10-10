@@ -49,6 +49,13 @@ tastepilot/
                against the schedule window each transfer is left —
                ok / tight / infeasible / unknown, warnings surfaced
                in the same report-never-repair shape as date warnings
+  timetable.py timetable providers behind the feasibility check:
+               scheduled services from a timetable file the user
+               supplies (JSON/CSV: from, to, duration, mode, service —
+               parsed offline, no API, no account) replace the offline
+               estimate for the pairs they cover; uncovered pairs fall
+               back to the estimate, and every transfer records its
+               source (timetable_file / offline_estimate)
   qloo.py      Qloo adapter: real client (hackathon API, X-Api-Key; bounded
                retries on 429/5xx + network errors, every failure surfaces
                as QlooError; tolerant payload-envelope parsing) + mock client
@@ -189,6 +196,26 @@ baked into the image or the repo.
   shape as `date_warnings`. Like dates, estimates are composition
   constraints only: reported, never silently repaired, never
   blocking, and never sent to Qloo.
+* A transfer can be judged on a scheduled service instead of the
+  estimate: `plan --timetable-file <file>` parses a timetable file
+  the user supplies — a JSON or CSV list of the services they are
+  actually considering (`from`, `to`, `duration_hours` or
+  `duration_minutes`, optional `mode` and `service`) — entirely
+  offline, with no timetable API, account, or network call. Pairs
+  the file covers are judged on the scheduled duration (a service
+  listed in one direction is used in reverse and flagged as such);
+  pairs it does not cover keep the offline estimate. Every transfer
+  records its `source` (`timetable_file` or `offline_estimate`) and
+  its detail line says "scheduled" or "door-to-door" accordingly —
+  an estimate is never presented as a schedule. The plan reports
+  the timetable files it used (`timetable`: source-file basename —
+  never a path — format, and entry count), the CLI prints one
+  `timetable:` line per file with the matched-transfer count, and
+  malformed files fail cleanly with a categorised error
+  (`bad_json`, `no_items`, `too_large`, …) and exit code 2. Files
+  are capped at 1 MiB and 500 entries. Scheduled durations are
+  composition constraints only, exactly like estimates: never sent
+  to Qloo, never in the evidence log.
 * Seeds can also arrive as an exported taste file: `plan --import-file
   <file>` parses a file the user downloaded from their own accounts —
   a Spotify playlist export (JSON), a Letterboxd watchlist or a

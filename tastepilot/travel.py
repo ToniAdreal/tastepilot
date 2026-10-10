@@ -33,6 +33,12 @@ legs in the same city — is reported as status ``unknown`` (or skipped
 for same-city pairs) and produces no warning. Transfer estimates are
 composition constraints only, exactly like dates: they are never
 sent to Qloo and never enter the evidence log.
+
+The estimate source is pluggable: ``assess_transfers`` accepts a
+timetable provider (see ``timetable``) whose scheduled durations
+replace the estimate for the city pairs it covers. Every transfer
+records its ``source`` so a scheduled duration is never presented
+as an estimate, or vice versa.
 """
 from __future__ import annotations
 
@@ -110,7 +116,8 @@ def _window_hours(gap_days: int) -> float:
     return 0.0
 
 
-def assess_transfers(leg_dates: list[dict]) -> tuple[list[dict], list[dict]]:
+def assess_transfers(leg_dates: list[dict],
+                     provider=None) -> tuple[list[dict], list[dict]]:
     """Feasibility of every inter-leg transfer in a schedule.
 
     ``leg_dates`` is the parser's per-leg list ({"location", "start",
@@ -119,14 +126,30 @@ def assess_transfers(leg_dates: list[dict]) -> tuple[list[dict], list[dict]]:
     legs in different cities, and one warning per tight or
     infeasible transfer, in the date_warnings shape
     ({"code", "location", "detail"} — location is the destination
-    leg)."""
+    leg).
+
+    ``provider`` is a timetable provider (see ``timetable``): when
+    it has a scheduled service for a pair, that duration is judged
+    instead of the offline estimate, and the transfer records
+    ``source="timetable_file"`` (plus the service name when the file
+    names one); pairs the provider does not cover fall back to the
+    offline estimate with ``source="offline_estimate"``. With no
+    provider, every transfer is the offline estimate — the original
+    behaviour. The provider is imported lazily here so ``travel``
+    stays importable on its own."""
+    if provider is None:
+        from .timetable import OfflineEstimateProvider
+        provider = OfflineEstimateProvider()
     transfers: list[dict] = []
     warnings: list[dict] = []
     for prev, nxt in zip(leg_dates, leg_dates[1:]):
         from_city, to_city = prev.get("location"), nxt.get("location")
         if not from_city or not to_city or from_city == to_city:
             continue
-        est = estimate_transfer(from_city, to_city)
+        est = provider.lookup(from_city, to_city)
+        if est is None:
+            est = {**estimate_transfer(from_city, to_city),
+                   "source": "offline_estimate", "service": None}
         prev_ref = prev.get("end") or prev.get("start")
         next_start = nxt.get("start")
         gap_days = window_hours = None
@@ -149,10 +172,17 @@ def assess_transfers(leg_dates: list[dict]) -> tuple[list[dict], list[dict]]:
                 status = "tight"
             else:
                 status = "ok"
-            detail = (f"{from_city} -> {to_city}: ~{hours} h "
-                      f"door-to-door ({est['mode']}, "
-                      f"~{est['distance_km']} km) in a "
-                      f"{window_hours:g} h window")
+            if est.get("source") == "timetable_file":
+                service = f", {est['service']}" if est.get("service") else ""
+                rev = ", listed in reverse" if est.get("reversed") else ""
+                detail = (f"{from_city} -> {to_city}: ~{hours} h "
+                          f"scheduled ({est['mode']}{service}{rev}) "
+                          f"in a {window_hours:g} h window")
+            else:
+                detail = (f"{from_city} -> {to_city}: ~{hours} h "
+                          f"door-to-door ({est['mode']}, "
+                          f"~{est['distance_km']} km) in a "
+                          f"{window_hours:g} h window")
         transfer = {**est, "gap_days": gap_days,
                     "window_hours": window_hours, "status": status,
                     "detail": detail}

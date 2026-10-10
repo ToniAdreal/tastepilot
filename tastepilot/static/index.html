@@ -195,6 +195,9 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   const importSum = data.imports && data.imports.length
     ? ` · Imports: ${data.imports.map(i => `${i.source_file} (${i.format}, ${i.items.length})`).join(', ')}`
     : '';
+  const timetableSum = data.timetable && data.timetable.length
+    ? ` · Timetable: ${data.timetable.map(t => `${t.source_file} (${t.format}, ${t.entries} services)`).join(', ')}`
+    : '';
   const legLabel = (l) => (l.location || 'anywhere') +
     (l.start ? ` (${l.start}${l.end ? ' – ' + l.end : ''}` +
       `${l.nights != null ? `, ${l.nights} night${l.nights === 1 ? '' : 's'}` : ''})` : '');
@@ -205,12 +208,12 @@ document.getElementById('f').addEventListener('submit', async (e) => {
     ? ` · Schedule warnings: ${data.date_warnings.length}`
     : '';
   const transferSum = data.transfers && data.transfers.length
-    ? ` · Transfers: ${data.transfers.map(t => `${t.from} → ${t.to} ~${t.travel_hours}h (${t.status})`).join(', ')}`
+    ? ` · Transfers: ${data.transfers.map(t => `${t.from} → ${t.to} ~${t.travel_hours}h (${t.status}, ${t.source || 'offline_estimate'})`).join(', ')}`
     : '';
   const travelWarnSum = data.travel_warnings && data.travel_warnings.length
     ? ` · Travel warnings: ${data.travel_warnings.length}`
     : '';
-  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${importSum}${legsSum}${warnSum}${transferSum}${travelWarnSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
+  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${importSum}${timetableSum}${legsSum}${warnSum}${transferSum}${travelWarnSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
   const renderGroups = (groups) => {
     for (const group of groups) {
       const h = document.createElement('h3');
@@ -245,8 +248,11 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   if (data.transfers && data.transfers.length) {
     const div = document.createElement('div');
     div.className = 'meta';
-    div.textContent = 'Inter-leg transfers (offline door-to-door estimates): ' +
-      data.transfers.map(t => `${t.detail} — ${t.status}`).join('; ');
+    const anyScheduled = data.transfers.some(t => t.source === 'timetable_file');
+    div.textContent = (anyScheduled
+      ? 'Inter-leg transfers (scheduled services where a timetable file covers the pair, offline door-to-door estimates otherwise): '
+      : 'Inter-leg transfers (offline door-to-door estimates): ') +
+      data.transfers.map(t => `${t.detail} — ${t.status} [${t.source || 'offline_estimate'}]`).join('; ');
     out.appendChild(div);
   }
   if (data.travel_warnings && data.travel_warnings.length) {

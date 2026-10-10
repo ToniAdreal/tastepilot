@@ -49,7 +49,8 @@ class TastePilotAgent:
                 resolved_names.append(pick.entity.name)
         return ids, resolved_names
 
-    def run(self, text: str, reference_date=None, imported=None) -> dict:
+    def run(self, text: str, reference_date=None, imported=None,
+            timetables=None) -> dict:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("text is required")
         if len(text) > MAX_TEXT_CHARS:
@@ -57,7 +58,22 @@ class TastePilotAgent:
         # reference_date anchors relative dates ("tomorrow", "next
         # Friday") and year-less explicit dates; None = today. Tests
         # pass a fixed date so plans stay deterministic.
-        parsed = parse_request(text, reference_date=reference_date)
+        # Timetable files (see timetable.py): scheduled durations from
+        # files the user supplied replace the offline transfer
+        # estimates for the city pairs they cover — composition
+        # constraints only, never sent to Qloo. Provenance (basename +
+        # format + entry count, never a path) is carried into the plan.
+        from .timetable import provider_for
+        timetable_prov: list[dict] = []
+        for tt in timetables or []:
+            timetable_prov.append({
+                "source_file": tt.get("source_file", "timetable"),
+                "format": tt.get("format", "unknown"),
+                "entries": len(tt.get("entries", []))})
+        parsed = parse_request(
+            text, reference_date=reference_date,
+            timetable_provider=provider_for(timetables) if timetables
+            else None)
         # External taste-file imports (see imports.py): each imported
         # title becomes a seed through the SAME sealed search ->
         # insights -> checker path as a typed seed — an import grants
@@ -200,6 +216,7 @@ class TastePilotAgent:
             "imports": imports_prov,
             "schedule": parsed.leg_dates,
             "date_warnings": parsed.date_warnings,
+            "timetable": timetable_prov,
             "transfers": parsed.transfers,
             "travel_warnings": parsed.travel_warnings,
             "mode": self.mode,
