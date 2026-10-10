@@ -20,6 +20,8 @@
   #viewer { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin-top: 1.5rem; display: none; }
   #viewer pre { background: #f7f7f7; padding: .6rem; overflow-x: auto; font-size: .8rem; }
   #verifybox { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin-top: 1.5rem; }
+  #mybox { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin-top: 1.5rem; }
+  #sharesout .shareline { margin: .4rem 0; font-size: .9rem; }
   #verifybox textarea { width: 100%; box-sizing: border-box; font-family: monospace; font-size: .8rem; }
   #vout { margin-top: .6rem; white-space: pre-wrap; font-size: .9rem; }
   .evlink { color: #2563eb; cursor: pointer; text-decoration: underline; background: none;
@@ -55,10 +57,22 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
   <p class="meta">A shareable link stores the plan on this server under a
   content-addressed id; anyone opening it gets the plan back with its
   verification recomputed — the audit travels with the plan, no pasting.
-  Links expire after 7 days and can be revoked by anyone holding them
-  (the button below appears when you open one).</p>
+  Links expire after 7 days. Links you create from this browser are
+  owned by it (see “Your share links” below): only this browser can
+  list or revoke them. Links created without an owner can be revoked
+  by anyone holding them (the button below appears when you open one).</p>
   <div style="margin-top:.5rem"><button type="button" id="revokebtn" style="display:none">Revoke this share link</button></div>
   <div id="vout"></div>
+</section>
+<section id="mybox" aria-label="Your share links">
+  <h2 style="margin-top:0">Your share links</h2>
+  <p class="meta">This browser holds an owner token (generated locally
+  and kept in localStorage — no account, no sign-up). Share links
+  created here are registered to that token: this list shows only
+  yours, with each link's recomputed verification, and only this
+  browser can revoke them.</p>
+  <div style="margin-top:.5rem"><button type="button" id="sharesbtn">List my share links</button></div>
+  <div id="sharesout" style="margin-top:.6rem"></div>
 </section>
 <script>
 const statusEl = document.getElementById('status');
@@ -70,9 +84,28 @@ const sharebtn = document.getElementById('sharebtn');
 const shareout = document.getElementById('shareout');
 let lastPlan = null;
 
+// Owner token: a per-browser bearer credential, generated locally
+// and kept in localStorage. The server stores only its hash; links
+// created with it are owned by this browser (list + revoke below).
+function ownerToken() {
+  let token = localStorage.getItem('tastepilot_owner_token');
+  if (!token) {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    token = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    localStorage.setItem('tastepilot_owner_token', token);
+  }
+  return token;
+}
+
+function ownerHeaders() {
+  return {'X-Owner-Token': ownerToken()};
+}
+
 async function createShareLink(payload) {
   const res = await fetch('/api/share', {method: 'POST',
-    headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+    headers: {'Content-Type': 'application/json', ...ownerHeaders()},
+    body: JSON.stringify(payload)});
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || res.status);
   data.absolute_url = location.origin + data.url;
@@ -87,9 +120,47 @@ function showShareLink(el, data) {
   if (data.expires_at) {
     el.appendChild(document.createTextNode(
       ' · expires ' + new Date(data.expires_at).toLocaleString() +
-      ' · revocable by anyone holding the link'));
+      (data.owned
+        ? ' · owned by this browser — manage it under “Your share links”'
+        : ' · revocable by anyone holding the link')));
   }
 }
+
+async function listMyShares() {
+  const box = document.getElementById('sharesout');
+  box.textContent = 'Loading…';
+  const res = await fetch('/api/shares', {headers: ownerHeaders()});
+  const data = await res.json();
+  if (!res.ok) { box.textContent = 'Error: ' + (data.error || res.status); return; }
+  box.innerHTML = '';
+  if (!data.shares.length) {
+    box.textContent = 'No share links owned by this browser yet — create one above.';
+    return;
+  }
+  for (const s of data.shares) {
+    const row = document.createElement('div');
+    row.className = 'shareline';
+    const a = document.createElement('a');
+    a.href = s.url; a.textContent = location.origin + s.url;
+    row.appendChild(a);
+    row.appendChild(document.createTextNode(
+      ` · ${s.item_count} item(s) · verification ${s.passed ? 'PASS' : 'FAIL'}` +
+      ` · expires ${new Date(s.expires_at).toLocaleString()} `));
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.textContent = 'Revoke';
+    btn.addEventListener('click', async () => {
+      const del = await fetch('/api/share/' + encodeURIComponent(s.share_id),
+        {method: 'DELETE', headers: ownerHeaders()});
+      const d = await del.json();
+      if (!del.ok) { box.textContent = 'Error: ' + (d.error || del.status); return; }
+      listMyShares();
+    });
+    row.appendChild(btn);
+    box.appendChild(row);
+  }
+}
+
+document.getElementById('sharesbtn').addEventListener('click', listMyShares);
 
 sharebtn.addEventListener('click', async () => {
   if (!lastPlan) return;
@@ -320,7 +391,9 @@ document.getElementById('sbtn').addEventListener('click', async () => {
   const revokeBtn = document.getElementById('revokebtn');
   revokeBtn.style.display = '';
   revokeBtn.addEventListener('click', async () => {
-    const del = await fetch('/api/share/' + encodeURIComponent(shareId), {method: 'DELETE'});
+    const saved = localStorage.getItem('tastepilot_owner_token');
+    const del = await fetch('/api/share/' + encodeURIComponent(shareId), {method: 'DELETE',
+      headers: saved ? {'X-Owner-Token': saved} : {}});
     const d = await del.json();
     vout.textContent = del.ok
       ? 'Share link revoked — it now returns 404 for everyone.'

@@ -35,14 +35,38 @@ Routes:
                                verdict for the stored plan — exactly the
                                /api/verify report, plus the share id
                                and the link's expiry.
+  GET  /api/shares             the caller's own share links (dashboard):
+                               requires an ``X-Owner-Token`` header and
+                               returns only the shares that token owns —
+                               id, url, expiry, item count, and the
+                               recomputed checker verdict per link.
   DELETE /api/share/<id>       revoke a share link: the stored plan is
                                dropped and the id 404s from then on
-                               ({"revoked": true}). Knowing the id is
-                               the capability — whoever holds the link
-                               can revoke it; that is the documented
-                               demo trade-off. DELETE anywhere else
-                               stays 405 like the other unsupported
-                               methods.
+                               ({"revoked": true}). For an owner-managed
+                               link (below) only the owner's token can
+                               revoke it (403 otherwise); for a legacy
+                               link created without a token, knowing the
+                               id remains the capability — whoever holds
+                               the link can revoke it; that is the
+                               documented demo trade-off for unowned
+                               links. DELETE anywhere else stays 405
+                               like the other unsupported methods.
+
+Owner-managed shares (no account system):
+  * A client may send an ``X-Owner-Token`` header when creating a
+    share. The token is a bearer credential the client generates and
+    keeps (the demo UI generates one and stores it in the browser's
+    localStorage — a per-browser "account", no registration, no
+    password, no email). The server stores only the token's SHA-256
+    hash alongside the entry, never the token itself, so a leaked
+    share file does not leak owner credentials.
+  * The first token to store a plan owns it: re-storing the same plan
+    is still idempotent (same id, original expiry) and never
+    transfers ownership to a later token.
+  * ``GET /api/shares`` lists only the presenting token's shares;
+    revoking an owned share requires that same token. Shares created
+    without a token ("legacy" shares) keep the original link-holder
+    behaviour and never appear in any owner's list.
 
 Persistence, expiry, revocation:
   * The share store is in-memory by default (the original behaviour).
@@ -106,6 +130,9 @@ MAX_SHARED_PLANS = 128           # shared plans kept for link verification
 MAX_SHARE_BODY_BYTES = MAX_VERIFY_BODY_BYTES  # a shared plan is a plan
 DEFAULT_SHARE_TTL_SECONDS = 7 * 24 * 3600  # share links live for 7 days
 SHARE_FILE_ENV_VAR = "TASTEPILOT_SHARE_FILE"  # opt-in persistence path
+OWNER_TOKEN_HEADER = "X-Owner-Token"  # per-browser owner credential
+MIN_OWNER_TOKEN_CHARS = 16   # shorter than this is not a credential
+MAX_OWNER_TOKEN_CHARS = 200
 
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
@@ -172,6 +199,22 @@ def _iso(epoch_seconds: float) -> str:
     return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).isoformat()
 
 
+def owner_token_hash(token) -> str | None:
+    """SHA-256 hash of an owner token, or None for no/invalid token.
+
+    Only the hash is ever stored: a share-file leak then exposes plan
+    payloads (fictional demo data) but not the owner credentials that
+    manage them. A token is valid at 16–200 chars with no whitespace."""
+    if not isinstance(token, str):
+        return None
+    token = token.strip()
+    if not MIN_OWNER_TOKEN_CHARS <= len(token) <= MAX_OWNER_TOKEN_CHARS:
+        return None
+    if any(ch.isspace() for ch in token):
+        return None
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 class ShareStore:
     """Bounded store behind the shareable verification links.
 
@@ -229,12 +272,18 @@ class ShareStore:
                     expires_at <= now:
                 continue  # skip malformed or already-expired rows
             created_at = entry.get("created_at")
-            self._entries[share_id] = {
+            loaded = {
                 "payload": copy.deepcopy(payload),
                 "created_at": created_at if isinstance(
                     created_at, (int, float)) else expires_at,
                 "expires_at": float(expires_at),
             }
+            # Owner hashes survive restarts; a malformed one is
+            # dropped (the entry degrades to a legacy unowned share)
+            # rather than failing the row.
+            if isinstance(entry.get("owner_hash"), str):
+                loaded["owner_hash"] = entry["owner_hash"]
+            self._entries[share_id] = loaded
             self._entries.move_to_end(share_id)
         while len(self._entries) > self.max_plans:
             self._entries.popitem(last=False)
@@ -277,7 +326,8 @@ class ShareStore:
     def _meta(share_id: str, entry: dict) -> dict:
         return {"share_id": share_id,
                 "created_at": _iso(entry["created_at"]),
-                "expires_at": _iso(entry["expires_at"])}
+                "expires_at": _iso(entry["expires_at"]),
+                "owned": entry.get("owner_hash") is not None}
 
     # -- public API --------------------------------------------------------
 
@@ -294,12 +344,17 @@ class ShareStore:
                     "max": self.max_plans,
                     "ttl_seconds": self.ttl_seconds}
 
-    def put(self, payload: dict) -> dict:
+    def put(self, payload: dict, owner_token: str | None = None) -> dict:
         """Store a plan payload and return its link metadata.
 
         Idempotent for identical content: re-storing the same plan
         returns the original entry — the expiry is NOT extended, so a
-        link's lifetime cannot be quietly renewed by re-posting it."""
+        link's lifetime cannot be quietly renewed by re-posting it,
+        and ownership is NOT transferred: the first token to store a
+        plan owns it, and a later re-store (with or without a token)
+        changes neither fact. Only the owner token's hash is kept;
+        an invalid token is treated as no token (the HTTP layer
+        rejects invalid tokens with a 400 before they reach here)."""
         share_id = share_id_for(payload)
         with self._lock:
             self._prune_expired()
@@ -309,6 +364,9 @@ class ShareStore:
                 entry = {"payload": copy.deepcopy(payload),
                          "created_at": now,
                          "expires_at": now + self.ttl_seconds}
+                digest = owner_token_hash(owner_token)
+                if digest is not None:
+                    entry["owner_hash"] = digest
                 self._entries[share_id] = entry
                 while len(self._entries) > self.max_plans:
                     self._entries.popitem(last=False)
@@ -316,6 +374,28 @@ class ShareStore:
                 self._entries.move_to_end(share_id)
             self._save()
             return self._meta(share_id, entry)
+
+    def list_for_owner(self, owner_token: str | None) -> list[dict]:
+        """Link metadata for every live share the token owns, oldest
+        first, each with its plan's item count. An absent or invalid
+        token owns nothing (empty list) — and legacy unowned shares
+        never appear in any owner's list."""
+        digest = owner_token_hash(owner_token)
+        if digest is None:
+            return []
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            out = []
+            for share_id, entry in self._entries.items():
+                if entry.get("owner_hash") != digest:
+                    continue
+                meta = self._meta(share_id, entry)
+                items = entry["payload"].get("items")
+                meta["item_count"] = len(items) \
+                    if isinstance(items, list) else 0
+                out.append(meta)
+            return out
 
     def get(self, share_id: str) -> dict | None:
         """The stored payload (a deep copy), or None when the id is
@@ -336,17 +416,34 @@ class ShareStore:
             entry = self._entries.get(share_id)
             return None if entry is None else self._meta(share_id, entry)
 
-    def revoke(self, share_id: str) -> bool:
-        """Drop an entry now. True when something was revoked; an
-        unknown or already-expired id revokes nothing (False)."""
+    def revoke_status(self, share_id: str,
+                      owner_token: str | None = None) -> str:
+        """Attempt a revocation and say exactly what happened:
+        ``"revoked"``, ``"not_found"`` (unknown or already-expired
+        id), or ``"forbidden"`` — the share is owner-managed and the
+        presented token is absent, invalid, or not the owner's.
+        Legacy unowned shares may be revoked by any caller, exactly
+        as before owner management existed."""
         with self._lock:
             if self._prune_expired():
                 self._save()
-            if share_id not in self._entries:
-                return False
+            entry = self._entries.get(share_id)
+            if entry is None:
+                return "not_found"
+            digest = entry.get("owner_hash")
+            if digest is not None and \
+                    owner_token_hash(owner_token) != digest:
+                return "forbidden"
             del self._entries[share_id]
             self._save()
-            return True
+            return "revoked"
+
+    def revoke(self, share_id: str,
+               owner_token: str | None = None) -> bool:
+        """Drop an entry now. True when something was revoked; an
+        unknown or already-expired id revokes nothing (False), and
+        neither does a non-owner token on an owned share."""
+        return self.revoke_status(share_id, owner_token) == "revoked"
 
 
 def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
@@ -386,6 +483,53 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             self._send(code, json.dumps(obj, ensure_ascii=False).encode(),
                        "application/json; charset=utf-8")
 
+        def _owner_token(self):
+            """The presented owner token: (token, invalid). ``token``
+            is None when no header was sent; ``invalid`` is True when
+            a header was sent but is not a usable credential — the
+            caller decides whether that is a 400 (share creation,
+            revocation) or simply owns nothing."""
+            raw = self.headers.get(OWNER_TOKEN_HEADER)
+            if raw is None:
+                return None, False
+            token = raw.strip()
+            if owner_token_hash(token) is None:
+                return None, True
+            return token, False
+
+        def _handle_shares(self):
+            """The owner's dashboard list: only the presenting
+            token's shares, each with its recomputed checker verdict
+            — listing grants nothing, it just names what the token
+            already owns. No token → 401; a malformed one → 400."""
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            if token is None:
+                self._send_json(401, {"error": "owner token required"})
+                return
+            shares = []
+            for meta in share_store.list_for_owner(token):
+                entry = dict(meta)
+                entry["url"] = f"/?share={meta['share_id']}"
+                entry["verify_url"] = \
+                    f"/api/share/{meta['share_id']}/verify"
+                plan = share_store.get(meta["share_id"])
+                try:
+                    report = verification_report(plan) \
+                        if plan is not None else None
+                except (KeyError, TypeError, ValueError, AttributeError,
+                        IndexError):
+                    report = None
+                entry["passed"] = report["passed"] \
+                    if report is not None else None
+                entry["chain_valid"] = report["chain_valid"] \
+                    if report is not None else None
+                shares.append(entry)
+            self._send_json(200, {"shares": shares,
+                                  "count": len(shares)})
+
         def do_GET(self):
             path = urlparse(self.path).path
             if path in ("/", "/index.html"):
@@ -395,6 +539,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 self._send_json(200, {"ok": True, "mode": agent.mode,
                                       "explainer": agent.explainer_info,
                                       "shares": share_store.info()})
+            elif path == "/api/shares":
+                self._handle_shares()
             elif path.startswith("/api/share/"):
                 rest = unquote(path[len("/api/share/"):])
                 want_verify = rest.endswith("/verify")
@@ -507,13 +653,18 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             if error is not None:
                 self._send_json(400, {"error": error})
                 return
-            meta = share_store.put(payload)
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            meta = share_store.put(payload, owner_token=token)
             share_id = meta["share_id"]
             self._send_json(201, {
                 "share_id": share_id,
                 "url": f"/?share={share_id}",
                 "verify_url": f"/api/share/{share_id}/verify",
                 "expires_at": meta["expires_at"],
+                "owned": meta["owned"],
             })
 
         def do_POST(self):
@@ -585,10 +736,23 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             path = urlparse(self.path).path
             if path.startswith("/api/share/"):
                 share_id = unquote(path[len("/api/share/"):])
-                if share_id and "/" not in share_id and \
-                        share_store.revoke(share_id):
+                if not share_id or "/" in share_id:
+                    self._send_json(404, {"error": "unknown share id"})
+                    return
+                token, invalid = self._owner_token()
+                if invalid:
+                    self._send_json(400, {"error": "invalid owner token"})
+                    return
+                status = share_store.revoke_status(share_id,
+                                                     owner_token=token)
+                if status == "revoked":
                     self._send_json(200, {"revoked": True,
                                           "share_id": share_id})
+                    return
+                if status == "forbidden":
+                    self._send_json(
+                        403, {"error": "only the owner can revoke "
+                                       "this share"})
                     return
                 self._send_json(404, {"error": "unknown share id"})
                 return

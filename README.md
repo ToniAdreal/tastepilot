@@ -73,7 +73,10 @@ tastepilot/
                endpoint for shared plan JSON, shareable verification
                links (content-addressed plan store, verify-by-link,
                7-day expiry, DELETE revocation, optional file
-               persistence across restarts);
+               persistence across restarts, owner-managed links:
+               an X-Owner-Token bearer credential — only its SHA-256
+               hash is stored — lists and revokes just its owner's
+               links via GET /api/shares);
                hardened: input caps, security headers, bounded caches,
                leak-free 500s)
   smoke.py     real-mode smoke check: one search + one insights call,
@@ -264,6 +267,22 @@ baked into the image or the repo.
   simply starts an empty store. `GET /api/health` reports the share
   store's mode, count, and TTL, and `--share-ttl-days` tunes the
   lifetime.
+* Share links can be owner-managed, with no account system: a client
+  creating a link may present an `X-Owner-Token` bearer credential
+  (the demo UI generates one per browser and keeps it in
+  localStorage — a per-browser "account", no registration, no
+  password). The server stores only the token's SHA-256 hash — a
+  leaked share file exposes no owner credential — and the first
+  token to store a plan owns it (re-storing never transfers
+  ownership, exactly as it never extends expiry). `GET /api/shares`
+  with that header lists only the owner's links, each with its item
+  count, expiry, and recomputed checker verdict (a tampered owned
+  plan still lists as FAIL), and revoking an owned link requires
+  the owner's token (`DELETE` without it, or with another token,
+  gets a 403 and changes nothing). Shares created without a token
+  remain legacy links: link-holder revocation, and they appear in
+  no owner's list. Ownership governs management only — every read
+  still recomputes verification from the sealed record.
 
 ## Hackathon submission
 

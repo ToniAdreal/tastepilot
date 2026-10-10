@@ -93,7 +93,12 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    plan back with its verification recomputed — storing grants a plan
    no trust, so a tampered shared plan still fails by link. Links
    expire after 7 days, can be revoked by anyone holding them, and —
-   with an opt-in JSON file store — survive a server restart.
+   with an opt-in JSON file store — survive a server restart. Links
+   can also be owner-managed without any account system: the browser
+   that creates a link presents an owner token (generated locally,
+   kept in localStorage; the server stores only its hash), and only
+   that token can list the owner's links — each shown with its
+   recomputed verdict — or revoke them.
 
 **[FINALIZE: one real-mode example — a plan produced against the live
 Qloo API, with its item count and checker verdict.]**
@@ -162,8 +167,10 @@ stops being a liability and becomes pure upside.
   replacing the built file-based timetable provider behind the same
   feasibility interface, so scheduled services refresh themselves
   instead of arriving as a supplied file.
-- Account-owned share management (per-user link lists and dashboards)
-  on top of the built expiry/revocation/persistence primitives.
+- Full user accounts (sign-up/login with cross-device sync) on top
+  of the built token-owned share management, so a user's link list
+  and dashboard follow them between browsers instead of living in
+  one browser's localStorage.
 
 ## Built with
 
