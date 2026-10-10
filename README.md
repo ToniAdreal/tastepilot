@@ -48,7 +48,8 @@ tastepilot/
   checker.py   deterministic evidence checker (the invariant enforcer)
   server.py    stdlib HTTP demo server (chat + grouped itinerary UI,
                per-item checker badges, explanation provenance,
-               evidence-record viewer endpoint; hardened: input caps,
+               evidence-record viewer endpoint, browser plan-verification
+               endpoint for shared plan JSON; hardened: input caps,
                security headers, bounded evidence cache, leak-free 500s)
   smoke.py     real-mode smoke check: one search + one insights call,
                payload-shape validation, both sealed + chain re-verified
@@ -131,6 +132,13 @@ baked into the image or the repo.
   Qloo call behind the plan and opens any of them
   (`GET /api/evidence/<response_id>`) — request, results, record hash,
   and chain validity included.
+* Anyone holding a plan JSON can re-verify it in the browser: the UI's
+  "Verify a shared plan" panel posts it to `POST /api/verify`, which
+  recomputes the hash chain and every per-item checker verdict from the
+  sealed record alone (the record's own verdict field is reported back
+  as an untrusted claim, never used). Submitted records are untrusted
+  input — size-capped, shape-validated, and malformed records get a 400,
+  never a crash.
 
 ## Hackathon submission
 

@@ -55,7 +55,10 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    rejected, with the reason. The web UI surfaces this per item: checker
    badge, the affinity found in the cited response, and an
    evidence-record viewer that opens the sealed Qloo call behind any
-   recommendation.
+   recommendation. And because a plan is just JSON, anyone can audit
+   one they did not produce: the UI's "Verify a shared plan" panel
+   recomputes the chain and every checker verdict from the sealed
+   record alone — the record's own verdict is never trusted.
 
 **[FINALIZE: one real-mode example — a plan produced against the live
 Qloo API, with its item count and checker verdict.]**
@@ -120,8 +123,8 @@ stops being a liability and becomes pure upside.
 - Richer seed capture (paste a playlist, a reading list, a watchlist)
   feeding the same evidence-checked loop.
 - Multi-city trip composition with per-leg taste continuity.
-- A public "verify this plan" page so anyone can re-check a shared
-  itinerary's evidence chain in the browser.
+- Shareable verification links, so a plan's audit result travels with
+  the plan instead of needing the JSON pasted by hand.
 
 ## Built with
 

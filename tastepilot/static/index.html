@@ -19,6 +19,9 @@
   .rejected { color: #a33; margin: .6rem 0; }
   #viewer { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin-top: 1.5rem; display: none; }
   #viewer pre { background: #f7f7f7; padding: .6rem; overflow-x: auto; font-size: .8rem; }
+  #verifybox { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin-top: 1.5rem; }
+  #verifybox textarea { width: 100%; box-sizing: border-box; font-family: monospace; font-size: .8rem; }
+  #vout { margin-top: .6rem; white-space: pre-wrap; font-size: .9rem; }
   .evlink { color: #2563eb; cursor: pointer; text-decoration: underline; background: none;
             border: none; padding: 0; font-size: .85rem; }
 </style>
@@ -37,6 +40,17 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
   <h2 style="margin-top:0">Evidence record</h2>
   <div id="evlist"></div>
   <pre id="evdetail"></pre>
+</section>
+<section id="verifybox" aria-label="Verify a shared plan">
+  <h2 style="margin-top:0">Verify a shared plan</h2>
+  <p class="meta">Paste a plan JSON (for example one of the repo samples, or a
+  plan someone shared with you). The server recomputes the evidence chain and
+  the per-item checker verdict from the sealed record alone — the record's
+  own verdict is never trusted. Edit any affinity in the pasted JSON and
+  watch verification fail.</p>
+  <textarea id="vtext" rows="6" placeholder='{"items": [...], "evidence": {...}}'></textarea>
+  <div style="margin-top:.5rem"><button type="button" id="vbtn">Verify plan</button></div>
+  <div id="vout"></div>
 </section>
 <script>
 const statusEl = document.getElementById('status');
@@ -140,6 +154,30 @@ document.getElementById('f').addEventListener('submit', async (e) => {
     out.appendChild(div);
   }
   renderEvidenceIndex(data);
+});
+
+document.getElementById('vbtn').addEventListener('click', async () => {
+  const vout = document.getElementById('vout');
+  const raw = document.getElementById('vtext').value;
+  vout.textContent = 'Verifying…';
+  const res = await fetch('/api/verify', {method: 'POST',
+    headers: {'Content-Type': 'application/json'}, body: raw});
+  const data = await res.json();
+  if (!res.ok) { vout.textContent = 'Error: ' + (data.error || res.status); return; }
+  const lines = [
+    `Verification: ${data.passed ? 'PASS' : 'FAIL'} · evidence chain valid: ${data.chain_valid}` +
+    ` · ${data.item_count} item(s) against ${data.sealed_responses} sealed Qloo response(s)` +
+    (data.record_verdict ? ` · record claims verdict: ${data.record_verdict} (recomputed, not trusted)` : ''),
+  ];
+  for (const r of data.items) {
+    lines.push(`${r.admissible ? '✓' : '✗'} ${r.item} (${r.domain}) — checker: ${r.reason}`);
+  }
+  for (const v of data.violations) {
+    if (v.item === null || !data.items.some(r => r.item === v.item)) {
+      lines.push(`✗ ${v.reason}`);
+    }
+  }
+  vout.textContent = lines.join('\n');
 });
 </script>
 </body>

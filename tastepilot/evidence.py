@@ -83,15 +83,23 @@ def verify_chain(record: dict) -> bool:
         expected = hmac.new(signing_key().encode("utf-8"),
                             record_hash.encode("utf-8"), hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, record["signature"])
-    except (KeyError, IndexError, TypeError):
+    except (KeyError, IndexError, TypeError, AttributeError):
+        # Records also arrive from untrusted callers (the browser verify
+        # endpoint, shared plan files): any malformed shape is simply an
+        # invalid chain, never an exception worth a traceback.
         return False
 
 
 def qloo_responses(record: dict) -> dict[str, dict]:
     """Index a record's Qloo responses by response_id (checker input)."""
     out: dict[str, dict] = {}
-    for entry in record.get("entries", []):
-        if entry.get("kind") == "qloo_call":
-            resp = entry["response"]
+    entries = record.get("entries", []) if isinstance(record, dict) else []
+    if not isinstance(entries, list):
+        return out
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("kind") != "qloo_call":
+            continue
+        resp = entry.get("response")
+        if isinstance(resp, dict) and resp.get("response_id"):
             out[resp["response_id"]] = resp
     return out

@@ -49,6 +49,10 @@ the reason recorded (the demo never goes down because the LLM did).
    shows its checker badge, and the evidence viewer opens a record.
 4. Oversize probe: a `POST /api/plan` body over 16 KiB → `413`
    (hardening is live, not just written down).
+5. Paste a repo sample plan (`samples/plan_weekend_kyoto.json`) into the
+   UI's "Verify a shared plan" panel → `PASS` with every item `ok`;
+   edit one affinity in the pasted JSON and re-verify → `FAIL` with
+   `affinity_mismatch`.
 
 ## Notes
 
