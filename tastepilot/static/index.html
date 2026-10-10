@@ -192,10 +192,16 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   const listSum = data.seed_lists && data.seed_lists.length
     ? ` · Lists: ${data.seed_lists.map(l => `${l.label} (${l.items.length})`).join(', ')}`
     : '';
-  const legsSum = data.legs && data.legs.length > 1
-    ? ` · Legs: ${data.legs.map(l => l.location || 'anywhere').join(' → ')}`
+  const legLabel = (l) => (l.location || 'anywhere') +
+    (l.start ? ` (${l.start}${l.end ? ' – ' + l.end : ''}` +
+      `${l.nights != null ? `, ${l.nights} night${l.nights === 1 ? '' : 's'}` : ''})` : '');
+  const legsSum = data.legs && (data.legs.length > 1 || data.legs.some(l => l.start))
+    ? ` · Legs: ${data.legs.map(legLabel).join(' → ')}`
     : '';
-  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${legsSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
+  const warnSum = data.date_warnings && data.date_warnings.length
+    ? ` · Schedule warnings: ${data.date_warnings.length}`
+    : '';
+  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${legsSum}${warnSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
   const renderGroups = (groups) => {
     for (const group of groups) {
       const h = document.createElement('h3');
@@ -211,7 +217,7 @@ document.getElementById('f').addEventListener('submit', async (e) => {
     for (const leg of data.legs) {
       const h = document.createElement('h2');
       h.className = 'leg';
-      h.textContent = leg.location || 'Anywhere';
+      h.textContent = legLabel(leg);
       out.appendChild(h);
       renderGroups(leg.groups);
     }
@@ -219,6 +225,13 @@ document.getElementById('f').addEventListener('submit', async (e) => {
     renderGroups(data.groups && data.groups.length
       ? data.groups
       : [{domain: 'plan', items: data.items}]);
+  }
+  if (data.date_warnings && data.date_warnings.length) {
+    const div = document.createElement('div');
+    div.className = 'rejected';
+    div.textContent = 'Schedule warnings: ' +
+      data.date_warnings.map(w => `${w.code} (${w.location || 'anywhere'}): ${w.detail}`).join('; ');
+    out.appendChild(div);
   }
   if (data.rejected_details && data.rejected_details.length) {
     const div = document.createElement('div');

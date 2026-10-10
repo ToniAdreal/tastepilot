@@ -132,6 +132,15 @@ def main(argv: list[str] | None = None) -> int:
           f"items={len(result['items'])} rejected={len(result['rejected'])} "
           f"checker_passed={result['checker']['passed']} "
           f"chain_valid={result['checker']['chain_valid']}")
+    for entry in result.get("schedule", []):
+        if entry.get("start"):
+            print(f"  schedule: {entry['location'] or 'anywhere'} "
+                  f"{entry['start']}"
+                  f"{' – ' + entry['end'] if entry.get('end') else ''}"
+                  f"{' (' + str(entry['nights']) + ' nights)' if entry.get('nights') is not None else ''}")
+    for warning in result.get("date_warnings", []):
+        print(f"  schedule warning [{warning['code']}] "
+              f"{warning['location'] or 'anywhere'}: {warning['detail']}")
     for item in result["items"]:
         print(f"  [{item['domain']}] {item['entity']['name']} "
               f"(affinity {item['affinity']:.2f}) — {item['why']}")

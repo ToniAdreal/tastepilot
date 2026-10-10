@@ -40,7 +40,9 @@ tastepilot/
   parser.py    deterministic request parsing (scenario / locations / seeds,
                incl. richer seed capture from pasted labelled lists —
                watchlist / playlist / reading list, bulleted or delimited —
-               and multi-city legs: every city mentioned, in mention order)
+               multi-city legs: every city mentioned, in mention order —
+               and date-aware legs: explicit / range / relative dates
+               attached per leg, with ordering + pacing warnings)
   qloo.py      Qloo adapter: real client (hackathon API, X-Api-Key; bounded
                retries on 429/5xx + network errors, every failure surfaces
                as QlooError; tolerant payload-envelope parsing) + mock client
@@ -152,6 +154,17 @@ baked into the image or the repo.
   (per-leg domain groups alongside the flat `groups`), every item
   carries its leg in `location`, and the UI renders one section per leg
   with a `Legs: Kyoto → Paris` status line.
+* Legs are date-aware: dates in the request — explicit (`Nov 3`,
+  `2026-11-03`, `3 November 2026`), ranges (`from Nov 3 to Nov 5`,
+  `Nov 3-5`), durations (`Nov 3 for 3 nights`), or relative (`tomorrow`,
+  `in 5 days`, `next Friday`, all resolved against a reference date) —
+  attach to the leg whose city was most recently mentioned, and the
+  plan reports a `schedule` (per-leg `start`/`end`/`nights`) plus
+  `date_warnings` when legs are out of order, overlap, or end before
+  they start. Warnings are surfaced, never silently repaired, and they
+  never block the plan. Dates are composition constraints only — the
+  Qloo API has no date filter, so no date is ever sent to it; the
+  evidence invariant is untouched.
 * Seeds can arrive as a pasted list, not just prose: a request like
   *"a weekend in Kyoto. Watchlist: Spirited Away, An Obscure Reel.
   Playlist: Kind of Blue; Bon Iver"* contributes every list item as a

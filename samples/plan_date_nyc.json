@@ -15,6 +15,16 @@
   "Kind of Blue (Miles Davis)"
  ],
  "seed_lists": [],
+ "schedule": [
+  {
+   "location": "New York",
+   "start": null,
+   "end": null,
+   "nights": null,
+   "dates": []
+  }
+ ],
+ "date_warnings": [],
  "mode": "mock",
  "explainer": {
   "source": "template",
@@ -555,7 +565,10 @@
       }
      ]
     }
-   ]
+   ],
+   "start": null,
+   "end": null,
+   "nights": null
   }
  ],
  "rejected": [],
@@ -622,7 +635,7 @@
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-10T21:09:07.341771+00:00",
+  "created_at": "2026-10-10T21:39:59.881877+00:00",
   "verdict": "PASS",
   "entries": [
    {

@@ -20,11 +20,36 @@ Multi-city trips: every known city the request mentions is a leg, in
 mention order (``locations``); ``location`` stays the first leg for
 callers that only need one. The agent plans each leg separately with
 the same resolved seeds — per-leg taste continuity by construction.
+
+Date-aware legs: calendar dates in the request are attached to legs —
+a date belongs to the leg whose city was most recently mentioned
+before it (a date before any city belongs to the first leg). Supported
+forms, all resolved deterministically against a reference date (the
+caller supplies it; the agent defaults to today):
+
+- explicit: ``2026-11-03``, ``Nov 3``, ``November 3, 2026``,
+  ``3 November 2026`` (ordinals ok; a missing year rolls forward to
+  the next occurrence on/after the reference date);
+- ranges: ``from Nov 3 to Nov 5``, ``Nov 3 – Nov 5``, the same-month
+  shorthand ``Nov 3-5``, and durations ``Nov 3 for 3 nights``
+  (``for N days`` ends N-1 days after the start);
+- relative: ``today``, ``tomorrow``, ``in N days``, ``on/this
+  <weekday>`` (the upcoming occurrence, today counts) and ``next
+  <weekday>`` (that occurrence one week later).
+
+Per leg the parser reports ``start``/``end`` (ISO dates), ``nights``,
+and the raw date text it used; cross-leg problems are reported as
+``date_warnings`` (``out_of_order``, ``overlap``,
+``end_before_start``) instead of being silently repaired. Dates are
+composition constraints only — the Qloo API has no date filter, so
+nothing date-shaped is ever sent to it.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import date as _date
+from datetime import timedelta
 
 from . import fixtures
 
@@ -82,6 +107,12 @@ class ParsedRequest:
     # Provenance for richer seed capture: [{"label": ..., "items": [...]}]
     # in the order the lists appear in the request.
     seed_lists: list[dict] = field(default_factory=list)
+    # Date-aware legs: one entry per leg (aligned with ``locations``,
+    # or a single location-less entry), each {"location", "start",
+    # "end", "nights", "dates"} with ISO dates or None.
+    leg_dates: list[dict] = field(default_factory=list)
+    # Cross-leg schedule problems: [{"code", "location", "detail"}].
+    date_warnings: list[dict] = field(default_factory=list)
 
 
 def _clean_list_item(raw: str) -> str | None:
@@ -159,7 +190,207 @@ def extract_locations(text: str) -> list[str]:
     return locations
 
 
-def parse_request(text: str) -> ParsedRequest:
+_MONTHS = {"jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3,
+           "march": 3, "apr": 4, "april": 4, "may": 5, "jun": 6,
+           "june": 6, "jul": 7, "july": 7, "aug": 8, "august": 8,
+           "sep": 9, "sept": 9, "september": 9, "oct": 10, "october": 10,
+           "nov": 11, "november": 11, "dec": 12, "december": 12}
+_MONTH_ALT = (r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|"
+              r"Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|"
+              r"Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)")
+_WEEKDAYS = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+             "friday": 4, "saturday": 5, "sunday": 6}
+_ORD = r"(?:st|nd|rd|th)?"
+_DATE_TOKEN = (
+    rf"(?:\d{{4}}-\d{{2}}-\d{{2}}"
+    rf"|{_MONTH_ALT}\s+\d{{1,2}}(?!\d){_ORD}(?:,?\s+\d{{4}})?"
+    rf"|\d{{1,2}}(?!\d){_ORD}\s+{_MONTH_ALT}(?:,?\s+\d{{4}})?)")
+_TOKEN_RE = re.compile(_DATE_TOKEN, re.IGNORECASE)
+_SAME_MONTH_RANGE_RE = re.compile(
+    rf"({_MONTH_ALT})\s+(\d{{1,2}}(?!\d)){_ORD}\s*[-\u2013\u2014]\s*"
+    rf"(\d{{1,2}}(?!\d)){_ORD}(?:,?\s+(\d{{4}}))?", re.IGNORECASE)
+_FROM_TO_RE = re.compile(
+    rf"\bfrom\s+({_DATE_TOKEN})\s+(?:to|until|through)\s+({_DATE_TOKEN})",
+    re.IGNORECASE)
+_DASH_RANGE_RE = re.compile(
+    rf"({_DATE_TOKEN})\s*[-\u2013\u2014]\s*({_DATE_TOKEN})", re.IGNORECASE)
+_DURATION_RE = re.compile(
+    rf"({_DATE_TOKEN})\s+for\s+(\d{{1,3}})\s+(nights?|days?)",
+    re.IGNORECASE)
+_RELATIVE_RE = re.compile(
+    r"\b(tomorrow|today)\b|\bin\s+(\d{1,3})\s+days?\b"
+    r"|\b(next|this|on)\s+(monday|tuesday|wednesday|thursday|friday|"
+    r"saturday|sunday)\b", re.IGNORECASE)
+
+
+def _resolve_year(month: int, day: int, year: int | None,
+                  ref: _date) -> _date | None:
+    """Build a date; a missing year rolls forward past the reference."""
+    try:
+        d = _date(year, month, day) if year else _date(ref.year, month, day)
+    except ValueError:
+        return None
+    if not year and d < ref:
+        try:
+            d = _date(ref.year + 1, month, day)
+        except ValueError:
+            return None
+    return d
+
+
+def _parse_date_token(token: str, ref: _date) -> _date | None:
+    token = token.strip()
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", token)
+    if m:
+        try:
+            return _date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            return None
+    m = re.fullmatch(
+        rf"({_MONTH_ALT})\s+(\d{{1,2}}(?!\d)){_ORD}(?:,?\s+(\d{{4}}))?",
+        token, re.IGNORECASE)
+    if m:
+        return _resolve_year(_MONTHS[m.group(1).lower()], int(m.group(2)),
+                             int(m.group(3)) if m.group(3) else None, ref)
+    m = re.fullmatch(
+        rf"(\d{{1,2}}(?!\d)){_ORD}\s+({_MONTH_ALT})(?:,?\s+(\d{{4}}))?",
+        token, re.IGNORECASE)
+    if m:
+        return _resolve_year(_MONTHS[m.group(2).lower()], int(m.group(1)),
+                             int(m.group(3)) if m.group(3) else None, ref)
+    return None
+
+
+def extract_dates(text: str, reference: _date) -> list[dict]:
+    """Every calendar date/range in the request, in mention order:
+    [{"start": date, "end": date|None, "raw": str, "position": int}].
+    A weekday is only a date when introduced by on/this/next, so a
+    film called "Friday" is never mistaken for a schedule."""
+    found: list[dict] = []
+    claimed: list[tuple[int, int]] = []
+
+    def overlaps(span: tuple[int, int]) -> bool:
+        return any(span[0] < c[1] and c[0] < span[1] for c in claimed)
+
+    def add(m: re.Match, start: _date | None, end: _date | None) -> None:
+        if start is None:
+            return
+        claimed.append(m.span())
+        found.append({"start": start, "end": end,
+                      "raw": text[m.start():m.end()],
+                      "position": m.start()})
+
+    for m in _SAME_MONTH_RANGE_RE.finditer(text):
+        month = _MONTHS[m.group(1).lower()]
+        year = int(m.group(4)) if m.group(4) else None
+        add(m, _resolve_year(month, int(m.group(2)), year, reference),
+            _resolve_year(month, int(m.group(3)), year, reference))
+    for regex in (_FROM_TO_RE, _DASH_RANGE_RE):
+        for m in regex.finditer(text):
+            if not overlaps(m.span()):
+                add(m, _parse_date_token(m.group(1), reference),
+                    _parse_date_token(m.group(2), reference))
+    for m in _DURATION_RE.finditer(text):
+        if overlaps(m.span()):
+            continue
+        start = _parse_date_token(m.group(1), reference)
+        n = int(m.group(2))
+        end = None
+        if start is not None:
+            end = start + timedelta(days=n if m.group(3).lower().startswith("night")
+                                    else max(n - 1, 0))
+        add(m, start, end)
+    for m in _TOKEN_RE.finditer(text):
+        if not overlaps(m.span()):
+            add(m, _parse_date_token(m.group(0), reference), None)
+    for m in _RELATIVE_RE.finditer(text):
+        if overlaps(m.span()):
+            continue
+        if m.group(1):
+            d = reference + timedelta(days=1 if m.group(1).lower() == "tomorrow"
+                                      else 0)
+        elif m.group(2):
+            d = reference + timedelta(days=int(m.group(2)))
+        else:
+            delta = (_WEEKDAYS[m.group(4).lower()] - reference.weekday()) % 7
+            if m.group(3).lower() == "next":
+                delta += 7
+            d = reference + timedelta(days=delta)
+        add(m, d, None)
+    found.sort(key=lambda f: f["position"])
+    return found
+
+
+def assign_leg_dates(text: str, locations: list[str],
+                     reference: _date) -> tuple[list[dict], list[dict]]:
+    """Attach the request's dates to legs and derive schedule warnings.
+
+    Returns (leg_dates, date_warnings): one leg_dates entry per leg in
+    ``locations`` order (a single location-less entry when the request
+    names no city)."""
+    found = extract_dates(text, reference)
+    leg_names: list[str | None] = list(locations) if locations else [None]
+    # A date belongs to the leg whose city was most recently mentioned
+    # before it; a date before any city mention belongs to the first.
+    low = text.lower()
+    mentions: list[tuple[int, str]] = []
+    for city in CITIES:
+        for m in re.finditer(r"\b" + re.escape(city.lower()) + r"\b", low):
+            mentions.append((m.start(), CITY_CANON.get(city, city)))
+    mentions.sort()
+    buckets: list[list[dict]] = [[] for _ in leg_names]
+    for f in found:
+        idx = 0
+        for pos, canon in mentions:
+            if pos > f["position"]:
+                break
+            if canon in leg_names:
+                idx = leg_names.index(canon)
+        buckets[idx].append(f)
+    leg_dates: list[dict] = []
+    for name, bucket in zip(leg_names, buckets):
+        starts = [f["start"] for f in bucket]
+        ends = [f["end"] for f in bucket if f["end"] is not None]
+        if len([f for f in bucket if f["end"] is None]) >= 2:
+            ends += [f["start"] for f in bucket if f["end"] is None]
+        start = min(starts) if starts else None
+        end = max(ends) if ends else None
+        leg_dates.append({
+            "location": name,
+            "start": start.isoformat() if start else None,
+            "end": end.isoformat() if end else None,
+            "nights": (end - start).days if start and end else None,
+            "dates": [f["raw"] for f in bucket]})
+    warnings: list[dict] = []
+    prev: dict | None = None
+    for leg in leg_dates:
+        if leg["start"] and leg["end"] and leg["end"] < leg["start"]:
+            warnings.append({"code": "end_before_start",
+                             "location": leg["location"],
+                             "detail": f"ends {leg['end']} before it "
+                                       f"starts {leg['start']}"})
+        if prev and leg["start"] and prev["start"]:
+            if leg["start"] < prev["start"]:
+                warnings.append({"code": "out_of_order",
+                                 "location": leg["location"],
+                                 "detail": f"starts {leg['start']} before "
+                                           f"the previous leg "
+                                           f"({prev['location']}, "
+                                           f"{prev['start']})"})
+            elif prev["end"] and leg["start"] < prev["end"]:
+                warnings.append({"code": "overlap",
+                                 "location": leg["location"],
+                                 "detail": f"starts {leg['start']} before "
+                                           f"the previous leg "
+                                           f"({prev['location']}) ends "
+                                           f"{prev['end']}"})
+        if leg["start"]:
+            prev = leg
+    return leg_dates, warnings
+
+
+def parse_request(text: str,
+                  reference_date: _date | None = None) -> ParsedRequest:
     low = text.lower()
     scenario = "generic"
     for name, spec in SCENARIOS.items():
@@ -195,8 +426,11 @@ def parse_request(text: str) -> ParsedRequest:
     for q in quoted:
         if q not in seed_names:
             seed_names.append(q)
+    leg_dates, date_warnings = assign_leg_dates(
+        text, locations, reference_date or _date.today())
     return ParsedRequest(text=text, scenario=scenario,
                          domains=list(SCENARIOS[scenario]["domains"]),
                          location=location, locations=locations,
                          seed_names=seed_names, quoted=quoted,
-                         seed_lists=seed_lists)
+                         seed_lists=seed_lists, leg_dates=leg_dates,
+                         date_warnings=date_warnings)

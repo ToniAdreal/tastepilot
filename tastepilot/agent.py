@@ -44,12 +44,15 @@ class TastePilotAgent:
                 resolved_names.append(pick.entity.name)
         return ids, resolved_names
 
-    def run(self, text: str) -> dict:
+    def run(self, text: str, reference_date=None) -> dict:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("text is required")
         if len(text) > MAX_TEXT_CHARS:
             raise ValueError("text too long")
-        parsed = parse_request(text)
+        # reference_date anchors relative dates ("tomorrow", "next
+        # Friday") and year-less explicit dates; None = today. Tests
+        # pass a fixed date so plans stay deterministic.
+        parsed = parse_request(text, reference_date=reference_date)
         log = EvidenceLog(request_text=text, mode=self.mode)
         seed_ids, seed_names = self._resolve_seeds(parsed, log)
         items: list[dict] = []
@@ -130,6 +133,13 @@ class TastePilotAgent:
         # plans (a single-city plan has exactly one leg). A leg with no
         # admitted items is omitted, mirroring how empty domain groups
         # are omitted above.
+        # Date info per leg location, from the parser's leg_dates
+        # (aligned with parsed.locations; a location-less plan has a
+        # single None entry). Dates are composition constraints only:
+        # they never reach a Qloo call, so the evidence invariant is
+        # untouched — but ordering/pacing problems are surfaced as
+        # date_warnings rather than silently repaired.
+        dates_by_location = {d["location"]: d for d in parsed.leg_dates}
         legs = []
         for leg_location in leg_locations:
             leg_groups = []
@@ -140,7 +150,11 @@ class TastePilotAgent:
                 if members:
                     leg_groups.append({"domain": domain, "items": members})
             if leg_groups:
-                legs.append({"location": leg_location, "groups": leg_groups})
+                leg = {"location": leg_location, "groups": leg_groups}
+                info = dates_by_location.get(leg_location) or {}
+                for key in ("start", "end", "nights"):
+                    leg[key] = info.get(key)
+                legs.append(leg)
         # Plan-level explainer summary over the admitted items only:
         # how many "why" lines the live LLM actually wrote, how many the
         # template wrote, and how many are recorded Nebius fallbacks.
@@ -164,6 +178,8 @@ class TastePilotAgent:
             "domains": parsed.domains,
             "seeds": seed_names,
             "seed_lists": parsed.seed_lists,
+            "schedule": parsed.leg_dates,
+            "date_warnings": parsed.date_warnings,
             "mode": self.mode,
             "explainer": explainer_summary,
             "items": admissible,
