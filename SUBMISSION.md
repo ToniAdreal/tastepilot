@@ -62,7 +62,9 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    also travel as shareable verification links: a plan can be stored
    under a content-addressed id, and anyone opening the link gets the
    plan back with its verification recomputed — storing grants a plan
-   no trust, so a tampered shared plan still fails by link.
+   no trust, so a tampered shared plan still fails by link. Links
+   expire after 7 days, can be revoked by anyone holding them, and —
+   with an opt-in JSON file store — survive a server restart.
 
 **[FINALIZE: one real-mode example — a plan produced against the live
 Qloo API, with its item count and checker verdict.]**
@@ -127,8 +129,8 @@ stops being a liability and becomes pure upside.
 - Richer seed capture (paste a playlist, a reading list, a watchlist)
   feeding the same evidence-checked loop.
 - Multi-city trip composition with per-leg taste continuity.
-- Persistent shared-plan storage with expiry and revocation, so
-  verification links outlive the demo process that issued them.
+- Account-owned share management (per-user link lists and dashboards)
+  on top of the built expiry/revocation/persistence primitives.
 
 ## Built with
 

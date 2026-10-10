@@ -50,7 +50,9 @@ tastepilot/
                per-item checker badges, explanation provenance,
                evidence-record viewer endpoint, browser plan-verification
                endpoint for shared plan JSON, shareable verification
-               links (content-addressed plan store, verify-by-link);
+               links (content-addressed plan store, verify-by-link,
+               7-day expiry, DELETE revocation, optional file
+               persistence across restarts);
                hardened: input caps, security headers, bounded caches,
                leak-free 500s)
   smoke.py     real-mode smoke check: one search + one insights call,
@@ -149,6 +151,15 @@ baked into the image or the repo.
   bounded (128 plans, oldest evicted — an evicted link simply 404s),
   and storing a plan grants it no trust: a tampered stored plan still
   FAILs by link, with its claimed verdict echoed as a claim only.
+  Links also expire (7 days from first storage; re-storing the same
+  plan does not extend that) and can be revoked by anyone holding
+  them (`DELETE /api/share/<id>` → the link 404s for everyone). With
+  `serve --share-file <path>` (or the `TASTEPILOT_SHARE_FILE` env var)
+  the store persists to a JSON file written atomically on every
+  mutation, so links survive a restart; a missing or corrupt file
+  simply starts an empty store. `GET /api/health` reports the share
+  store's mode, count, and TTL, and `--share-ttl-days` tunes the
+  lifetime.
 
 ## Hackathon submission
 

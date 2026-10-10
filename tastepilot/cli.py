@@ -6,9 +6,15 @@
   python -m tastepilot verify --record plan.json
   python -m tastepilot serve [--host 127.0.0.1] [--port 8765]
                              [--mode mock|auto] [--llm template|nebius]
+                             [--share-file shares.json]
+                             [--share-ttl-days 7]
 
 For hosted deployments the port defaults to the platform's ``PORT``
 environment variable when ``--port`` is not given (see DEPLOY.md).
+Share links are in-memory unless ``--share-file`` (or the
+``TASTEPILOT_SHARE_FILE`` env var) names a JSON file they persist to;
+every link expires after ``--share-ttl-days`` and can be revoked with
+``DELETE /api/share/<id>``.
 """
 from __future__ import annotations
 
@@ -56,10 +62,18 @@ def main(argv: list[str] | None = None) -> int:
                    help="bind port (default: $PORT or 8765)")
     s.add_argument("--mode", default="mock", choices=["mock", "auto"])
     s.add_argument("--llm", default="template", choices=["template", "nebius"])
+    s.add_argument("--share-file", default=None,
+                   help="persist share links to this JSON file "
+                        "(default: $TASTEPILOT_SHARE_FILE, else in-memory)")
+    s.add_argument("--share-ttl-days", type=float, default=7.0,
+                   help="share-link lifetime in days (default 7)")
     args = ap.parse_args(argv)
 
     if args.cmd == "serve":
         from .server import serve
+        if args.share_ttl_days <= 0:
+            print("error: --share-ttl-days must be > 0", file=sys.stderr)
+            return 2
         try:
             agent = _agent_for(args.mode, args.llm)
         except QlooError as exc:
@@ -67,7 +81,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         port = args.port if args.port is not None \
             else int(os.environ.get("PORT", "8765"))
-        serve(agent, port=port, host=args.host)
+        serve(agent, port=port, host=args.host, share_file=args.share_file,
+              share_ttl_seconds=args.share_ttl_days * 24 * 3600)
         return 0
     if args.cmd == "smoke":
         try:

@@ -34,6 +34,7 @@ No build/install step is required — there are no dependencies.
 | `PORT` | no | Bind port (default 8765). Set by most platforms automatically. |
 | `QLOO_API_KEY` | no | When set (platform secret store only), `--mode auto` serves **real** Qloo responses; when unset it serves mock Judge Mode. Never bake the key into an image or commit it — `.env` is gitignored and dockerignored. |
 | `TASTEPILOT_SIGNING_KEY` | no | Overrides the development HMAC key for evidence records. |
+| `TASTEPILOT_SHARE_FILE` | no | Path of a JSON file the share-link store persists to (atomic writes), so verification links survive restarts. Needs a writable, persistent volume; unset = in-memory links. The CLI equivalent is `serve --share-file <path>`, and `--share-ttl-days` tunes the 7-day default link lifetime. The file holds only shared plan payloads (fictional demo data) — never the Qloo key. |
 
 For live Nemotron explanations instead of the deterministic template,
 append `--llm nebius` to the start command; every explanation records
@@ -55,8 +56,12 @@ the reason recorded (the demo never goes down because the LLM did).
    `affinity_mismatch`.
 6. Share-link probe: create a shareable link for a generated plan (or
    for the pasted sample) and open it in a fresh tab → the shared plan
-   loads with its verification recomputed to `PASS`. (Links live in the
-   server process — a restart clears them, oldest-evicted after 128.)
+   loads with its verification recomputed to `PASS`, with the link's
+   expiry shown. Links expire 7 days after creation and are
+   oldest-evicted after 128; `DELETE /api/share/<id>` revokes one
+   immediately (it 404s afterwards). Without `TASTEPILOT_SHARE_FILE`
+   links live in the server process — a restart clears them; with it
+   set (on a persistent volume) they survive restarts.
 
 ## Notes
 

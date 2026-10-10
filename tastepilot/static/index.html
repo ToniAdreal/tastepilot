@@ -54,7 +54,10 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
   <button type="button" id="sbtn">Create shareable link for this plan</button></div>
   <p class="meta">A shareable link stores the plan on this server under a
   content-addressed id; anyone opening it gets the plan back with its
-  verification recomputed — the audit travels with the plan, no pasting.</p>
+  verification recomputed — the audit travels with the plan, no pasting.
+  Links expire after 7 days and can be revoked by anyone holding them
+  (the button below appears when you open one).</p>
+  <div style="margin-top:.5rem"><button type="button" id="revokebtn" style="display:none">Revoke this share link</button></div>
   <div id="vout"></div>
 </section>
 <script>
@@ -72,14 +75,20 @@ async function createShareLink(payload) {
     headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || res.status);
-  return location.origin + data.url;
+  data.absolute_url = location.origin + data.url;
+  return data;
 }
 
-function showShareLink(el, link) {
+function showShareLink(el, data) {
   el.textContent = 'Shareable verification link: ';
   const a = document.createElement('a');
-  a.href = link; a.textContent = link;
+  a.href = data.absolute_url; a.textContent = data.absolute_url;
   el.appendChild(a);
+  if (data.expires_at) {
+    el.appendChild(document.createTextNode(
+      ' · expires ' + new Date(data.expires_at).toLocaleString() +
+      ' · revocable by anyone holding the link'));
+  }
 }
 
 sharebtn.addEventListener('click', async () => {
@@ -243,7 +252,19 @@ document.getElementById('sbtn').addEventListener('click', async () => {
   const res = await fetch('/api/share/' + encodeURIComponent(shareId) + '/verify');
   const data = await res.json();
   if (!res.ok) { vout.textContent = 'Error: ' + (data.error || res.status); return; }
-  vout.textContent = 'Shared plan ' + shareId + '\n' + verifyLines(data).join('\n');
+  vout.textContent = 'Shared plan ' + shareId +
+    (data.expires_at ? ' · link expires ' + new Date(data.expires_at).toLocaleString() : '') +
+    '\n' + verifyLines(data).join('\n');
+  const revokeBtn = document.getElementById('revokebtn');
+  revokeBtn.style.display = '';
+  revokeBtn.addEventListener('click', async () => {
+    const del = await fetch('/api/share/' + encodeURIComponent(shareId), {method: 'DELETE'});
+    const d = await del.json();
+    vout.textContent = del.ok
+      ? 'Share link revoked — it now returns 404 for everyone.'
+      : 'Error: ' + (d.error || del.status);
+    if (del.ok) revokeBtn.style.display = 'none';
+  });
   document.getElementById('verifybox').scrollIntoView();
 })();
 </script>
