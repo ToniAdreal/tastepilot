@@ -12,6 +12,8 @@
                              [--format markdown|text|ics] [--out file]
   python -m tastepilot swap --plan plan.json --primary NAME
                              --alternative NAME [--out swapped.json]
+  python -m tastepilot undo --plan plan.json [--out undone.json]
+  python -m tastepilot history --plan plan.json
   python -m tastepilot serve [--host 127.0.0.1] [--port 8765]
                              [--mode mock|auto] [--llm template|nebius]
                              [--share-file shares.json]
@@ -105,6 +107,15 @@ def main(argv: list[str] | None = None) -> int:
                    help="name of the verified alternative to swap in")
     w.add_argument("--out",
                    help="write the swapped plan here (default: stdout)")
+    u = sub.add_parser("undo")
+    u.add_argument("--plan", required=True,
+                   help="a saved plan JSON with at least one sealed swap")
+    u.add_argument("--out",
+                   help="write the undone plan here (default: stdout)")
+    h = sub.add_parser("history")
+    h.add_argument("--plan", required=True,
+                   help="a saved plan JSON; its swap audit trail is "
+                        "recomputed from the sealed evidence record")
     s = sub.add_parser("serve")
     s.add_argument("--host", default="127.0.0.1",
                    help="bind host (hosted deployments: 0.0.0.0)")
@@ -210,6 +221,65 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(json.dumps(result, indent=1, ensure_ascii=False))
         return 0 if result["checker"]["passed"] else 1
+    if args.cmd == "undo":
+        from .swap import undo_last_swap
+        try:
+            plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: undo failed: cannot read plan "
+                  f"({type(exc).__name__})", file=sys.stderr)
+            return 2
+        if not isinstance(plan, dict):
+            print("error: undo failed: bad_plan", file=sys.stderr)
+            return 2
+        try:
+            result = undo_last_swap(plan)
+        except ValueError as exc:  # categorised refusal, no traceback
+            print(f"error: undo failed: {exc}", file=sys.stderr)
+            return 2
+        event = result["swaps"][-1]
+        if args.out:
+            Path(args.out).write_text(
+                json.dumps(result, indent=1, ensure_ascii=False),
+                encoding="utf-8")
+            print(f"undo: reversed swap {event['undo_of'][:8]}: "
+                  f"[{event['primary']['domain']}] "
+                  f"{event['alternative']['name']} is primary again "
+                  f"(was {event['primary']['name']}) "
+                  f"checker_passed={result['checker']['passed']} "
+                  f"chain_valid={result['checker']['chain_valid']} "
+                  f"swaps={len(result['swaps'])} out={args.out}")
+        else:
+            print(json.dumps(result, indent=1, ensure_ascii=False))
+        return 0 if result["checker"]["passed"] else 1
+    if args.cmd == "history":
+        from .swap import swap_history
+        try:
+            plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: swap history failed: cannot read plan "
+                  f"({type(exc).__name__})", file=sys.stderr)
+            return 2
+        if not isinstance(plan, dict):
+            print("error: swap history failed: bad_plan", file=sys.stderr)
+            return 2
+        try:
+            events = swap_history(plan)
+        except ValueError as exc:  # categorised refusal, no traceback
+            print(f"error: swap history failed: {exc}", file=sys.stderr)
+            # A broken chain is a verdict (exit 1, like verify);
+            # every other refusal is a caller error (exit 2).
+            return 1 if str(exc) == "evidence_chain_invalid" else 2
+        for event in events:
+            primary, alternative = event["primary"], event["alternative"]
+            print(f"  swap #{event['index']} "
+                  f"[{primary['domain']}] {primary['name']} -> "
+                  f"{alternative['name']} swap_id={event['swap_id']}"
+                  + (f" undo_of={event['undo_of']}"
+                     if event["is_undo"] else ""))
+        print(f"swap history: {len(events)} sealed swap(s), "
+              f"chain_valid=True")
+        return 0
     if args.cmd == "verify":
         data = json.loads(Path(args.record).read_text(encoding="utf-8"))
         record = data.get("evidence", data)

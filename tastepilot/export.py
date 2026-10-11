@@ -166,6 +166,34 @@ def _provenance_lines(plan) -> list[str]:
     return lines
 
 
+def _swap_history_lines(plan) -> list[str]:
+    """The sealed swap audit trail, recomputed from the evidence
+    record (swap.swap_history) — a ``swaps``/``swap_history`` field
+    stored in the plan JSON is never read back. A plan whose chain
+    does not verify yields no lines: its banner already says NOT
+    VERIFIED, and an audit trail read from a broken chain would be
+    a claim, not an audit."""
+    from .swap import swap_history
+    try:
+        events = swap_history(plan)
+    except ValueError:
+        return []
+    lines = []
+    for event in events:
+        primary = event.get("primary") or {}
+        alternative = event.get("alternative") or {}
+        line = (f"#{event.get('index')} [{primary.get('domain', '')}] "
+                f"{primary.get('name', '')} -> "
+                f"{alternative.get('name', '')} "
+                f"(swap {(event.get('swap_id') or '')[:8]}, sealed; "
+                f"record before: "
+                f"{(event.get('record_hash_before') or '')[:12]})")
+        if event.get("is_undo"):
+            line += f" — undo of swap {(event.get('undo_of') or '')[:8]}"
+        lines.append(line)
+    return lines
+
+
 def _handoff_lines(plan) -> list[tuple[str, str]]:
     """(label, url) handoff links, recomputed from the plan itself
     (handoff.plan_handoffs) — a ``handoffs`` field stored in the
@@ -279,6 +307,10 @@ def render_markdown(plan: dict) -> str:
             if ref:
                 out.append(f"  Evidence: `{ref}`")
         out.append("")
+    swap_history = _swap_history_lines(plan)
+    if swap_history:
+        out += ["## Swap history (sealed audit trail)", ""]
+        out += [f"- {line}" for line in swap_history] + [""]
     handoffs = _handoff_lines(plan)
     if handoffs:
         out += ["## Handoffs (your own calendar / maps)", ""]
@@ -341,6 +373,10 @@ def render_text(plan: dict) -> str:
             if ref:
                 out.append(f"    Evidence: {ref}")
         out.append("")
+    swap_history = _swap_history_lines(plan)
+    if swap_history:
+        out += ["Swap history (sealed audit trail):"]
+        out += [f"  * {line}" for line in swap_history] + [""]
     handoffs = _handoff_lines(plan)
     if handoffs:
         out += ["Handoffs (your own calendar / maps):"]

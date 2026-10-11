@@ -107,7 +107,16 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    plan passing, both items traced) — a tampered plan is refused,
    never re-sealed — and the exchange itself is then sealed into
    the evidence record as a swap event, so the re-signed record
-   attests the original Qloo calls and every swap at once.
+   attests the original Qloo calls and every swap at once. The
+   swap history is an audit trail every surface recomputes from
+   those sealed events — the UI's history block, the verify
+   report, the itinerary exports, a `history` command — never
+   from a plan's stored swap list, and the newest swap can be
+   reversed with one Undo tap: the reversal is read from the sealed
+   history, re-checked against every precondition, and sealed
+   as a further event naming the swap it reversed, so the
+   record attests swaps and their undos alike and nothing is
+   ever deleted from the chain.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -234,10 +243,10 @@ stops being a liability and becomes pure upside.
   and platform maps links, with two-way calendar sync, instead
   of the one-tap template/search links and one-way share
   payload the handoff layer already produces.
-- Undo and swap history in the UI — walking back through a
-  plan's sealed swap events (and exporting the full swap audit
-  trail) instead of only the latest state the re-sealed record
-  already attests.
+- Branching swap timelines — exploring several swap paths
+  side by side (and comparing their recomputed verdicts) instead
+  of the single linear history — swaps, undos, and redos on one
+  sealed stack — the built audit trail already attests.
 
 ## Built with
 

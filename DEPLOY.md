@@ -101,6 +101,13 @@ the reason recorded (the demo never goes down because the LLM did).
    names a new record hash whose verdict is PASS; pasting the
    swapped plan into the verify panel still PASSes, and editing
    any affinity in it FAILs.
+12. Undo probe: after the swap probe, the plan shows a "Swap
+    history (sealed audit trail)" block naming the exchange;
+    click "Undo last swap" → the original primary is restored,
+    the history block lists two sealed events (the second marked
+    as the undo of the first), and the plan still PASSes in the
+    verify panel, whose output now includes the two-line sealed
+    swap history.
 
 ## Notes
 

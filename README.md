@@ -109,7 +109,11 @@ tastepilot/
                recomputed (chain + full-plan checker + both items),
                checker re-run over the swapped plan, and the evidence
                record re-sealed around a swap_event entry (original
-               Qloo calls replayed byte-identically)
+               Qloo calls replayed byte-identically); swap_history
+               recomputes the audit trail from the sealed events
+               alone, and undo_last_swap reverses the newest one
+               through the same preconditions, sealing the reversal
+               as an undo_of event
   smoke.py     real-mode smoke check: one search + one insights call,
                payload-shape validation, both sealed + chain re-verified
   imports.py   external taste-file imports: Spotify playlist-export JSON,
@@ -358,6 +362,21 @@ baked into the image or the repo.
   the chain, and the record is re-signed with the recomputed
   verdict — so `verify` attests the original calls and every swap
   at once, and swapping back is just another sealed event.
+* The swap history is an audit trail, not a display field: every
+  surface (the UI's swap-history block, the verify report, the
+  Markdown/text exports, `tastepilot history`) recomputes it from
+  the sealed `swap_event` entries via `swap_history` — editing a
+  plan's stored `swaps` list changes nothing anywhere, and a plan
+  whose chain fails verification reports no history at all (the
+  verify report marks its claimed swaps as unverified instead).
+  The newest swap can be walked back with the UI's "Undo last
+  swap" button, `POST /api/undo`, or `tastepilot undo`: the
+  reversal target is read from the sealed history, the exchange
+  runs through every swap precondition again (a tampered plan is
+  refused, never re-sealed), and the reversal is itself sealed as
+  a swap event whose `undo_of` names the swap it reversed — so
+  the chain attests swaps and undos alike, the undone event is
+  never deleted, and undoing an undo redoes the swap.
 * Anyone holding a plan JSON can re-verify it in the browser: the UI's
   "Verify a shared plan" panel posts it to `POST /api/verify`, which
   recomputes the hash chain and every per-item checker verdict from the

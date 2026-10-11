@@ -324,6 +324,15 @@ function verifyLines(data) {
   for (const r of data.alternatives || []) {
     lines.push(`${r.admissible ? '✓' : '✗'} ${r.item} (${r.domain}) — alternative, checker: ${r.reason}`);
   }
+  if (data.swaps_verified && data.swap_history && data.swap_history.length) {
+    lines.push(`Swap history: ${data.swap_history.length} sealed swap(s), recomputed from the evidence record:`);
+    for (const ev of data.swap_history) {
+      lines.push(`  #${ev.index} ${ev.primary.name} → ${ev.alternative.name}` +
+        (ev.is_undo ? ` (undo of swap ${String(ev.undo_of).slice(0, 8)})` : ''));
+    }
+  } else if (data.swaps_claimed) {
+    lines.push(`Swap history: ${data.swaps_claimed} swap(s) claimed by the plan's stored field — NOT sealed-verified (chain invalid or no sealed swap events).`);
+  }
   for (const v of data.violations) {
     if (v.item === null || !data.items.some(r => r.item === v.item)) {
       lines.push(`✗ ${v.reason}`);
@@ -418,6 +427,17 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   if (!res.ok) { statusEl.textContent = 'Error: ' + (data.error || res.status); return; }
   renderPlan(data);
 });
+
+async function doUndo() {
+  if (!lastPlan) return;
+  statusEl.textContent = 'Undoing last swap…';
+  const res = await fetch('/api/undo', {method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({plan: lastPlan})});
+  const data = await res.json();
+  if (!res.ok) { statusEl.textContent = 'Error: ' + (data.error || res.status); return; }
+  renderPlan(data);
+}
 
 async function doSwap(primary, alternative) {
   if (!lastPlan) return;
@@ -566,6 +586,28 @@ function renderPlan(data) {
       }
       out.appendChild(altCard);
     }
+  }
+  const history = (data.swap_history && data.swap_history.length)
+    ? data.swap_history
+    : (data.swaps || []).map((ev, i) => ({index: i + 1, primary: ev.primary,
+        alternative: ev.alternative, is_undo: !!ev.undo_of, undo_of: ev.undo_of}));
+  if (history.length) {
+    const h = document.createElement('h2');
+    h.className = 'leg';
+    h.textContent = 'Swap history (sealed audit trail)';
+    out.appendChild(h);
+    const div = document.createElement('div');
+    div.className = 'meta swaphistory';
+    div.textContent = history.map(ev =>
+      `#${ev.index} ${ev.primary.name} → ${ev.alternative.name}` +
+      (ev.is_undo ? ` (undo of swap ${String(ev.undo_of).slice(0, 8)})` : '') +
+      ' — sealed').join(' · ');
+    out.appendChild(div);
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'undobtn';
+    btn.textContent = 'Undo last swap';
+    btn.addEventListener('click', doUndo);
+    out.appendChild(btn);
   }
   if (data.date_warnings && data.date_warnings.length) {
     const div = document.createElement('div');

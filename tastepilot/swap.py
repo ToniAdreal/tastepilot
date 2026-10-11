@@ -27,6 +27,13 @@ are held to the same standard as the plan itself:
 Failures raise ValueError with a categorised message (``swap
 failed:`` prefix added by callers) — never a traceback, never an
 echo of the submitted plan.
+
+History and undo live here too. ``swap_history`` recomputes a
+plan's audit trail from the sealed swap_event entries alone (the
+stored ``swaps`` mirror is never trusted), and ``undo_last_swap``
+reverses the newest sealed event by re-running the same exchange
+through every swap precondition and sealing the reversal as
+another event whose ``undo_of`` names the swap it walked back.
 """
 from __future__ import annotations
 
@@ -119,7 +126,62 @@ def _regroup(plan: dict, items: list[dict]) -> tuple[list, list]:
     return groups, legs
 
 
-def swap_plan(plan: dict, primary_selector, alternative_selector) -> dict:
+def sealed_swap_events(record) -> list[dict]:
+    """The swap events sealed into a record, in chain order.
+
+    This is the only authoritative swap history: a plan's stored
+    ``swaps`` field is a reader-facing mirror, and any surface that
+    reports history derives it from the sealed entries here. A
+    malformed record simply yields no events (callers that need to
+    distinguish "no swaps" from "unverifiable" check the chain
+    first — see swap_history)."""
+    if not isinstance(record, dict):
+        return []
+    entries = record.get("entries")
+    if not isinstance(entries, list):
+        return []
+    events = []
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("kind") == "swap_event" \
+                and isinstance(entry.get("swap"), dict):
+            events.append(entry["swap"])
+    return events
+
+
+def swap_history(plan: dict) -> list[dict]:
+    """Recompute a plan's swap history from its sealed record.
+
+    Returns one entry per sealed swap_event, in order:
+    ``{index, swap_id, primary, alternative, record_hash_before,
+    undo_of, is_undo}``. The stored ``swaps`` field is never read —
+    editing it changes nothing here. Raises ValueError with a
+    categorised message: bad_plan / missing_evidence /
+    evidence_chain_invalid (a history read from a broken chain
+    would be a claim, not an audit)."""
+    if not isinstance(plan, dict):
+        raise ValueError("bad_plan")
+    record = plan.get("evidence")
+    if not isinstance(record, dict) or \
+            not isinstance(record.get("entries"), list) or not record["entries"]:
+        raise ValueError("missing_evidence")
+    if not verify_chain(record):
+        raise ValueError("evidence_chain_invalid")
+    history = []
+    for i, event in enumerate(sealed_swap_events(record)):
+        history.append({
+            "index": i + 1,
+            "swap_id": event.get("swap_id"),
+            "primary": event.get("primary"),
+            "alternative": event.get("alternative"),
+            "record_hash_before": event.get("record_hash_before"),
+            "undo_of": event.get("undo_of"),
+            "is_undo": bool(event.get("undo_of")),
+        })
+    return history
+
+
+def swap_plan(plan: dict, primary_selector, alternative_selector,
+              *, undo_of: str | None = None) -> dict:
     """Return a NEW plan with the selected primary and alternative
     exchanged. The input plan is never mutated.
 
@@ -171,6 +233,11 @@ def swap_plan(plan: dict, primary_selector, alternative_selector) -> dict:
     event = {"primary": _describe(primary),
              "alternative": _describe(alternative),
              "record_hash_before": record.get("record_hash")}
+    if undo_of is not None:
+        # An undo is a swap like any other, but the sealed event
+        # names the swap it reverses, so the audit trail reads as a
+        # stack: each undo points at the event it walked back.
+        event["undo_of"] = undo_of
     event["swap_id"] = hashlib.sha256(
         _canonical(event).encode("utf-8")).hexdigest()[:32]
 
@@ -191,6 +258,9 @@ def swap_plan(plan: dict, primary_selector, alternative_selector) -> dict:
     swaps = new_plan.get("swaps")
     new_plan["swaps"] = (list(swaps) if isinstance(swaps, list) else []) \
         + [event]
+    # The reader-facing history is recomputed from the new sealed
+    # record, never accumulated from the input's stored fields.
+    new_plan["swap_history"] = swap_history(new_plan)
 
     item_reports = checker.item_reports(new_items, new_record)
     alt_reports = checker.item_reports(new_alternatives, new_record)
@@ -228,3 +298,38 @@ def swap_plan(plan: dict, primary_selector, alternative_selector) -> dict:
     from .handoff import plan_handoffs
     new_plan["handoffs"] = plan_handoffs(new_plan)
     return new_plan
+
+
+def _selector_from(described: dict) -> dict:
+    """Rebuild an exact selector from a sealed event's item
+    description (the _describe shape)."""
+    return {"name": described.get("name"),
+            "entity_id": described.get("entity_id"),
+            "domain": described.get("domain"),
+            "location": described.get("location"),
+            "evidence_ref": described.get("evidence_ref")}
+
+
+def undo_last_swap(plan: dict) -> dict:
+    """Return a NEW plan with the most recent swap reversed.
+
+    The reversal target comes from the sealed history
+    (swap_history), never from the stored ``swaps`` mirror: the
+    last event's alternative is currently primary and its primary
+    is currently the alternative, so undoing is the same exchange
+    in reverse — run through swap_plan's full precondition checks
+    and sealed as a new swap_event carrying ``undo_of`` (the
+    swap_id it reverses). Undoing an undo therefore redoes the
+    original swap; the history is a stack, not a one-way ratchet.
+    The undone event is never removed from the record — the chain
+    attests swaps and their undos alike.
+
+    Raises ValueError with a categorised message: swap_history's
+    categories, no_swaps_to_undo, or any swap_plan refusal."""
+    history = swap_history(plan)
+    if not history:
+        raise ValueError("no_swaps_to_undo")
+    last = history[-1]
+    return swap_plan(plan, _selector_from(last["alternative"]),
+                     _selector_from(last["primary"]),
+                     undo_of=last["swap_id"])

@@ -149,7 +149,7 @@ from .checker import check_plan, item_reports
 from .evidence import qloo_responses, verify_chain
 from .export import export_plan, media_for
 from .imports import parse_import_bytes
-from .swap import swap_plan
+from .swap import swap_history, swap_plan, undo_last_swap
 from .timetable import parse_timetable_bytes
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -281,6 +281,18 @@ def verification_report(payload: dict) -> dict:
     violations = list(report["violations"]) + [
         {"item": r["item"], "reason": r["reason"]}
         for r in alt_reports if not r["admissible"]]
+    # The swap audit trail is recomputed from the sealed swap_event
+    # entries; the plan's stored swaps list is only a claim. A plan
+    # whose chain does not verify gets an empty, unverified history
+    # alongside its FAIL verdict — never a 400, never the claimed
+    # events presented as audited.
+    try:
+        history = swap_history(payload if "evidence" in payload
+                               else {"evidence": record})
+        swaps_verified = True
+    except ValueError:
+        history, swaps_verified = [], False
+    claimed = payload.get("swaps")
     return {
         "chain_valid": report["chain_valid"],
         "passed": report["passed"] and
@@ -292,6 +304,10 @@ def verification_report(payload: dict) -> dict:
         "alternative_count": len(alternatives),
         "sealed_responses": len(qloo_responses(record)),
         "record_verdict": record.get("verdict"),
+        "swap_history": history,
+        "swap_count": len(history),
+        "swaps_verified": swaps_verified,
+        "swaps_claimed": len(claimed) if isinstance(claimed, list) else 0,
     }
 
 
@@ -849,6 +865,58 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                     evidence_cache.popitem(last=False)
             self._send_json(200, result)
 
+        def _handle_undo(self):
+            """Reverse a plan's most recent sealed swap.
+
+            Body: {"plan": {...}}. The plan is untrusted input held
+            to exactly the swap endpoint's gates; swap.undo_last_swap
+            derives the reversal from the sealed history (never the
+            stored swaps mirror), re-checks every precondition, and
+            re-seals with the undo as a further swap_event — the
+            response is the new plan. Refusals (including
+            no_swaps_to_undo) are categorised 400s."""
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_VERIFY_BODY_BYTES:
+                self._send_json(413, {"error": "plan too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            if not isinstance(payload, dict) or \
+                    not isinstance(payload.get("plan"), dict):
+                self._send_json(400, {"error": "plan is required"})
+                return
+            plan = payload["plan"]
+            error = validate_plan_payload(plan)
+            if error is not None:
+                self._send_json(400, {"error": error})
+                return
+            try:
+                result = undo_last_swap(plan)
+            except ValueError as exc:  # categorised refusal
+                self._send_json(400, {"error": f"undo failed: {exc}"})
+                return
+            except (KeyError, TypeError, AttributeError, IndexError):
+                self._send_json(400, {"error": "undo failed: bad_plan"})
+                return
+            record = result.get("evidence") or {}
+            for rid, resp in qloo_responses(record).items():
+                evidence_cache[rid] = (record, resp)
+                evidence_cache.move_to_end(rid)
+                while len(evidence_cache) > max_evidence_records:
+                    evidence_cache.popitem(last=False)
+            self._send_json(200, result)
+
         def _handle_share(self):
             """Store a plan under its content-addressed share id.
 
@@ -907,6 +975,9 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return
             if path == "/api/swap":
                 self._handle_swap()
+                return
+            if path == "/api/undo":
+                self._handle_undo()
                 return
             if path != "/api/plan":
                 self._send(404, b"not found", "text/plain")
