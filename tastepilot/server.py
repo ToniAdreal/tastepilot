@@ -256,6 +256,10 @@ def validate_plan_payload(payload) -> str | None:
     if not isinstance(items, list) or \
             any(not isinstance(i, dict) for i in items):
         return "items must be a list of objects"
+    alternatives = payload.get("alternatives", [])
+    if not isinstance(alternatives, list) or \
+            any(not isinstance(i, dict) for i in alternatives):
+        return "alternatives must be a list of objects"
     return None
 
 
@@ -268,13 +272,23 @@ def verification_report(payload: dict) -> dict:
     to a 400."""
     record = payload.get("evidence", payload)
     items = payload.get("items", [])
+    alternatives = payload.get("alternatives", [])
+    # Alternatives are recommendations too: their reports are
+    # recomputed here and a bad alternative fails the whole report.
+    alt_reports = item_reports(alternatives, record)
     report = check_plan(items, record)
+    violations = list(report["violations"]) + [
+        {"item": r["item"], "reason": r["reason"]}
+        for r in alt_reports if not r["admissible"]]
     return {
         "chain_valid": report["chain_valid"],
-        "passed": report["passed"],
-        "violations": report["violations"],
+        "passed": report["passed"] and
+                  all(r["admissible"] for r in alt_reports),
+        "violations": violations,
         "items": item_reports(items, record),
+        "alternatives": alt_reports,
         "item_count": len(items),
+        "alternative_count": len(alternatives),
         "sealed_responses": len(qloo_responses(record)),
         "record_verdict": record.get("verdict"),
     }

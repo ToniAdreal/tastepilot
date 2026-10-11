@@ -58,7 +58,9 @@ def test_agent_nebius_calls_are_sealed_in_evidence():
     result = _neb_agent(_ok_runner).run(KYOTO)
     llm_entries = [e for e in result["evidence"]["entries"]
                    if e["kind"] == "llm_call"]
-    assert len(llm_entries) == len(result["items"])
+    # Alternatives are explained (and sealed) too — see test_alternatives.
+    assert len(llm_entries) == len(result["items"]) + \
+        len(result.get("alternatives", []))
     assert all(e["call"]["purpose"] == "explain" for e in llm_entries)
     assert all(e["call"]["item"] for e in llm_entries)
     assert verify_chain(result["evidence"]) is True

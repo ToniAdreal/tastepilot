@@ -3,6 +3,17 @@
 
 Invariant: an item enters the final plan only if the deterministic
 evidence checker can trace it to a sealed Qloo insights response.
+
+Alternatives: each insights call asks Qloo for more results than
+the plan shows (``ITEMS_PER_DOMAIN + 2``). The overflow results are
+not discarded: they are offered as ``alternatives`` — evidence-
+backed swap options for the same domain and leg. An alternative is
+held to exactly the primary standard: it cites the same sealed
+insights response it came from, it is checker-verified against the
+final record before it is kept (a non-admissible alternative is
+dropped, never shown), and user exclusions filter it just as they
+filter primary items. Alternatives are never primary items: they
+stay out of ``items``/``groups``/``legs``/``handoffs``.
 """
 from __future__ import annotations
 
@@ -91,6 +102,7 @@ class TastePilotAgent:
         seed_ids, seed_names = self._resolve_seeds(parsed, log,
                                                    extra_names=extra_names)
         items: list[dict] = []
+        alternatives: list[dict] = []
         llm_calls: list[dict] = []
         # Multi-city composition: one leg per mentioned city (mention
         # order), planned with the SAME resolved seed ids — the user's
@@ -106,7 +118,8 @@ class TastePilotAgent:
                                                limit=ITEMS_PER_DOMAIN + 2,
                                                location=leg_location)
                     log.add_qloo_call(resp.to_dict())
-                    for scored in resp.results[:ITEMS_PER_DOMAIN]:
+                    def make_item(scored, resp=resp, domain=domain,
+                                  leg_location=leg_location):
                         item = {"entity": scored.entity.to_dict(),
                                 "domain": domain,
                                 "location": leg_location,
@@ -129,7 +142,16 @@ class TastePilotAgent:
                                               "item": scored.entity.name,
                                               "domain": domain,
                                               "location": leg_location, **meta})
-                        items.append(item)
+                        return item
+
+                    for scored in resp.results[:ITEMS_PER_DOMAIN]:
+                        items.append(make_item(scored))
+                    # The overflow of the same sealed response becomes
+                    # alternatives (checker-verified below, after the
+                    # final seal — an alternative that cannot trace to
+                    # its response is dropped, never shown).
+                    for scored in resp.results[ITEMS_PER_DOMAIN:]:
+                        alternatives.append(make_item(scored))
         for call in llm_calls:
             log.add_llm_call(call)
         # Seal with a provisional verdict, verify, then re-seal honestly:
@@ -188,6 +210,35 @@ class TastePilotAgent:
         rejected_details = [
             {"name": r["item"], "domain": r["domain"], "reason": r["reason"]}
             for r in reports if not r["admissible"]]
+        # Alternatives: checker-verified against the final sealed
+        # record, exactly like primary items — only admissible ones
+        # are kept, each carrying its verification report. Deduped
+        # against the primary items (an entity shown as a primary
+        # pick for a leg is not also its own alternative) and within
+        # themselves, and filtered by the same user exclusions as
+        # primary items (a swap option the user asked to leave out
+        # is not offered).
+        primary_keys = {(i["entity"]["id"], i["location"])
+                        for i in admissible}
+        verified_alternatives: list[dict] = []
+        seen_alternative_keys: set = set()
+        for alt, rep in zip(alternatives,
+                            checker.item_reports(alternatives, record)):
+            if not rep["admissible"]:
+                continue
+            key = (alt["entity"]["id"], alt["domain"], alt["location"],
+                   alt["evidence_ref"])
+            if key in seen_alternative_keys:
+                continue
+            seen_alternative_keys.add(key)
+            if (alt["entity"]["id"], alt["location"]) in primary_keys:
+                continue
+            if parsed.exclusions and \
+                    exclusion_match(alt, parsed.exclusions) is not None:
+                continue
+            alt["verification"] = rep
+            verified_alternatives.append(alt)
+        alternatives = verified_alternatives
         # Plan timeline: items grouped by domain, in the parser's domain
         # order, so the UI renders sections instead of one flat list.
         groups = []
@@ -253,6 +304,7 @@ class TastePilotAgent:
             "mode": self.mode,
             "explainer": explainer_summary,
             "items": admissible,
+            "alternatives": alternatives,
             "groups": groups,
             "legs": legs,
             "rejected": [i["entity"]["name"] for i in rejected],
@@ -265,7 +317,9 @@ class TastePilotAgent:
                         "items": [by_key[(i["entity"]["id"],
                                            i["entity"]["name"],
                                            i["evidence_ref"])]
-                                  for i in admissible]},
+                                  for i in admissible],
+                        "alternatives": [a["verification"]
+                                         for a in alternatives]},
             "evidence": record,
         }
         # Native handoffs (calendar/maps links) are recomputed from

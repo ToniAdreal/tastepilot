@@ -63,7 +63,11 @@ BY_NAME: dict[str, Entity] = {e.name.lower(): e for e in ENTITIES}
 EDGES: dict[str, list[tuple[str, float]]] = {
     "mov_spirited_away": [("art_nujabes", 0.91), ("bok_wind_up_bird", 0.84), ("plc_gion", 0.88),
                           ("fod_ramen_kyoto", 0.86), ("brd_studio_ghibli", 0.95), ("dst_kyoto", 0.9),
-                          ("plc_arashiyama", 0.82), ("fod_izakaya", 0.8)],
+                          ("plc_arashiyama", 0.82), ("fod_izakaya", 0.8),
+                          # Lower-affinity third picks: the plan shows the
+                          # top two per domain, these surface as verified
+                          # alternatives (see agent.py).
+                          ("plc_kyoto_museum", 0.75), ("fod_kaiseki", 0.72)],
     "mov_blade_runner": [("art_radiohead", 0.9), ("bok_neuromancer", 0.94), ("brd_leica", 0.72),
                          ("mov_lost_translation", 0.78), ("plc_west_village", 0.66)],
     "mov_amelie": [("plc_montmartre", 0.93), ("fod_paris_bistro", 0.89), ("bok_little_prince", 0.87),

@@ -31,7 +31,7 @@ import sys
 from pathlib import Path
 
 from .agent import TastePilotAgent
-from .checker import check_plan
+from .checker import check_plan, plan_recommendations
 from .evidence import verify_chain
 from .export import FORMATS as EXPORT_FORMATS, export_plan
 from .imports import fetch_import, load_import
@@ -172,7 +172,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "verify":
         data = json.loads(Path(args.record).read_text(encoding="utf-8"))
         record = data.get("evidence", data)
-        report = check_plan(data.get("items", []), record)
+        # Alternatives are recommendations too: verify covers both.
+        report = check_plan(plan_recommendations(data), record)
         ok = verify_chain(record) and report["passed"]
         print(json.dumps({"chain_valid": verify_chain(record), **report}, indent=1))
         return 0 if ok else 1
@@ -222,8 +223,14 @@ def main(argv: list[str] | None = None) -> int:
     print(f"scenario={result['scenario']} mode={result['mode']} "
           f"items={len(result['items'])} rejected={len(result['rejected'])} "
           f"excluded={len(result.get('excluded', []))} "
+          f"alternatives={len(result.get('alternatives', []))} "
           f"checker_passed={result['checker']['passed']} "
           f"chain_valid={result['checker']['chain_valid']}")
+    for alt in result.get("alternatives", []):
+        print(f"  alternative: [{alt['domain']}] "
+              f"{alt['entity']['name']} (affinity {alt['affinity']:.2f}) "
+              f"— checker: "
+              f"{(alt.get('verification') or {}).get('reason', 'unverified')}")
     for ex in result.get("excluded", []):
         print(f"  excluded: {ex['name']} ({ex['domain']}) — matched "
               f"exclusion '{ex['matched']}' "

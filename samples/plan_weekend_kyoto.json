@@ -101,7 +101,7 @@
    "shared_tags": [
     "japanese"
    ],
-   "evidence_ref": "mock:insights:e0c12c8b917168bc",
+   "evidence_ref": "mock:insights:9292441dbf5a16b1",
    "why": "Qloo's taste graph links Gion, Kyoto to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.88).",
    "explanation_source": "template",
    "explanation": {
@@ -114,7 +114,7 @@
     "admissible": true,
     "reason": "ok",
     "evidence": {
-     "response_id": "mock:insights:e0c12c8b917168bc",
+     "response_id": "mock:insights:9292441dbf5a16b1",
      "endpoint": "insights",
      "source": "mock",
      "affinity_in_response": 0.88
@@ -141,7 +141,7 @@
    "shared_tags": [
     "japanese"
    ],
-   "evidence_ref": "mock:insights:e0c12c8b917168bc",
+   "evidence_ref": "mock:insights:9292441dbf5a16b1",
    "why": "Qloo's taste graph links Arashiyama Bamboo Grove to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.82).",
    "explanation_source": "template",
    "explanation": {
@@ -154,7 +154,7 @@
     "admissible": true,
     "reason": "ok",
     "evidence": {
-     "response_id": "mock:insights:e0c12c8b917168bc",
+     "response_id": "mock:insights:9292441dbf5a16b1",
      "endpoint": "insights",
      "source": "mock",
      "affinity_in_response": 0.82
@@ -181,7 +181,7 @@
    "shared_tags": [
     "japanese"
    ],
-   "evidence_ref": "mock:insights:d8a221de4e7b1a6f",
+   "evidence_ref": "mock:insights:cc774734547222ea",
    "why": "Qloo's taste graph links A quiet ramen counter in Gion to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.86).",
    "explanation_source": "template",
    "explanation": {
@@ -194,7 +194,7 @@
     "admissible": true,
     "reason": "ok",
     "evidence": {
-     "response_id": "mock:insights:d8a221de4e7b1a6f",
+     "response_id": "mock:insights:cc774734547222ea",
      "endpoint": "insights",
      "source": "mock",
      "affinity_in_response": 0.86
@@ -221,7 +221,7 @@
    "shared_tags": [
     "japanese"
    ],
-   "evidence_ref": "mock:insights:d8a221de4e7b1a6f",
+   "evidence_ref": "mock:insights:cc774734547222ea",
    "why": "Qloo's taste graph links A lantern-lit izakaya in Pontocho Alley to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.80).",
    "explanation_source": "template",
    "explanation": {
@@ -234,7 +234,7 @@
     "admissible": true,
     "reason": "ok",
     "evidence": {
-     "response_id": "mock:insights:d8a221de4e7b1a6f",
+     "response_id": "mock:insights:cc774734547222ea",
      "endpoint": "insights",
      "source": "mock",
      "affinity_in_response": 0.8
@@ -323,6 +323,88 @@
    }
   }
  ],
+ "alternatives": [
+  {
+   "entity": {
+    "id": "plc_kyoto_museum",
+    "name": "Kyoto National Museum",
+    "domain": "place",
+    "urn_type": "urn:entity:place",
+    "tags": [
+     "kyoto",
+     "art",
+     "historic",
+     "quiet"
+    ],
+    "location": "Kyoto"
+   },
+   "domain": "place",
+   "location": "Kyoto",
+   "affinity": 0.75,
+   "shared_tags": [
+    "quiet"
+   ],
+   "evidence_ref": "mock:insights:9292441dbf5a16b1",
+   "why": "Qloo's taste graph links Kyoto National Museum to Spirited Away, Kind of Blue (Miles Davis) (shared signals: quiet; affinity 0.75).",
+   "explanation_source": "template",
+   "explanation": {
+    "source": "template"
+   },
+   "verification": {
+    "item": "Kyoto National Museum",
+    "entity_id": "plc_kyoto_museum",
+    "domain": "place",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:9292441dbf5a16b1",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.75
+    }
+   }
+  },
+  {
+   "entity": {
+    "id": "fod_kaiseki",
+    "name": "A seasonal kaiseki tasting menu",
+    "domain": "food",
+    "urn_type": "urn:entity:place",
+    "tags": [
+     "kyoto",
+     "japanese",
+     "seasonal",
+     "quiet"
+    ],
+    "location": "Kyoto"
+   },
+   "domain": "food",
+   "location": "Kyoto",
+   "affinity": 0.72,
+   "shared_tags": [
+    "japanese"
+   ],
+   "evidence_ref": "mock:insights:cc774734547222ea",
+   "why": "Qloo's taste graph links A seasonal kaiseki tasting menu to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.72).",
+   "explanation_source": "template",
+   "explanation": {
+    "source": "template"
+   },
+   "verification": {
+    "item": "A seasonal kaiseki tasting menu",
+    "entity_id": "fod_kaiseki",
+    "domain": "food",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:cc774734547222ea",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.72
+    }
+   }
+  }
+ ],
  "groups": [
   {
    "domain": "destination",
@@ -392,7 +474,7 @@
      "shared_tags": [
       "japanese"
      ],
-     "evidence_ref": "mock:insights:e0c12c8b917168bc",
+     "evidence_ref": "mock:insights:9292441dbf5a16b1",
      "why": "Qloo's taste graph links Gion, Kyoto to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.88).",
      "explanation_source": "template",
      "explanation": {
@@ -405,7 +487,7 @@
       "admissible": true,
       "reason": "ok",
       "evidence": {
-       "response_id": "mock:insights:e0c12c8b917168bc",
+       "response_id": "mock:insights:9292441dbf5a16b1",
        "endpoint": "insights",
        "source": "mock",
        "affinity_in_response": 0.88
@@ -432,7 +514,7 @@
      "shared_tags": [
       "japanese"
      ],
-     "evidence_ref": "mock:insights:e0c12c8b917168bc",
+     "evidence_ref": "mock:insights:9292441dbf5a16b1",
      "why": "Qloo's taste graph links Arashiyama Bamboo Grove to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.82).",
      "explanation_source": "template",
      "explanation": {
@@ -445,7 +527,7 @@
       "admissible": true,
       "reason": "ok",
       "evidence": {
-       "response_id": "mock:insights:e0c12c8b917168bc",
+       "response_id": "mock:insights:9292441dbf5a16b1",
        "endpoint": "insights",
        "source": "mock",
        "affinity_in_response": 0.82
@@ -477,7 +559,7 @@
      "shared_tags": [
       "japanese"
      ],
-     "evidence_ref": "mock:insights:d8a221de4e7b1a6f",
+     "evidence_ref": "mock:insights:cc774734547222ea",
      "why": "Qloo's taste graph links A quiet ramen counter in Gion to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.86).",
      "explanation_source": "template",
      "explanation": {
@@ -490,7 +572,7 @@
       "admissible": true,
       "reason": "ok",
       "evidence": {
-       "response_id": "mock:insights:d8a221de4e7b1a6f",
+       "response_id": "mock:insights:cc774734547222ea",
        "endpoint": "insights",
        "source": "mock",
        "affinity_in_response": 0.86
@@ -517,7 +599,7 @@
      "shared_tags": [
       "japanese"
      ],
-     "evidence_ref": "mock:insights:d8a221de4e7b1a6f",
+     "evidence_ref": "mock:insights:cc774734547222ea",
      "why": "Qloo's taste graph links A lantern-lit izakaya in Pontocho Alley to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.80).",
      "explanation_source": "template",
      "explanation": {
@@ -530,7 +612,7 @@
       "admissible": true,
       "reason": "ok",
       "evidence": {
-       "response_id": "mock:insights:d8a221de4e7b1a6f",
+       "response_id": "mock:insights:cc774734547222ea",
        "endpoint": "insights",
        "source": "mock",
        "affinity_in_response": 0.8
@@ -703,7 +785,7 @@
        "shared_tags": [
         "japanese"
        ],
-       "evidence_ref": "mock:insights:e0c12c8b917168bc",
+       "evidence_ref": "mock:insights:9292441dbf5a16b1",
        "why": "Qloo's taste graph links Gion, Kyoto to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.88).",
        "explanation_source": "template",
        "explanation": {
@@ -716,7 +798,7 @@
         "admissible": true,
         "reason": "ok",
         "evidence": {
-         "response_id": "mock:insights:e0c12c8b917168bc",
+         "response_id": "mock:insights:9292441dbf5a16b1",
          "endpoint": "insights",
          "source": "mock",
          "affinity_in_response": 0.88
@@ -743,7 +825,7 @@
        "shared_tags": [
         "japanese"
        ],
-       "evidence_ref": "mock:insights:e0c12c8b917168bc",
+       "evidence_ref": "mock:insights:9292441dbf5a16b1",
        "why": "Qloo's taste graph links Arashiyama Bamboo Grove to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.82).",
        "explanation_source": "template",
        "explanation": {
@@ -756,7 +838,7 @@
         "admissible": true,
         "reason": "ok",
         "evidence": {
-         "response_id": "mock:insights:e0c12c8b917168bc",
+         "response_id": "mock:insights:9292441dbf5a16b1",
          "endpoint": "insights",
          "source": "mock",
          "affinity_in_response": 0.82
@@ -788,7 +870,7 @@
        "shared_tags": [
         "japanese"
        ],
-       "evidence_ref": "mock:insights:d8a221de4e7b1a6f",
+       "evidence_ref": "mock:insights:cc774734547222ea",
        "why": "Qloo's taste graph links A quiet ramen counter in Gion to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.86).",
        "explanation_source": "template",
        "explanation": {
@@ -801,7 +883,7 @@
         "admissible": true,
         "reason": "ok",
         "evidence": {
-         "response_id": "mock:insights:d8a221de4e7b1a6f",
+         "response_id": "mock:insights:cc774734547222ea",
          "endpoint": "insights",
          "source": "mock",
          "affinity_in_response": 0.86
@@ -828,7 +910,7 @@
        "shared_tags": [
         "japanese"
        ],
-       "evidence_ref": "mock:insights:d8a221de4e7b1a6f",
+       "evidence_ref": "mock:insights:cc774734547222ea",
        "why": "Qloo's taste graph links A lantern-lit izakaya in Pontocho Alley to Spirited Away, Kind of Blue (Miles Davis) (shared signals: japanese; affinity 0.80).",
        "explanation_source": "template",
        "explanation": {
@@ -841,7 +923,7 @@
         "admissible": true,
         "reason": "ok",
         "evidence": {
-         "response_id": "mock:insights:d8a221de4e7b1a6f",
+         "response_id": "mock:insights:cc774734547222ea",
          "endpoint": "insights",
          "source": "mock",
          "affinity_in_response": 0.8
@@ -976,7 +1058,7 @@
     "admissible": true,
     "reason": "ok",
     "evidence": {
-     "response_id": "mock:insights:e0c12c8b917168bc",
+     "response_id": "mock:insights:9292441dbf5a16b1",
      "endpoint": "insights",
      "source": "mock",
      "affinity_in_response": 0.88
@@ -989,7 +1071,7 @@
     "admissible": true,
     "reason": "ok",
     "evidence": {
-     "response_id": "mock:insights:e0c12c8b917168bc",
+     "response_id": "mock:insights:9292441dbf5a16b1",
      "endpoint": "insights",
      "source": "mock",
      "affinity_in_response": 0.82
@@ -1002,7 +1084,7 @@
     "admissible": true,
     "reason": "ok",
     "evidence": {
-     "response_id": "mock:insights:d8a221de4e7b1a6f",
+     "response_id": "mock:insights:cc774734547222ea",
      "endpoint": "insights",
      "source": "mock",
      "affinity_in_response": 0.86
@@ -1015,7 +1097,7 @@
     "admissible": true,
     "reason": "ok",
     "evidence": {
-     "response_id": "mock:insights:d8a221de4e7b1a6f",
+     "response_id": "mock:insights:cc774734547222ea",
      "endpoint": "insights",
      "source": "mock",
      "affinity_in_response": 0.8
@@ -1047,12 +1129,40 @@
      "affinity_in_response": 0.77
     }
    }
+  ],
+  "alternatives": [
+   {
+    "item": "Kyoto National Museum",
+    "entity_id": "plc_kyoto_museum",
+    "domain": "place",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:9292441dbf5a16b1",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.75
+    }
+   },
+   {
+    "item": "A seasonal kaiseki tasting menu",
+    "entity_id": "fod_kaiseki",
+    "domain": "food",
+    "admissible": true,
+    "reason": "ok",
+    "evidence": {
+     "response_id": "mock:insights:cc774734547222ea",
+     "endpoint": "insights",
+     "source": "mock",
+     "affinity_in_response": 0.72
+    }
+   }
   ]
  },
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-11T03:41:07.307505+00:00",
+  "created_at": "2026-10-11T04:14:15.382982+00:00",
   "verdict": "PASS",
   "entries": [
    {
@@ -1164,9 +1274,9 @@
    },
    {
     "kind": "qloo_call",
-    "hash": "70c2d349efae0cc48dc2a601a2a265423d75ddaf050ee570a6d15941bdcfd7c3",
+    "hash": "3f3a1d9e20692595e6fedeeabf787e4c512c66fe5e4dce43e4bd010c913e72f3",
     "response": {
-     "response_id": "mock:insights:e0c12c8b917168bc",
+     "response_id": "mock:insights:9292441dbf5a16b1",
      "endpoint": "insights",
      "source": "mock",
      "request": {
@@ -1213,15 +1323,34 @@
        "shared_tags": [
         "japanese"
        ]
+      },
+      {
+       "entity": {
+        "id": "plc_kyoto_museum",
+        "name": "Kyoto National Museum",
+        "domain": "place",
+        "urn_type": "urn:entity:place",
+        "tags": [
+         "kyoto",
+         "art",
+         "historic",
+         "quiet"
+        ],
+        "location": "Kyoto"
+       },
+       "affinity": 0.75,
+       "shared_tags": [
+        "quiet"
+       ]
       }
      ]
     }
    },
    {
     "kind": "qloo_call",
-    "hash": "f82098dde08ccea6230f31bc029d9a2e76a5f17db53964ae2d34a15569586c6d",
+    "hash": "a8e5987c23cc9a0c6c8b3cc2c8e00924277311e76353988bb4c2cf6a15d45486",
     "response": {
-     "response_id": "mock:insights:d8a221de4e7b1a6f",
+     "response_id": "mock:insights:cc774734547222ea",
      "endpoint": "insights",
      "source": "mock",
      "request": {
@@ -1268,13 +1397,32 @@
        "shared_tags": [
         "japanese"
        ]
+      },
+      {
+       "entity": {
+        "id": "fod_kaiseki",
+        "name": "A seasonal kaiseki tasting menu",
+        "domain": "food",
+        "urn_type": "urn:entity:place",
+        "tags": [
+         "kyoto",
+         "japanese",
+         "seasonal",
+         "quiet"
+        ],
+        "location": "Kyoto"
+       },
+       "affinity": 0.72,
+       "shared_tags": [
+        "japanese"
+       ]
       }
      ]
     }
    },
    {
     "kind": "qloo_call",
-    "hash": "a6f5b270ab53b922b4a12dacb4dfaa6ca8c5061911feaed66a8ceee6ec74cf29",
+    "hash": "5f0052e9b3c9b2e9812e5d2ad64b66cd795b4f65099ec5c5d13a07a2fcc741b1",
     "response": {
      "response_id": "mock:insights:ff76955a2e7a6af6",
      "endpoint": "insights",
@@ -1311,7 +1459,7 @@
    },
    {
     "kind": "qloo_call",
-    "hash": "7eee74ed72fcfa620066392b4645746b59eb0f909addefd988378d52d9f5634d",
+    "hash": "1f9eb70644c7b73e975cfdbd86236ad27eae9cc9939736e29fb77331093d5eab",
     "response": {
      "response_id": "mock:insights:4c85c1b73b6f70dd",
      "endpoint": "insights",
@@ -1346,8 +1494,8 @@
     }
    }
   ],
-  "record_hash": "712a3f52fb73e7cfbd94a823e06ea0b0b7d8e9313a9a86d89959547141f89730",
-  "signature": "b3519c51abf348fb74a10324680be8ee5cceaa3d4280f7d4a166b98b34ca531b",
+  "record_hash": "84dce1f17ca42d3f968dcaffd0cd8d682e1aab88ddf87ee8cc401dddfcc797df",
+  "signature": "fab4dbb6bbe287eedeaef8b7cf21dc7b1e9147b03f106e3cd971eedd3d8e72db",
   "signing_key_is_default_dev_key": true
  },
  "handoffs": {

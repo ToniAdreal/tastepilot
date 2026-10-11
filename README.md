@@ -320,6 +320,23 @@ baked into the image or the repo.
   and exclusions are never sent to Qloo. Prose that merely contains
   a cue word is guarded out ("don't want to miss the jazz bars"
   wants the jazz bars; "never been to Kyoto" is biography).
+* Every plan also carries evidence-backed alternatives: each
+  insights call asks Qloo for two more results than the plan shows,
+  and the overflow is offered as swap options (`alternatives`) for
+  the same domain and leg — the Kyoto weekend plan, for example,
+  shows the Kyoto National Museum and a kaiseki tasting menu as
+  alternatives beside its primary picks. An alternative is held to
+  exactly the primary standard: it cites the same sealed insights
+  response it came from, it is checker-verified against the final
+  record before it is kept (a non-admissible one is dropped, never
+  shown), user exclusions filter it just as they filter primaries,
+  and every verification surface covers it — tampering with an
+  alternative's affinity makes CLI `verify`, the server's verify
+  report, the export banner, and the share payload all fail, just
+  as tampering with a primary item does. Alternatives are never
+  primary items: they stay out of `items`, the domain groups, the
+  per-leg groups, and the handoffs. A domain whose Qloo response
+  holds no overflow simply has no alternatives.
 * Anyone holding a plan JSON can re-verify it in the browser: the UI's
   "Verify a shared plan" panel posts it to `POST /api/verify`, which
   recomputes the hash chain and every per-item checker verdict from the

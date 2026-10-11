@@ -93,7 +93,14 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    are captured deterministically and applied as a filter after the
    evidence check: an excluded item is reported with the phrase it
    matched and its (passing) verification, removed by preference and
-   never confused with a checker rejection.
+   never confused with a checker rejection. And each plan carries
+   evidence-backed alternatives: every insights call asks Qloo for
+   two more results than the plan shows, and the overflow is offered
+   as a swap option for the same domain and leg — checker-verified
+   against the sealed record before it is kept, filtered by the
+   same exclusions, and covered by every verification surface, so
+   tampering with an alternative fails verification exactly as
+   tampering with a primary item does.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -220,6 +227,10 @@ stops being a liability and becomes pure upside.
   and platform maps links, with two-way calendar sync, instead
   of the one-tap template/search links and one-way share
   payload the handoff layer already produces.
+- One-tap swapping of a primary item with one of its verified
+  alternatives in the UI (re-running the checker and re-sealing
+  the plan around the swap), instead of the read-only swap
+  options the plan already surfaces.
 
 ## Built with
 

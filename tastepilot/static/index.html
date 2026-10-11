@@ -321,6 +321,9 @@ function verifyLines(data) {
   for (const r of data.items) {
     lines.push(`${r.admissible ? '✓' : '✗'} ${r.item} (${r.domain}) — checker: ${r.reason}`);
   }
+  for (const r of data.alternatives || []) {
+    lines.push(`${r.admissible ? '✓' : '✗'} ${r.item} (${r.domain}) — alternative, checker: ${r.reason}`);
+  }
   for (const v of data.violations) {
     if (v.item === null || !data.items.some(r => r.item === v.item)) {
       lines.push(`✗ ${v.reason}`);
@@ -521,6 +524,16 @@ document.getElementById('f').addEventListener('submit', async (e) => {
     renderGroups(data.groups && data.groups.length
       ? data.groups
       : [{domain: 'plan', items: data.items}]);
+  }
+  if (data.alternatives && data.alternatives.length) {
+    const h = document.createElement('h2');
+    h.className = 'leg';
+    h.textContent = 'Alternatives (evidence-backed swap options)';
+    out.appendChild(h);
+    for (const alt of data.alternatives) {
+      out.appendChild(card(alt,
+        mapsByKey[alt.entity.name + '|' + (alt.location || '')]));
+    }
   }
   if (data.date_warnings && data.date_warnings.length) {
     const div = document.createElement('div');

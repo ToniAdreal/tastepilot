@@ -77,6 +77,25 @@ def check_plan(items: list[dict], record: dict) -> dict:
             "passed": chain_valid and not violations}
 
 
+def plan_recommendations(plan: dict) -> list[dict]:
+    """Every recommendation a plan makes: its primary ``items`` plus
+    its evidence-backed ``alternatives`` (the lower-affinity results
+    of the same sealed insights responses, offered as swap options).
+
+    Alternatives are recommendations too, so every verification
+    surface — CLI verify, exports, share payloads, the server's
+    recomputed report — checks this combined list: tampering with an
+    alternative's affinity fails verification exactly as tampering
+    with a primary item does. Raises TypeError when either field is
+    present but not a list, so malformed input reads as NOT VERIFIED
+    rather than silently unchecked."""
+    items = plan.get("items") or []
+    alternatives = plan.get("alternatives") or []
+    if not isinstance(items, list) or not isinstance(alternatives, list):
+        raise TypeError("items/alternatives must be lists")
+    return list(items) + list(alternatives)
+
+
 def enforce(items: list[dict], record: dict) -> tuple[list[dict], list[dict], dict]:
     """Split items into (admissible, rejected) using the checker report."""
     report = check_plan(items, record)

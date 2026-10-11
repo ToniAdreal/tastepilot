@@ -32,7 +32,7 @@ import hashlib
 import json
 from datetime import date, timedelta
 
-from .checker import check_plan
+from .checker import check_plan, plan_recommendations
 
 FORMATS = ("markdown", "text", "ics")
 
@@ -63,14 +63,17 @@ def recomputed_verdict(plan) -> dict:
                 "record_verdict": None}
     record = plan.get("evidence")
     items = plan.get("items") or []
-    if not isinstance(record, dict) or not isinstance(items, list):
+    if not isinstance(record, dict) or not isinstance(items, list) or \
+            not isinstance(plan.get("alternatives") or [], list):
         return {"passed": False, "chain_valid": False,
                 "violations": [{"item": None,
                                 "reason": "missing_or_malformed_evidence"}],
                 "record_verdict": record.get("verdict")
                 if isinstance(record, dict) else None}
     try:
-        report = check_plan(items, record)
+        # Alternatives are recommendations too: the banner's verdict
+        # covers primary items and alternatives together.
+        report = check_plan(plan_recommendations(plan), record)
     except (KeyError, TypeError, ValueError, AttributeError, IndexError):
         return {"passed": False, "chain_valid": False,
                 "violations": [{"item": None,
@@ -262,6 +265,20 @@ def render_markdown(plan: dict) -> str:
                 f"(verification: {r.get('verification')}), removed by "
                 f"preference, not by the checker"
                 for r in excluded] + [""]
+    alternatives = plan.get("alternatives") or []
+    if alternatives:
+        out += ["## Alternatives (evidence-backed swap options)", ""]
+        for item in alternatives:
+            head, why, ref = _item_lines(item)
+            out.append(f"- **{head}** ({item.get('domain', '')}"
+                       f"{', ' + item['location'] if item.get('location') else ''})"
+                       f" — alternative, checker: "
+                       f"{(item.get('verification') or {}).get('reason', 'unverified')}")
+            if why:
+                out.append(f"  Why this fits: {why}")
+            if ref:
+                out.append(f"  Evidence: `{ref}`")
+        out.append("")
     handoffs = _handoff_lines(plan)
     if handoffs:
         out += ["## Handoffs (your own calendar / maps)", ""]
@@ -310,6 +327,20 @@ def render_text(plan: dict) -> str:
                 f"(verification: {r.get('verification')}), removed by "
                 f"preference, not by the checker"
                 for r in excluded] + [""]
+    alternatives = plan.get("alternatives") or []
+    if alternatives:
+        out += ["Alternatives (evidence-backed swap options):"]
+        for item in alternatives:
+            head, why, ref = _item_lines(item)
+            out.append(f"  * {head} ({item.get('domain', '')}"
+                       f"{', ' + item['location'] if item.get('location') else ''})"
+                       f" — alternative, checker: "
+                       f"{(item.get('verification') or {}).get('reason', 'unverified')}")
+            if why:
+                out.append(f"    Why this fits: {why}")
+            if ref:
+                out.append(f"    Evidence: {ref}")
+        out.append("")
     handoffs = _handoff_lines(plan)
     if handoffs:
         out += ["Handoffs (your own calendar / maps):"]

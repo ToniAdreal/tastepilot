@@ -131,8 +131,8 @@ def _share_verdict_line(plan: dict) -> str:
     if not isinstance(record, dict) or not isinstance(items, list):
         return "Verification: NOT VERIFIED (no sealed evidence record)."
     try:
-        from .checker import check_plan
-        report = check_plan(items, record)
+        from .checker import check_plan, plan_recommendations
+        report = check_plan(plan_recommendations(plan), record)
     except (KeyError, TypeError, ValueError, AttributeError, IndexError):
         return "Verification: NOT VERIFIED (evidence check failed)."
     if report["passed"]:
