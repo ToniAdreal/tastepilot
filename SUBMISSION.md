@@ -157,7 +157,14 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    it survives restarts, clearable by its owner at any time,
    and folded into later suggestion rankings for that token —
    reported as a stored profile applied — while other owners'
-   rankings are never touched.
+   rankings are never touched. And any two plans can be compared
+   directly: the diff names the items one plan has that the other
+   lacks, the affinity changes on the slots both keep, and the
+   alternatives and schedule changes between them — with both
+   plans' verdicts recomputed from their own sealed records, so
+   the branch explorer can state exactly what a swap path changed
+   (+added, −removed, ~rescored) instead of asking the reader to
+   eyeball two item lists.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -291,6 +298,11 @@ stops being a liability and becomes pure upside.
   the user across devices without them carrying a token, with
   conflict resolution when two devices save lessons offline,
   instead of the single-server store the built profile uses.
+- A visual side-by-side branch timeline — the built plan
+  comparison (added/removed/re-scored items between two plans,
+  both verdicts recomputed) rendered as a graphical timeline
+  over a trip's legs, instead of the summary lines the branch
+  explorer and the CLI diff already print.
 
 ## Built with
 

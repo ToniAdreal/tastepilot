@@ -138,6 +138,15 @@ tastepilot/
                bounded, clearable by its owner, and file-persistent
                across restarts when a path is given
                (TASTEPILOT_PROFILE_FILE), exactly like the share store
+  diff.py      plan comparison: two plans diffed item by item
+               (keyed by entity + domain + leg, so a move between
+               legs reads as remove + add) — added/removed/kept
+               items, affinity changes on kept slots, alternatives
+               and schedule changes — with BOTH plans' verdicts
+               recomputed from their own sealed records; a stored
+               checker field is never read on either side, and swap
+               counts come from the sealed swap history, never the
+               stored mirror
   smoke.py     real-mode smoke check: one search + one insights call,
                payload-shape validation, both sealed + chain re-verified
   imports.py   external taste-file imports: Spotify playlist-export JSON,
@@ -413,7 +422,14 @@ baked into the image or the repo.
   sealed swap count, resulting items — and a branch whose path
   does not apply (a domain mismatch, a tampered base) is reported
   with its categorised refusal beside the successful branches
-  instead of aborting the exploration. Branches never share
+  instead of aborting the exploration. Each branch line also
+  carries its plan comparison against the base — `+added`,
+  `−removed`, `~rescored` — recomputed server-side by
+  `POST /api/diff` (`tastepilot diff --base a.json --other
+  b.json` is the CLI form): the two plans are diffed item by item
+  and BOTH sides' verdicts are recomputed from their own sealed
+  records, so a tampered branch diffs as NOT VERIFIED on its side
+  of the comparison. Branches never share
   state and the base is never mutated; a branch plan is an
   ordinary swapped plan (its `branch` field is reader-facing
   provenance, never trusted by verification), so it verifies,

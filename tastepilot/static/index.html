@@ -583,6 +583,23 @@ async function doExplore(basePlan, branches, resultsEl) {
       continue;
     }
     div.textContent = `${branch.name}: ${branch.passed ? 'PASS' : 'FAIL'} · chain valid: ${branch.chain_valid} · swaps: ${branch.swap_count} · items: ${branch.items.join(', ')}`;
+    // Server-recomputed diff of this branch against the base plan:
+    // what the swap path actually added, removed, or re-scored.
+    try {
+      const dres = await fetch('/api/diff', {method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({base: basePlan, other: branch.plan})});
+      const ddata = await dres.json();
+      if (dres.ok) {
+        const s = ddata.summary;
+        const parts = [];
+        for (const item of ddata.added) parts.push(`+${item.name}`);
+        for (const item of ddata.removed) parts.push(`−${item.name}`);
+        for (const ch of ddata.affinity_changes)
+          parts.push(`~${ch.name} ${ch.base_affinity}→${ch.other_affinity}`);
+        div.textContent += ` · vs base: ${s.identical ? 'identical' : (parts.join(', ') || 'schedule only')}`;
+      }
+    } catch (e) { /* the branch line above stands on its own */ }
     const btn = document.createElement('button');
     btn.type = 'button'; btn.className = 'loadbranchbtn';
     btn.textContent = 'Load this branch';

@@ -16,6 +16,8 @@
   python -m tastepilot history --plan plan.json
   python -m tastepilot branches --plan plan.json --spec branches.json
                              [--out-dir branch-dir]
+  python -m tastepilot diff --base plan-a.json --other plan-b.json
+                             [--out diff.json]
   python -m tastepilot suggest --plan plan.json [--limit 5]
                              [--learn-from past-plan.json]
                              [--profile-store profiles.json]
@@ -146,6 +148,16 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--out-dir",
                    help="write each successful branch plan here as "
                         "<branch-name>.json")
+    d = sub.add_parser("diff")
+    d.add_argument("--base", required=True,
+                   help="the plan to compare from (a saved plan JSON)")
+    d.add_argument("--other", required=True,
+                   help="the plan to compare to (a saved plan JSON); "
+                        "both plans' verdicts are recomputed from "
+                        "their sealed records, never read from their "
+                        "stored checker fields")
+    d.add_argument("--out",
+                   help="write the full comparison JSON here")
     g = sub.add_parser("suggest")
     g.add_argument("--plan", required=True,
                    help="a saved plan JSON to suggest swap branches for")
@@ -469,6 +481,56 @@ def main(argv: list[str] | None = None) -> int:
         # Like verify: every branch applying is success (0); any
         # branch refusal is a reported verdict (1), not a crash.
         return 0 if all_ok else 1
+    if args.cmd == "diff":
+        from .diff import diff_plans
+        try:
+            base = json.loads(Path(args.base).read_text(encoding="utf-8"))
+            other = json.loads(Path(args.other).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: diff failed: cannot read input "
+                  f"({type(exc).__name__})", file=sys.stderr)
+            return 2
+        try:
+            result = diff_plans(base, other)
+        except ValueError as exc:  # categorised refusal, no traceback
+            print(f"error: diff failed: {exc}", file=sys.stderr)
+            return 2
+        summary = result["summary"]
+        print(f"diff: base_items={result['base']['item_count']} "
+              f"other_items={result['other']['item_count']} "
+              f"added={summary['added']} removed={summary['removed']} "
+              f"kept={summary['kept']} "
+              f"affinity_changes={summary['affinity_changes']} "
+              f"identical={summary['identical']}")
+        for side in ("base", "other"):
+            verdict = result[side]
+            print(f"  {side}: passed={verdict['passed']} "
+                  f"chain_valid={verdict['chain_valid']} "
+                  f"swaps={verdict['swap_count']}")
+        for item in result["added"]:
+            print(f"  + [{item['domain']}] {item['name']} "
+                  f"({item['location']}) affinity {item['affinity']}")
+        for item in result["removed"]:
+            print(f"  - [{item['domain']}] {item['name']} "
+                  f"({item['location']}) affinity {item['affinity']}")
+        for change in result["affinity_changes"]:
+            print(f"  ~ [{change['domain']}] {change['name']} "
+                  f"affinity {change['base_affinity']} -> "
+                  f"{change['other_affinity']}")
+        for change in result["schedule_changes"]:
+            print(f"  schedule {change['location']}: "
+                  f"{change['base']['start']}..{change['base']['end']} "
+                  f"-> {change['other']['start']}.."
+                  f"{change['other']['end']}")
+        if args.out:
+            Path(args.out).write_text(
+                json.dumps(result, indent=1, ensure_ascii=False),
+                encoding="utf-8")
+            print(f"diff written to {args.out}")
+        # Like verify: both plans passing is success (0); either
+        # side failing recomputation is a reported verdict (1).
+        return 0 if result["base"]["passed"] and \
+            result["other"]["passed"] else 1
     if args.cmd == "suggest":
         from .swap import suggest_branches
         try:

@@ -144,6 +144,14 @@ the reason recorded (the demo never goes down because the LLM did).
     restart; "Clear my profile" removes it and suggestions
     return to the per-request ranking. `GET /api/profile`
     without the browser's owner token → `401`.
+17. Diff probe (plan comparison): after the branch probe, each
+    successful branch line ends with a "vs base:" summary naming
+    the swapped items (`+Kyoto National Museum, −Gion, Kyoto`).
+    `POST /api/diff` with `{"base": <plan>, "other": <branch
+    plan>}` → `200` with both sides `passed: true`; edit one
+    affinity in the `other` plan first → that side reports
+    `passed: false` with an `affinity_mismatch` violation (the
+    comparison is recomputed, never read from a stored field).
 
 ## Notes
 

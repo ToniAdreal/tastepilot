@@ -77,6 +77,15 @@ Routes:
                                ``stored_applied``. Suggestions
                                propose only — nothing is applied,
                                mutated, or re-sealed.
+  POST /api/diff               {"base": {...}, "other": {...}} -> the
+                               plan comparison (tastepilot.diff):
+                               items added/removed/kept between the
+                               two plans, affinity changes on kept
+                               slots, alternatives and schedule
+                               changes, and BOTH plans' verdicts
+                               recomputed from their own sealed
+                               records — a stored checker field is
+                               never read on either side.
   GET  /api/shares             the caller's own share links (dashboard):
                                requires an ``X-Owner-Token`` header and
                                returns only the shares that token owns —
@@ -183,6 +192,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .checker import check_plan, item_reports
+from .diff import diff_plans
 from .evidence import qloo_responses, verify_chain
 from .export import export_plan, media_for
 from .imports import parse_import_bytes
@@ -1120,6 +1130,55 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                         evidence_cache.popitem(last=False)
             self._send_json(200, result)
 
+        def _handle_diff(self):
+            """Compare two plans; both verdicts recomputed.
+
+            Body: {"base": {...}, "other": {...}}. Both plans are
+            untrusted input held to exactly the verify endpoint's
+            gates; diff.diff_plans recomputes each side's chain +
+            checker verdict from its own sealed record (neither
+            plan's stored checker field is read) and reports the
+            added/removed/kept items, affinity changes, alternatives
+            and schedule changes between them. Malformed input is a
+            categorised 400, never a 500 or traceback."""
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_VERIFY_BODY_BYTES:
+                self._send_json(413, {"error": "plan too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            if not isinstance(payload, dict) or \
+                    not isinstance(payload.get("base"), dict) or \
+                    not isinstance(payload.get("other"), dict):
+                self._send_json(
+                    400, {"error": "base and other plans are required"})
+                return
+            for plan in (payload["base"], payload["other"]):
+                error = validate_plan_payload(plan)
+                if error is not None:
+                    self._send_json(400, {"error": error})
+                    return
+            try:
+                result = diff_plans(payload["base"], payload["other"])
+            except ValueError as exc:  # categorised refusal
+                self._send_json(400, {"error": f"diff failed: {exc}"})
+                return
+            except (KeyError, TypeError, AttributeError, IndexError):
+                self._send_json(400, {"error": "diff failed: bad_plan"})
+                return
+            self._send_json(200, result)
+
         def _handle_suggest(self):
             """Guided branch suggestions for one base plan.
 
@@ -1266,6 +1325,9 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return
             if path == "/api/suggest":
                 self._handle_suggest()
+                return
+            if path == "/api/diff":
+                self._handle_diff()
                 return
             if path == "/api/profile":
                 self._handle_profile_update()
