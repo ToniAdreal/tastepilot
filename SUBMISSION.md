@@ -262,7 +262,14 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    migration costs the subscriber nothing but the edit;
    rotating onto an already-registered URL is refused,
    and delivery records keep the old id and host as the
-   audit trail.
+   audit trail. Subscriptions are selective, too: a
+   webhook names the events it wants — at registration
+   or later in place (`set-events`), with an explicit
+   null resetting it to every event — and a push whose
+   event it filtered out is never sent to it (no attempt,
+   no delivery record, no failure-count effect), while
+   an explicit on-demand redelivery still resends,
+   because that is the subscriber's own act.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -409,7 +416,11 @@ stops being a liability and becomes pure upside.
   stopping verifying the moment the new one is stored,
   and an endpoint URL that likewise rotates in place,
   the id recomputed from the new URL while the secret,
-  pause state, and registration moment survive —
+  pause state, and registration moment survive, and an
+  event filter the subscriber sets at registration or
+  replaces in place, so a webhook receives only the
+  events it named and a filtered-out push is never
+  sent to it at all —
   and a webhook auto-paused after consecutive failures until
   the subscriber resumes it or a half-open probe — the
   next update push after a one-hour cooldown — revives it)

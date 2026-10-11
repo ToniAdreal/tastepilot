@@ -167,15 +167,21 @@ Routes:
   DELETE /api/multi-feeds/<id> revoke a multi-feed (owner rule as
                                for feeds).
   POST /api/multi-feeds/<id>/webhooks
-                               {"url": ..., "secret": ...} ->
+                               {"url": ..., "secret": ...,
+                               "events": [...]} ->
                                register a push webhook
                                (tastepilot.notify) on the feed:
                                the URL is stored inside the feed
                                entry (it is the delivery address)
                                and named everywhere else by host
-                               label only. Registration fires one
+                               label only. An optional "events"
+                               list sets the webhook's event
+                               filter (no list = every event).
+                               Registration fires one
                                multi_feed.subscribed test delivery
-                               to the new webhook. Deliveries are
+                               to the new webhook — unless its
+                               own filter excludes that event.
+                               Deliveries are
                                HMAC-signed when the webhook has
                                a signing secret: the subscriber
                                supplies "secret", or the server
@@ -240,6 +246,27 @@ Routes:
                                Delivery records are never
                                edited — they keep the old id
                                and host as the audit trail.
+  POST /api/multi-feeds/<id>/webhooks/<webhook_id>/set-events
+                               replace a webhook's event
+                               filter in place (owner rule as
+                               for the feed): {"events":
+                               [...]} names the events the
+                               webhook subscribes to
+                               (validated exactly as at
+                               registration, where an optional
+                               "events" list sets the initial
+                               filter); an explicit null
+                               resets it to every event. The
+                               change is stamped
+                               (events_updated_at); the id,
+                               URL, signing secret, pause
+                               state, failure count, and
+                               registration moment survive,
+                               and setting the current filter
+                               is idempotent. A push whose
+                               event a webhook filtered out
+                               is not sent to it and leaves
+                               no delivery record.
   GET  /api/multi-feeds/<id>/notifications
                                the feed's capped push delivery
                                log: one record per delivery
@@ -406,12 +433,14 @@ from .export import (TIMELINE_FORMATS, export_multi_timeline_ics,
 from .imports import parse_import_bytes
 from .notify import (MAX_DELIVERIES, MAX_WEBHOOKS_PER_FEED,
                      PAUSE_AFTER_CONSECUTIVE_FAILURES,
-                     PAUSE_COOLDOWN_SECONDS,
+                     PAUSE_COOLDOWN_SECONDS, WEBHOOK_EVENTS,
                      build_notification, deliver_to_webhooks,
                      delivery_id_for, generate_signing_secret,
                      skipped_record, validate_signing_secret,
+                     validate_webhook_events,
                      validate_webhook_url,
-                     webhook_host_label, webhook_id_for)
+                     webhook_host_label, webhook_id_for,
+                     webhook_subscribes_to)
 from .profiles import ProfileStore
 from .timeline import branch_timeline
 from .swap import (explore_branches, suggest_branches, swap_history,
@@ -1172,6 +1201,21 @@ class MultiTimelineFeedStore:
         rotated_at = row.get("url_rotated_at")
         row["url_rotated_at"] = rotated_at \
             if _epoch_of(rotated_at) is not None else None
+        # Event filter, coerced the same way: a stored list
+        # that validates survives (canonicalised); anything
+        # else — missing (a legacy row), malformed, empty —
+        # degrades to None, the no-filter value meaning every
+        # event, so a bad filter never silences a webhook or
+        # takes a feed down. The filter's update stamp is
+        # coerced like the rotation stamp.
+        try:
+            row["events"] = validate_webhook_events(
+                row.get("events"))
+        except ValueError:
+            row["events"] = None
+        events_at = row.get("events_updated_at")
+        row["events_updated_at"] = events_at \
+            if _epoch_of(events_at) is not None else None
         return row
 
     def __init__(self, max_feeds: int = MAX_MULTI_TIMELINE_FEEDS,
@@ -1474,10 +1518,19 @@ class MultiTimelineFeedStore:
                 "probe_eligible_at": probe_eligible_at,
                 "url_rotated_at": webhook.get("url_rotated_at")
                 if isinstance(webhook.get("url_rotated_at"), str)
+                else None,
+                "events": list(webhook.get("events"))
+                if isinstance(webhook.get("events"), list)
+                and webhook.get("events")
+                else list(WEBHOOK_EVENTS),
+                "events_updated_at":
+                webhook.get("events_updated_at")
+                if isinstance(webhook.get("events_updated_at"), str)
                 else None}
 
     def add_webhook(self, feed_id: str, url, owner_token=None,
-                    signing_secret="generate", secret_out=None):
+                    signing_secret="generate", secret_out=None,
+                    events=None):
         """Register (or re-register) a webhook URL on a feed.
         Returns (status, meta): status is ok / not_found /
         forbidden / too_many_webhooks; re-registering the same
@@ -1495,12 +1548,22 @@ class MultiTimelineFeedStore:
         report only ``signed``. A string is the subscriber's
         own secret (validated here, never reported back, the
         subscriber already knows it). None registers an
-        unsigned webhook, by the subscriber's choice."""
+        unsigned webhook, by the subscriber's choice.
+
+        ``events``: the subscriber's event filter (validated
+        here via notify.validate_webhook_events; a categorised
+        ValueError leaves the feed unchanged). None — the
+        default — means every event. The filter is stored
+        only for a NEW webhook: a re-registration never
+        replaces the first registration's filter either (the
+        same first-registration-wins rule as the secret); the
+        in-place remedy is set_webhook_events."""
         with self._lock:
             entry, status = self._webhook_gate(feed_id, owner_token)
             if entry is None:
                 return status, None
             url = validate_webhook_url(url)
+            events = validate_webhook_events(events)
             webhook_id = webhook_id_for(url)
             for webhook in entry.get("webhooks", []):
                 if webhook.get("webhook_id") == webhook_id:
@@ -1512,7 +1575,9 @@ class MultiTimelineFeedStore:
                        "created_at": _iso(self._clock()),
                        "paused": False, "consecutive_failures": 0,
                        "paused_reason": None, "paused_at": None,
-                       "url_rotated_at": None}
+                       "url_rotated_at": None,
+                       "events": events,
+                       "events_updated_at": None}
             generated = signing_secret == "generate"
             secret = generate_signing_secret() if generated \
                 else signing_secret
@@ -1660,6 +1725,50 @@ class MultiTimelineFeedStore:
             webhook["host"] = webhook_host_label(url)
             webhook["webhook_id"] = new_id
             webhook["url_rotated_at"] = _iso(self._clock())
+            self._save()
+            return "ok", self._webhook_meta(webhook)
+
+    def set_webhook_events(self, feed_id: str, webhook_id: str,
+                           events, owner_token=None):
+        """(status, meta): replace one webhook's event filter
+        in place, under the feed's owner rule (via the webhook
+        gate). Status is ok / not_found (feed) / forbidden /
+        webhook_not_found. ``events`` is validated exactly as
+        at registration, here, before any assignment, so a
+        categorised ValueError leaves the webhook
+        byte-unchanged; an explicit None resets the webhook
+        to every event (the no-filter default). Setting the
+        filter the webhook already effectively has — the same
+        set, or None on an unfiltered webhook — is idempotent:
+        ok, and nothing is stamped. A real change stores the
+        canonicalised filter and stamps ``events_updated_at``.
+
+        Everything else about the webhook survives: the id
+        (a filter is not an address), the URL, the signing
+        secret, the pause state and its provenance, the
+        consecutive-failure count, and created_at — changing
+        what a subscription carries is a management act, not
+        a new subscription. A paused webhook's filter can be
+        set (it stays paused). Setting delivers nothing, and
+        delivery records are never edited: a record from
+        before the change keeps the event it attempted."""
+        with self._lock:
+            entry, status = self._webhook_gate(feed_id, owner_token)
+            if entry is None:
+                return status, None
+            webhook = next(
+                (w for w in entry.get("webhooks", [])
+                 if w.get("webhook_id") == webhook_id), None)
+            if webhook is None:
+                return "webhook_not_found", None
+            events = validate_webhook_events(events)
+            current = webhook.get("events")
+            current = current \
+                if isinstance(current, list) and current else None
+            if events == current:
+                return "ok", self._webhook_meta(webhook)
+            webhook["events"] = events
+            webhook["events_updated_at"] = _iso(self._clock())
             self._save()
             return "ok", self._webhook_meta(webhook)
 
@@ -3076,7 +3185,10 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             Best-effort by design: a failing endpoint is recorded
             as a failed delivery and never fails (or rolls back)
             the feed operation that triggered it. Returns the
-            stamped delivery records ([] when no webhook matches).
+            stamped delivery records ([] when no webhook matches
+            — including when every webhook's event filter
+            excludes this push's event; a filtered-out webhook
+            gets no record at all).
             """
             entries = multi_feed_store.webhook_entries(feed_id)
             if only_webhook_id is not None:
@@ -3091,6 +3203,18 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 feed_id, kind, meta["version"], meta["etag"],
                 meta["timelines"], all_passed,
                 _iso(time.time()))
+            # Event filter: a webhook that did not subscribe
+            # to this push's event is not a recipient at all —
+            # no attempt, no delivery record, no failure-count
+            # effect. Opting out is not failing, and it is not
+            # being paused either (a paused webhook's wanted
+            # pushes are recorded as skipped, above): there is
+            # simply nothing the subscriber asked to hear.
+            entries = [e for e in entries
+                       if webhook_subscribes_to(
+                           e, payload.get("event"))]
+            if not entries:
+                return []
             kwargs = {}
             if webhook_transport is not None:
                 kwargs["transport"] = webhook_transport
@@ -3242,12 +3366,17 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
         def _handle_webhook_create(self, feed_id):
             """Register a push webhook on a multi-feed:
             POST /api/multi-feeds/<id>/webhooks {"url": ...,
-            "secret": ...}. Registration fires one
-            multi_feed.subscribed test delivery to the new
+            "secret": ..., "events": [...]}. Registration fires
+            one multi_feed.subscribed test delivery to the new
             webhook (recorded either way), so the subscriber
-            learns immediately whether their endpoint works.
-            The response names the webhook by id + host label
-            only — the stored URL is never echoed.
+            learns immediately whether their endpoint works —
+            unless their own "events" filter excludes
+            multi_feed.subscribed, in which case no test
+            delivery is sent or recorded, by their choice; the
+            response then carries "delivery": null alongside
+            the stored filter. The response names the webhook
+            by id + host label only — the stored URL is never
+            echoed.
 
             Signing: an optional "secret" is the subscriber's
             own signing secret (validated, never echoed — they
@@ -3299,6 +3428,16 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                         return
             else:
                 signing_secret = "generate"
+            if "events" in payload:
+                try:
+                    events = validate_webhook_events(
+                        payload["events"])
+                except ValueError as exc:  # never echoes values
+                    self._send_json(
+                        400, {"error": f"webhook failed: {exc}"})
+                    return
+            else:
+                events = None
             token, invalid = self._owner_token()
             if invalid:
                 self._send_json(400, {"error": "invalid owner token"})
@@ -3306,7 +3445,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             secret_out = {}
             status, meta = multi_feed_store.add_webhook(
                 feed_id, url, owner_token=token,
-                signing_secret=signing_secret, secret_out=secret_out)
+                signing_secret=signing_secret, secret_out=secret_out,
+                events=events)
             if status == "not_found":
                 self._send_json(404, {"error": "unknown multi-feed id"})
                 return
@@ -3531,6 +3671,72 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return
             self._send_json(200, {**meta, "feed_id": feed_id})
 
+        def _handle_webhook_set_events(self, feed_id, webhook_id):
+            """Replace one webhook's event filter in place:
+            POST /api/multi-feeds/<id>/webhooks/<webhook_id>/
+            set-events {"events": [...]}. Until now a
+            subscriber who wanted fewer pushes (only updates,
+            say, and not the registration test event on any
+            future re-registration) had one remedy — remove
+            the webhook and register it again, resetting its
+            pause state, failure count, and signing secret.
+            Setting the filter is the managed-endpoint remedy:
+            the list is validated exactly as at registration
+            (categorised 400s, the supplied values never
+            echoed), an explicit {"events": null} resets the
+            webhook to every event, and the change is stamped
+            (events_updated_at) while the id, URL, secret,
+            pause state, failure count, and created_at all
+            survive. Setting the current filter is idempotent
+            and stamps nothing. Setting delivers nothing
+            (owner rule as for the feed)."""
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_WEBHOOK_BODY_BYTES:
+                self._send_json(413, {"error": "request body too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            if not isinstance(payload, dict) or \
+                    "events" not in payload:
+                self._send_json(
+                    400, {"error": "webhook failed: bad_webhook_events"})
+                return
+            try:
+                events = validate_webhook_events(payload["events"])
+            except ValueError as exc:  # never echoes the values
+                self._send_json(
+                    400, {"error": f"webhook failed: {exc}"})
+                return
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            status, meta = multi_feed_store.set_webhook_events(
+                feed_id, webhook_id, events, owner_token=token)
+            if status == "not_found":
+                self._send_json(404, {"error": "unknown multi-feed id"})
+                return
+            if status == "forbidden":
+                self._send_json(
+                    403, {"error": "only the owner can manage "
+                                   "webhooks for this multi-feed"})
+                return
+            if status == "webhook_not_found":
+                self._send_json(404, {"error": "unknown webhook id"})
+                return
+            self._send_json(200, {**meta, "feed_id": feed_id})
+
         def _handle_notifications(self, feed_id):
             """The feed's push delivery log: one record per
             delivery attempt (registration pings + update pushes),
@@ -3723,6 +3929,11 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                         and parts[3] == "rotate-url" \
                         and parts[0] and parts[2]:
                     self._handle_webhook_rotate_url(
+                        parts[0], parts[2])
+                elif len(parts) == 4 and parts[1] == "webhooks" \
+                        and parts[3] == "set-events" \
+                        and parts[0] and parts[2]:
+                    self._handle_webhook_set_events(
                         parts[0], parts[2])
                 elif rest.endswith("/webhooks") and \
                         "/" not in rest[:-len("/webhooks")]:

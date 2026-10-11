@@ -86,6 +86,25 @@ instead of a named service's API:
   another webhook on the feed already holds is refused,
   and delivery records are never edited: pre-rotation
   records keep the old id and host as the audit trail.
+- a webhook subscribes to events, not to everything: at
+  registration (or later, in place, via ``set_webhook_events``)
+  the subscriber may name the events they want — any subset
+  of ``WEBHOOK_EVENTS``; no filter (the default, and what a
+  legacy registration carries) means every event. An automatic
+  push whose event the webhook did not subscribe to is
+  simply not sent to it: it is not an attempt, produces no
+  delivery record, and never touches the webhook's failure
+  count — the subscriber opted out, which is different from
+  the endpoint failing or being paused (a paused webhook's
+  pushes ARE recorded, as ``skipped``, because those are
+  changes the subscriber wanted and missed). The filter
+  governs automatic pushes only: an on-demand redelivery is
+  the subscriber's explicit act and resends regardless.
+  Replacing the filter stamps ``events_updated_at`` and
+  leaves everything else — id, secret, pause state, failure
+  count, registration moment — untouched; setting the same
+  effective filter is idempotent and stamps nothing, and an
+  explicit null filter resets the webhook to every event.
 - an auto-pause is a circuit breaker, not a life sentence:
   the store stamps it with its reason (``auto``) and the
   moment it paused, and after ``PAUSE_COOLDOWN_SECONDS``
@@ -125,6 +144,13 @@ MIN_SIGNING_SECRET_CHARS = 16
 MAX_SIGNING_SECRET_CHARS = 200
 SIGNATURE_HEADER = "X-TastePilot-Signature"
 EVENT_HEADER = "X-TastePilot-Event"
+WEBHOOK_EVENTS = ("multi_feed.subscribed", "multi_feed.updated",
+                  "multi_feed.created")
+"""Every event a multi-feed push can carry, in canonical
+order. ``multi_feed.created`` is listed for completeness —
+a feed has no webhooks at its own creation moment, so in
+practice pushes carry ``subscribed`` (the registration
+test delivery) or ``updated`` (an in-place update)."""
 
 
 def validate_webhook_url(url) -> str:
@@ -168,6 +194,46 @@ def webhook_id_for(url: str) -> str:
     reveals nothing about the URL beyond what its host label
     already shows."""
     return hashlib.sha256(url.encode()).hexdigest()[:16]
+
+
+def validate_webhook_events(events):
+    """Validate a webhook event filter; returns the filter
+    as a list in canonical ``WEBHOOK_EVENTS`` order with
+    duplicates removed, or None when ``events`` is None —
+    the no-filter value, meaning every event. Anything else
+    malformed raises a categorised ValueError
+    (``bad_webhook_events``) that never echoes the supplied
+    values: a non-list, an empty list (an empty subscription
+    is a removal, not a filter), a non-string entry, or a
+    name outside ``WEBHOOK_EVENTS``."""
+    if events is None:
+        return None
+    if isinstance(events, tuple):
+        events = list(events)
+    if not isinstance(events, list) or not events:
+        raise ValueError("bad_webhook_events: events must be "
+                         "a non-empty list of event names")
+    for event in events:
+        if not isinstance(event, str) \
+                or event not in WEBHOOK_EVENTS:
+            raise ValueError("bad_webhook_events: unknown "
+                             "event name in filter")
+    return [event for event in WEBHOOK_EVENTS if event in events]
+
+
+def webhook_subscribes_to(entry, event) -> bool:
+    """True when an automatic push carrying ``event`` should
+    go to this webhook entry: a webhook with no stored filter
+    (None, missing, or a malformed/empty value — the store
+    coerces those to no-filter on load) subscribes to every
+    event; a filtered webhook subscribes only to the events
+    its filter names."""
+    if not isinstance(entry, dict):
+        return True
+    events = entry.get("events")
+    if not isinstance(events, list) or not events:
+        return True
+    return event in events
 
 
 def validate_signing_secret(secret) -> str:

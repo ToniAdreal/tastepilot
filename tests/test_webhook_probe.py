@@ -294,7 +294,14 @@ def test_http_probe_flow_failed_then_delivered():
         assert note["status"] == "skipped" and "probe" not in note
         assert len(transport.calls) == calls
         # At the cooldown the next update probes — and fails.
-        clock.advance(PAUSE_COOLDOWN_SECONDS)
+        # (One second past it, not exactly on it: the clock
+        # starts at a real time.time(), whose microsecond
+        # round-trip through the ISO paused_at stamp can land
+        # a fraction of a microsecond past the start value,
+        # which made an exact-cooldown advance a coin flip —
+        # the exact boundary itself is pinned deterministically
+        # by the store-level test on integer epochs above.)
+        clock.advance(PAUSE_COOLDOWN_SECONDS + 1)
         status, body = _post(f"{base}/api/multi-feeds/{feed_id}",
                              _payload())
         assert status == 200
@@ -312,7 +319,9 @@ def test_http_probe_flow_failed_then_delivered():
             "skipped"
         assert len(transport.calls) == calls
         # After the second cooldown a delivered probe revives it.
-        clock.advance(PAUSE_COOLDOWN_SECONDS)
+        # (Same one-second slack as above, for the same reason:
+        # the failed probe re-stamped paused_at from this clock.)
+        clock.advance(PAUSE_COOLDOWN_SECONDS + 1)
         transport.status = 200
         status, body = _post(f"{base}/api/multi-feeds/{feed_id}",
                              _payload())

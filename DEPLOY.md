@@ -351,6 +351,31 @@ the reason recorded (the demo never goes down because the LLM did).
     URL → `200` with `url_rotated_at` unchanged. On an
     owned feed, rotation without the owner's token →
     `403`; an unknown webhook id → `404`.
+30. Webhook event filter probe (a webhook receives only
+    the events it subscribed to): register a webhook
+    with `{"events": ["multi_feed.updated"]}` → `201`
+    with `events: ["multi_feed.updated"]` and
+    `delivery: null` — its own filter excludes the
+    `multi_feed.subscribed` test delivery, so no ping
+    is attempted or recorded (the notifications log
+    stays empty). An update push IS delivered and
+    recorded. `POST .../webhooks/<webhook_id>/set-events`
+    with `{"events": ["multi_feed.subscribed"]}` → `200`
+    with a stamped `events_updated_at`, the same
+    `webhook_id` and `created_at`; the next update
+    produces no delivery and no record, and the
+    webhook's failure count is unchanged. Set
+    `{"events": null}` → `200` listing every event, and
+    updates flow again; setting the current filter →
+    `200` with `events_updated_at` unchanged. A bad
+    filter (`{"events": ["bogus.event"]}`, `[]`, or a
+    missing `events` key) → `400` (`bad_webhook_events`)
+    with the supplied values absent from the response.
+    On an owned feed, setting without the owner's
+    token → `403`; an unknown webhook id → `404`. An
+    explicit redelivery of a failed record still
+    resends even when its event is filtered out — the
+    filter governs automatic pushes only.
 
 ## Notes
 

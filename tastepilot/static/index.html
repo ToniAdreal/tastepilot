@@ -745,6 +745,11 @@ async function doTimeline(basePlan, okBranches, outEl) {
   hookSecret.type = 'text'; hookSecret.className = 'webhooksecret';
   hookSecret.placeholder =
     'Signing secret (optional — leave blank to have one generated)';
+  const hookEvents = document.createElement('input');
+  hookEvents.type = 'text'; hookEvents.className = 'webhookevents';
+  hookEvents.placeholder =
+    'Events (optional, comma-separated: multi_feed.updated — ' +
+    'leave blank for every event)';
   const hookBtn = document.createElement('button');
   hookBtn.type = 'button'; hookBtn.className = 'webhookbtn';
   hookBtn.textContent = 'Register push webhook';
@@ -760,6 +765,9 @@ async function doTimeline(basePlan, okBranches, outEl) {
     const body = {url};
     const own = hookSecret.value.trim();
     if (own) body.secret = own;
+    const evs = hookEvents.value.split(',')
+      .map(s => s.trim()).filter(Boolean);
+    if (evs.length) body.events = evs;
     const r = await fetch('/api/multi-feeds/' + multiFeedId + '/webhooks',
       {method: 'POST',
        headers: {'Content-Type': 'application/json', ...ownerHeaders()},
@@ -771,8 +779,11 @@ async function doTimeline(basePlan, okBranches, outEl) {
     }
     const dlv = d.delivery || {};
     hookOut.textContent = 'Push webhook registered: ' + d.host +
-      ' (id ' + d.webhook_id + ') — test delivery ' +
-      (dlv.status || 'not attempted') +
+      ' (id ' + d.webhook_id + ', events: ' +
+      (d.events || []).join(', ') + ') — test delivery ' +
+      (d.delivery ? (dlv.status || 'not attempted')
+                  : 'skipped — its own filter excludes ' +
+                    'multi_feed.subscribed') +
       '. Updates to this feed will be pushed here; the delivery ' +
       'log is at ' + location.origin + '/api/multi-feeds/' +
       multiFeedId + '/notifications.' +
@@ -785,6 +796,7 @@ async function doTimeline(basePlan, okBranches, outEl) {
   });
   outEl.appendChild(hookUrl);
   outEl.appendChild(hookSecret);
+  outEl.appendChild(hookEvents);
   outEl.appendChild(hookBtn);
   outEl.appendChild(hookOut);
   // Failed pushes are not final: redeliver them on demand. One
@@ -983,6 +995,67 @@ async function doTimeline(basePlan, okBranches, outEl) {
   });
   outEl.appendChild(rotateUrlBtn);
   outEl.appendChild(rotateUrlOut);
+  // Event filters are settable in place, too: a webhook
+  // subscribes to the events it names (no filter = every
+  // event), and a push whose event it filtered out is simply
+  // not sent to it — no delivery record, no failure count.
+  // Setting the filter replaces it without removing and
+  // re-registering the webhook: id, secret, pause state, and
+  // failure count survive, and the change is stamped
+  // (events_updated_at). An empty answer resets the filter
+  // to every event.
+  const setEventsBtn = document.createElement('button');
+  setEventsBtn.type = 'button';
+  setEventsBtn.className = 'webhookseteventsbtn';
+  setEventsBtn.textContent = 'Set webhook event filters';
+  const setEventsOut = document.createElement('div');
+  setEventsOut.className = 'meta webhookseteventsout';
+  setEventsBtn.addEventListener('click', async () => {
+    if (!multiFeedId) {
+      setEventsOut.textContent =
+        'Create the multi-timeline subscription first.';
+      return;
+    }
+    const r = await fetch('/api/multi-feeds/' + multiFeedId + '/webhooks',
+      {headers: {...ownerHeaders()}});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      setEventsOut.textContent =
+        'Webhook error: ' + (d.error || r.status);
+      return;
+    }
+    if (!(d.webhooks || []).length) {
+      setEventsOut.textContent = 'No webhooks on this feed.';
+      return;
+    }
+    const lines = [];
+    for (const w of d.webhooks) {
+      const next = window.prompt(
+        'Events for the webhook at ' + w.host +
+        ' (comma-separated; currently: ' + w.events.join(', ') +
+        '; leave empty to reset to every event):',
+        w.events.join(', '));
+      if (next === null) { lines.push(w.host + ' kept'); continue; }
+      const evs = next.split(',').map(s => s.trim()).filter(Boolean);
+      const rr = await fetch('/api/multi-feeds/' + multiFeedId +
+        '/webhooks/' + w.webhook_id + '/set-events',
+        {method: 'POST',
+         headers: {'Content-Type': 'application/json',
+                   ...ownerHeaders()},
+         body: JSON.stringify({events: evs.length ? evs : null})});
+      const dd = await rr.json().catch(() => ({}));
+      lines.push(w.host + (rr.ok
+        ? ' now subscribes to ' + dd.events.join(', ') +
+          (dd.events_updated_at
+            ? ' (set at ' + dd.events_updated_at + ')' : '')
+        : ' filter failed: ' + (dd.error || rr.status)));
+    }
+    setEventsOut.textContent = 'Webhooks: ' + lines.join('; ') +
+      '. Pushes for events a webhook did not subscribe to are ' +
+      'not sent to it and leave no delivery record.';
+  });
+  outEl.appendChild(setEventsBtn);
+  outEl.appendChild(setEventsOut);
 }
 
 async function doExplore(basePlan, branches, resultsEl) {

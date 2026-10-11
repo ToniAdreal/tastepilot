@@ -783,7 +783,36 @@ baked into the image or the repo.
   their id names no current registration). The timeline
   view's "Rotate webhook endpoints" button asks for a
   new URL per webhook and reports each rotation's new
-  host, moment, and id. Webhooks are
+  host, moment, and id. A webhook subscribes to events,
+  not to everything: an optional `"events"` list at
+  registration (any subset of `multi_feed.subscribed`,
+  `multi_feed.updated`, `multi_feed.created`; no list
+  means every event) sets its filter, and
+  `POST .../webhooks/<id>/set-events` replaces it in
+  place (owner rule as for the feed) — `{"events": [...]}`
+  is validated exactly as at registration (categorised
+  `bad_webhook_events` errors, the supplied values never
+  echoed), an explicit `{"events": null}` resets the
+  webhook to every event, and the change is stamped
+  (`events_updated_at` in listings) while the webhook's
+  id, URL, signing secret, pause state, failure count,
+  and registration moment all survive; setting the
+  current filter is idempotent and stamps nothing. A
+  push whose event a webhook filtered out is not sent
+  to it at all: no attempt, no delivery record, and no
+  failure-count effect — opting out is not failing, and
+  it is not being paused either (a paused webhook's
+  wanted pushes are recorded as `skipped`). That is
+  also why a webhook whose filter excludes
+  `multi_feed.subscribed` receives no registration test
+  delivery (its registration response carries
+  `"delivery": null`). The filter governs automatic
+  pushes only: an on-demand redelivery is the
+  subscriber's explicit act and resends regardless. The
+  timeline view's "Set webhook event filters" button
+  asks for a comma-separated list per webhook (empty
+  resets to every event) and reports each webhook's new
+  subscription. Webhooks are
   listed (`GET .../webhooks`, host labels only) and removed
   (`DELETE .../webhooks/<id>`) under the same owner rule, and
   persist with the feed in file mode. Bundles expire after 30 days
