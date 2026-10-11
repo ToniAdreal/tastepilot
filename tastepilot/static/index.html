@@ -787,10 +787,12 @@ async function doTimeline(basePlan, okBranches, outEl) {
   outEl.appendChild(hookSecret);
   outEl.appendChild(hookBtn);
   outEl.appendChild(hookOut);
-  // Failed pushes are not final: redeliver them on demand. The
-  // server resends each failed record's stored payload to the
-  // webhook's current URL and records the resend as a new
-  // delivery naming the original (redelivery_of).
+  // Failed pushes are not final: redeliver them on demand. One
+  // bulk call resends the latest attempt of each failed chain —
+  // the server reports any failed record it skipped (superseded
+  // by a later resend, payload-less, or its webhook removed) —
+  // and records each resend as a new delivery naming the
+  // original (redelivery_of).
   const redeliverBtn = document.createElement('button');
   redeliverBtn.type = 'button'; redeliverBtn.className = 'redeliverbtn';
   redeliverBtn.textContent = 'Redeliver failed pushes';
@@ -803,30 +805,22 @@ async function doTimeline(basePlan, okBranches, outEl) {
       return;
     }
     const r = await fetch('/api/multi-feeds/' + multiFeedId +
-      '/notifications', {headers: {...ownerHeaders()}});
+      '/notifications/redeliver-failed',
+      {method: 'POST', headers: {...ownerHeaders()}});
     const d = await r.json().catch(() => ({}));
     if (!r.ok) {
       redeliverOut.textContent =
-        'Delivery log error: ' + (d.error || r.status);
+        'Redelivery error: ' + (d.error || r.status);
       return;
     }
-    const failed = (d.deliveries || []).filter(
-      x => x.status === 'failed' && x.delivery_id);
-    if (!failed.length) {
+    if (!d.attempted && !(d.skipped || []).length) {
       redeliverOut.textContent = 'No failed deliveries to redeliver.';
       return;
     }
-    const lines = [];
-    for (const rec of failed) {
-      const rr = await fetch('/api/multi-feeds/' + multiFeedId +
-        '/notifications/' + rec.delivery_id + '/redeliver',
-        {method: 'POST', headers: {...ownerHeaders()}});
-      const dd = await rr.json().catch(() => ({}));
-      lines.push(rr.ok
-        ? rec.event + ' v' + rec.version + ' → ' +
-          ((dd.delivery || {}).status || 'recorded')
-        : rec.event + ' v' + rec.version + ' → ' +
-          (dd.error || rr.status));
+    const lines = (d.results || []).map(rec =>
+      rec.event + ' v' + rec.version + ' → ' + rec.status);
+    for (const skip of d.skipped || []) {
+      lines.push('skipped (' + skip.reason + ')');
     }
     redeliverOut.textContent = 'Redeliveries: ' + lines.join('; ') +
       '. Each resend is a new delivery in the log naming the ' +

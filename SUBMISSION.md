@@ -219,7 +219,12 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    payload it attempted, so the subscriber can have it
    redelivered on demand — the resend goes to the webhook's
    current URL and is recorded as a new delivery naming the
-   original, which is never edited. Pushes are verifiable,
+   original, which is never edited — or redelivered in bulk:
+   one call resends the latest attempt of every failed
+   delivery chain on the feed, while a failed record a later
+   resend already superseded is reported as skipped and never
+   resent, so a recovered receiver is brought up to date
+   without duplicate pushes. Pushes are verifiable,
    too: a signed webhook's deliveries carry an HMAC-SHA256
    signature header over the exact body bytes — the
    subscriber supplies the signing secret at registration

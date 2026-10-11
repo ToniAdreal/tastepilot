@@ -268,6 +268,21 @@ the reason recorded (the demo never goes down because the LLM did).
     null` → the webhook registers `signed: false` and its
     deliveries carry no signature header. A redelivery
     (probe 23) of a signed delivery is signed too.
+25. Bulk redelivery probe (all failed pushes, one call):
+    with the probe-23 receiver still answering `500`,
+    register the webhook and update the feed once more, so
+    two deliveries stand `failed`; make the receiver answer
+    `200`, then `POST /api/multi-feeds/<id>/notifications/
+    redeliver-failed` → `200` with `attempted: 2`,
+    `delivered: 2`, and one result per chain, each naming
+    its original record; `GET .../notifications` shows both
+    resends recorded with `redelivery_of` set. A second
+    bulk call → `attempted: 0` with both originals reported
+    under `skipped` as `superseded` — nothing is resent.
+    After `DELETE .../webhooks/<webhook_id>`, a bulk call
+    on a feed with a failed record → that record under
+    `skipped` as `webhook_not_found`. On an owned feed,
+    the bulk call without the owner's token → `403`.
 
 ## Notes
 

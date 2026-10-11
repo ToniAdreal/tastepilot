@@ -694,7 +694,17 @@ baked into the image or the repo.
   never edited, so the log stays an audit trail. A delivered
   record, a payload-less legacy record, and a removed webhook
   are categorised refusals; the timeline view's "Redeliver
-  failed pushes" button drives the same flow. Deliveries to a
+  failed pushes" button drives the same flow. All of a feed's
+  failed pushes can also be resent in one call —
+  `POST /api/multi-feeds/<id>/notifications/redeliver-failed`
+  resends the latest attempt of each failed delivery chain
+  and reports per-record outcomes; a failed record a later
+  resend already superseded is reported under `skipped` and
+  never resent (resending it would duplicate a push its
+  chain has moved past), as are payload-less legacy records
+  and records whose webhook was removed, each with its
+  reason — and the button now drives this bulk endpoint
+  instead of looping the single-record one. Deliveries to a
   signed webhook carry an HMAC-SHA256 signature header
   (`X-TastePilot-Signature: sha256=…` over the exact body
   bytes, plus `X-TastePilot-Event`) so the subscriber can
