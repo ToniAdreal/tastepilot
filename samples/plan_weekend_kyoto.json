@@ -1050,7 +1050,7 @@
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-11T01:38:25.794132+00:00",
+  "created_at": "2026-10-11T02:08:34.281060+00:00",
   "verdict": "PASS",
   "entries": [
    {
@@ -1355,7 +1355,9 @@
     "start": null,
     "end": null,
     "calendar_url": null,
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Kyoto"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Kyoto",
+    "maps_apple_url": "https://maps.apple.com/?q=Kyoto",
+    "maps_geo_url": "geo:0,0?q=Kyoto"
    }
   ],
   "items": [
@@ -1363,44 +1365,62 @@
     "name": "Kyoto",
     "domain": "destination",
     "location": "Kyoto",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Kyoto"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Kyoto",
+    "maps_apple_url": "https://maps.apple.com/?q=Kyoto",
+    "maps_geo_url": "geo:0,0?q=Kyoto"
    },
    {
     "name": "Gion, Kyoto",
     "domain": "place",
     "location": "Kyoto",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Gion%2C+Kyoto"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Gion%2C+Kyoto",
+    "maps_apple_url": "https://maps.apple.com/?q=Gion%2C+Kyoto",
+    "maps_geo_url": "geo:0,0?q=Gion%2C%20Kyoto"
    },
    {
     "name": "Arashiyama Bamboo Grove",
     "domain": "place",
     "location": "Kyoto",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Arashiyama+Bamboo+Grove%2C+Kyoto"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Arashiyama+Bamboo+Grove%2C+Kyoto",
+    "maps_apple_url": "https://maps.apple.com/?q=Arashiyama+Bamboo+Grove%2C+Kyoto",
+    "maps_geo_url": "geo:0,0?q=Arashiyama%20Bamboo%20Grove%2C%20Kyoto"
    },
    {
     "name": "A quiet ramen counter in Gion",
     "domain": "food",
     "location": "Kyoto",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=A+quiet+ramen+counter+in+Gion%2C+Kyoto"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=A+quiet+ramen+counter+in+Gion%2C+Kyoto",
+    "maps_apple_url": "https://maps.apple.com/?q=A+quiet+ramen+counter+in+Gion%2C+Kyoto",
+    "maps_geo_url": "geo:0,0?q=A%20quiet%20ramen%20counter%20in%20Gion%2C%20Kyoto"
    },
    {
     "name": "A lantern-lit izakaya in Pontocho Alley",
     "domain": "food",
     "location": "Kyoto",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=A+lantern-lit+izakaya+in+Pontocho+Alley%2C+Kyoto"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=A+lantern-lit+izakaya+in+Pontocho+Alley%2C+Kyoto",
+    "maps_apple_url": "https://maps.apple.com/?q=A+lantern-lit+izakaya+in+Pontocho+Alley%2C+Kyoto",
+    "maps_geo_url": "geo:0,0?q=A%20lantern-lit%20izakaya%20in%20Pontocho%20Alley%2C%20Kyoto"
    },
    {
     "name": "Nujabes",
     "domain": "music",
     "location": "Kyoto",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Nujabes%2C+Kyoto"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Nujabes%2C+Kyoto",
+    "maps_apple_url": "https://maps.apple.com/?q=Nujabes%2C+Kyoto",
+    "maps_geo_url": "geo:0,0?q=Nujabes%2C%20Kyoto"
    },
    {
     "name": "Lost in Translation",
     "domain": "film",
     "location": "Kyoto",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Lost+in+Translation%2C+Kyoto"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Lost+in+Translation%2C+Kyoto",
+    "maps_apple_url": "https://maps.apple.com/?q=Lost+in+Translation%2C+Kyoto",
+    "maps_geo_url": "geo:0,0?q=Lost%20in%20Translation%2C%20Kyoto"
    }
-  ]
+  ],
+  "share": {
+   "title": "TastePilot plan: Kyoto",
+   "text": "a slow weekend in Kyoto, I love Spirited Away and Kind of Blue\nKyoto: Kyoto, Gion, Kyoto, Arashiyama Bamboo Grove, A quiet ramen counter in Gion, A lantern-lit izakaya in Pontocho Alley, Nujabes, Lost in Translation\nVerification: PASS — 7 recommendation(s), every one traced to a Qloo response."
+  }
  }
 }

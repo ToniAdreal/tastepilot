@@ -77,6 +77,14 @@ the reason recorded (the demo never goes down because the LLM did).
    exclusive) and every card shows an "open in Maps" link; a
    dateless plan shows Maps links only — no calendar link is
    ever rendered for a leg without dates.
+9. Native-integration probe: each leg also shows an "Open in
+   Apple Maps" link (the plan JSON's legs/items also carry
+   `maps_geo_url` Android `geo:` intents for the same queries),
+   and "Share via OS share sheet ↗" presents the plan's
+   recomputed share payload (`handoffs.share`: title naming the
+   legs, per-leg items, and a `Verification: PASS` line) to the
+   browser's share sheet — on a browser without the Web Share
+   API the same payload is copied to the clipboard instead.
 
 ## Notes
 

@@ -261,6 +261,13 @@ def main(argv: list[str] | None = None) -> int:
         if leg.get("maps_url"):
             print(f"  handoff: open {where} in Google Maps: "
                   f"{leg['maps_url']}")
+        if leg.get("maps_apple_url"):
+            print(f"  handoff: open {where} in Apple Maps: "
+                  f"{leg['maps_apple_url']}")
+    share = (result.get("handoffs") or {}).get("share") or {}
+    if share:
+        print(f"  share payload: {share.get('title', '')} "
+              f"({len(share.get('text', ''))} chars, OS share sheet)")
     return 0 if result["checker"]["passed"] else 1
 
 

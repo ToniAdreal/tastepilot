@@ -628,7 +628,7 @@
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-11T01:38:25.961959+00:00",
+  "created_at": "2026-10-11T02:08:34.293878+00:00",
   "verdict": "PASS",
   "entries": [
    {
@@ -823,7 +823,9 @@
     "start": null,
     "end": null,
     "calendar_url": null,
-    "maps_url": null
+    "maps_url": null,
+    "maps_apple_url": null,
+    "maps_geo_url": null
    }
   ],
   "items": [
@@ -831,26 +833,38 @@
     "name": "Aesop",
     "domain": "brand",
     "location": null,
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Aesop"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Aesop",
+    "maps_apple_url": "https://maps.apple.com/?q=Aesop",
+    "maps_geo_url": "geo:0,0?q=Aesop"
    },
    {
     "name": "The Little Prince",
     "domain": "book",
     "location": null,
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=The+Little+Prince"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=The+Little+Prince",
+    "maps_apple_url": "https://maps.apple.com/?q=The+Little+Prince",
+    "maps_geo_url": "geo:0,0?q=The%20Little%20Prince"
    },
    {
     "name": "Fleetwood Mac",
     "domain": "music",
     "location": null,
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Fleetwood+Mac"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Fleetwood+Mac",
+    "maps_apple_url": "https://maps.apple.com/?q=Fleetwood+Mac",
+    "maps_geo_url": "geo:0,0?q=Fleetwood%20Mac"
    },
    {
     "name": "Midnight in Paris",
     "domain": "film",
     "location": null,
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Midnight+in+Paris"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Midnight+in+Paris",
+    "maps_apple_url": "https://maps.apple.com/?q=Midnight+in+Paris",
+    "maps_geo_url": "geo:0,0?q=Midnight%20in%20Paris"
    }
-  ]
+  ],
+  "share": {
+   "title": "TastePilot itinerary",
+   "text": "I need a birthday gift shortlist for someone who loves Amelie\nAnywhere: Aesop, The Little Prince, Fleetwood Mac, Midnight in Paris\nVerification: PASS — 4 recommendation(s), every one traced to a Qloo response."
+  }
  }
 }

@@ -91,7 +91,12 @@ tastepilot/
                apps — a Google Calendar template URL per dated leg
                (all-day, exclusive end; a dateless leg gets none —
                no invented dates) and a Google Maps search URL per
-               leg and per recommendation; links are recomputed
+               leg and per recommendation, plus the platform-native
+               forms of the same queries (Apple Maps URLs for
+               iOS/macOS, geo: URIs for Android maps intents) and a
+               Web Share API payload ({title, text}) for the OS
+               share sheet whose verification line is recomputed
+               from the sealed evidence; links are recomputed
                from the plan's schedule + items on every surface,
                never read back from a stored plan field; no account,
                no credential, no network — the user's own browser
@@ -358,6 +363,24 @@ baked into the image or the repo.
   they render — a `handoffs` field stored in a shared plan JSON is
   never trusted — and opening one acts entirely in the user's own
   browser/account: TastePilot signs in nowhere and sends nothing.
+* The handoffs also speak each platform's native dialect: every
+  leg and recommendation carries, beside its Google Maps URL, an
+  Apple Maps URL (`maps.apple.com`, which opens the native Maps
+  app on iOS/macOS) and a `geo:` URI (the Android maps intent) for
+  the identical recomputed query — the UI renders the Apple Maps
+  link beside the Google one. And every plan carries a share-sheet
+  payload (`handoffs.share`: a title naming the legs in order,
+  plus text with the request, each leg's dates and recommendation
+  names, and a verification line **recomputed from the sealed
+  evidence** — a tampered plan's payload reads NOT VERIFIED). The
+  UI's "Share via OS share sheet ↗" button hands that payload to
+  the Web Share API (`navigator.share`), so the user's own apps
+  receive it; where no share sheet exists it falls back to copying
+  the same text to the clipboard. The payload is capped at 1,000
+  characters with per-leg item lists truncated behind a "+N more"
+  note, and the verdict line always survives the cap. Like every
+  handoff, it is recomputed on every surface — a `share` object
+  stored inside a plan JSON is never read back.
 
 ## Hackathon submission
 

@@ -175,6 +175,9 @@ def _handoff_lines(plan) -> list[tuple[str, str]]:
         if leg.get("maps_url"):
             lines.append((f"Open {where} in Google Maps",
                           leg["maps_url"]))
+        if leg.get("maps_apple_url"):
+            lines.append((f"Open {where} in Apple Maps",
+                          leg["maps_apple_url"]))
     for item in handoffs["items"]:
         lines.append((f"{item['name']} in Google Maps",
                       item["maps_url"]))

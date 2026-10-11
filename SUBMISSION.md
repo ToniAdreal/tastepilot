@@ -118,7 +118,14 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    Markdown/text exports — recomputed from the plan on every
    surface (a stored link field is never trusted), with no
    account or sign-in on TastePilot's side: the user's own
-   browser completes the action.
+   browser completes the action. The same handoffs also come in
+   each platform's native dialect — an Apple Maps link and an
+   Android `geo:` intent for every leg and recommendation — and
+   as an OS share-sheet payload (Web Share API): a title and a
+   short text naming the legs and their recommendations, whose
+   verification line is recomputed from the sealed evidence, so
+   a plan shared to the user's own messaging or notes apps
+   carries its PASS — or its NOT VERIFIED — with it.
 
 **[FINALIZE: one real-mode example — a plan produced against the live
 Qloo API, with its item count and checker verdict.]**
@@ -194,10 +201,10 @@ stops being a liability and becomes pure upside.
   of the built token-owned share management, so a user's link list
   and dashboard follow them between browsers instead of living in
   one browser's localStorage.
-- Deeper native integrations on top of the built one-tap
-  handoff links: OS share sheets and calendar/maps intents from
-  a native mobile app, and two-way calendar sync, instead of the
-  template/search links the handoff layer already produces.
+- A native mobile app on top of the built share-sheet payload
+  and platform maps links, with two-way calendar sync, instead
+  of the one-tap template/search links and one-way share
+  payload the handoff layer already produces.
 
 ## Built with
 

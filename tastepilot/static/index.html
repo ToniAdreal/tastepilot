@@ -37,7 +37,7 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
   <button type="submit">Plan</button>
 </form>
 <div id="status"></div>
-<div style="margin:.5rem 0"><button type="button" id="sharebtn" style="display:none">Create shareable verification link</button> <span id="shareout" class="meta"></span></div>
+<div style="margin:.5rem 0"><button type="button" id="sharebtn" style="display:none">Create shareable verification link</button> <button type="button" id="ossharebtn" style="display:none">Share via OS share sheet ↗</button> <span id="shareout" class="meta"></span></div>
 <div style="margin:.5rem 0" id="exportrow" hidden><label class="meta" for="exportfmt">Export itinerary as</label>
 <select id="exportfmt"><option value="markdown">Markdown</option><option value="text">Plain text</option><option value="ics">iCalendar (.ics, dated legs)</option></select>
 <button type="button" id="exportbtn">Download export</button> <span id="exportout" class="meta"></span></div>
@@ -177,6 +177,29 @@ sharebtn.addEventListener('click', async () => {
   catch (err) { shareout.textContent = 'Error: ' + err.message; }
 });
 
+document.getElementById('ossharebtn').addEventListener('click', async () => {
+  if (!lastPlan) return;
+  // Web Share API: the browser/OS presents the share sheet and the
+  // user's own apps complete the action — TastePilot sends nothing.
+  // The payload is the server-recomputed handoffs.share (its verdict
+  // line is recomputed from the sealed evidence, never claimed).
+  const payload = (lastPlan.handoffs && lastPlan.handoffs.share)
+    || {title: 'TastePilot itinerary', text: ''};
+  const data = {title: payload.title, text: payload.text,
+                url: window.location.href};
+  if (navigator.share) {
+    try { await navigator.share(data); shareout.textContent = 'Shared via the OS share sheet.'; }
+    catch (err) { if (err.name !== 'AbortError') shareout.textContent = 'Share cancelled or unavailable.'; }
+  } else if (navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(payload.title + '\n' + payload.text + '\n' + data.url);
+      shareout.textContent = 'OS share sheet unavailable here — share text copied to the clipboard instead.';
+    } catch (err) { shareout.textContent = 'Error: ' + err.message; }
+  } else {
+    shareout.textContent = 'OS share sheet unavailable in this browser.';
+  }
+});
+
 async function downloadExport(payload, fmt) {
   const res = await fetch('/api/export?format=' + encodeURIComponent(fmt),
     {method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -304,6 +327,7 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   if (!res.ok) { statusEl.textContent = 'Error: ' + (data.error || res.status); return; }
   lastPlan = data;
   sharebtn.style.display = '';
+  document.getElementById('ossharebtn').style.display = '';
   document.getElementById('exportrow').hidden = false;
   shareout.textContent = '';
   const exSum = data.explainer
@@ -373,6 +397,15 @@ document.getElementById('f').addEventListener('submit', async (e) => {
       a.target = '_blank';
       a.rel = 'noopener';
       a.textContent = 'Open in Google Maps ↗';
+      div.appendChild(a);
+    }
+    if (leg.maps_apple_url) {
+      div.appendChild(document.createTextNode(' · '));
+      const a = document.createElement('a');
+      a.href = leg.maps_apple_url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = 'Open in Apple Maps ↗';
       div.appendChild(a);
     }
     out.appendChild(div);

@@ -639,7 +639,7 @@
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-11T01:38:26.256608+00:00",
+  "created_at": "2026-10-11T02:08:34.310531+00:00",
   "verdict": "PASS",
   "entries": [
    {
@@ -837,7 +837,9 @@
     "start": null,
     "end": null,
     "calendar_url": null,
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=New+York"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=New+York",
+    "maps_apple_url": "https://maps.apple.com/?q=New+York",
+    "maps_geo_url": "geo:0,0?q=New%20York"
    }
   ],
   "items": [
@@ -845,26 +847,38 @@
     "name": "A basement jazz bar with natural wine",
     "domain": "food",
     "location": "New York",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=A+basement+jazz+bar+with+natural+wine%2C+New+York"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=A+basement+jazz+bar+with+natural+wine%2C+New+York",
+    "maps_apple_url": "https://maps.apple.com/?q=A+basement+jazz+bar+with+natural+wine%2C+New+York",
+    "maps_geo_url": "geo:0,0?q=A%20basement%20jazz%20bar%20with%20natural%20wine%2C%20New%20York"
    },
    {
     "name": "West Village, New York",
     "domain": "place",
     "location": "New York",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=West+Village%2C+New+York"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=West+Village%2C+New+York",
+    "maps_apple_url": "https://maps.apple.com/?q=West+Village%2C+New+York",
+    "maps_geo_url": "geo:0,0?q=West%20Village%2C%20New%20York"
    },
    {
     "name": "Nujabes",
     "domain": "music",
     "location": "New York",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Nujabes%2C+New+York"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Nujabes%2C+New+York",
+    "maps_apple_url": "https://maps.apple.com/?q=Nujabes%2C+New+York",
+    "maps_geo_url": "geo:0,0?q=Nujabes%2C%20New%20York"
    },
    {
     "name": "Lost in Translation",
     "domain": "film",
     "location": "New York",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Lost+in+Translation%2C+New+York"
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Lost+in+Translation%2C+New+York",
+    "maps_apple_url": "https://maps.apple.com/?q=Lost+in+Translation%2C+New+York",
+    "maps_geo_url": "geo:0,0?q=Lost%20in%20Translation%2C%20New%20York"
    }
-  ]
+  ],
+  "share": {
+   "title": "TastePilot plan: New York",
+   "text": "a first date in New York, we both love Kind of Blue\nNew York: A basement jazz bar with natural wine, West Village, New York, Nujabes, Lost in Translation\nVerification: PASS — 4 recommendation(s), every one traced to a Qloo response."
+  }
  }
 }
