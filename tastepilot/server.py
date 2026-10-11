@@ -96,7 +96,7 @@ Routes:
                                verdict recomputed from its own sealed
                                record — a tampered branch is a FAIL
                                column in the grid, never a 400.
-  POST /api/export-timeline?format=markdown|text
+  POST /api/export-timeline?format=markdown|text|ics
                                {"base": {...}, "branches": [...]}
                                -> the branch timeline as a take-away
                                export (tastepilot.export.export_timeline):
@@ -1265,8 +1265,11 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             gates. The rendered banner and every column verdict
             are recomputed by export.export_timeline; a tampered
             branch exports as a FAIL column under a NOT VERIFIED
-            banner (a 200 download, like a tampered single-plan
-            export), never clean. ics is refused categorically."""
+            banner (markdown/text) or a NOT VERIFIED event series
+            (ics) — a 200 download, like a tampered single-plan
+            export — never clean. ics on a timeline with no dated
+            leg in any column is a categorised 400 (no_dated_legs),
+            exactly as a dateless single-plan ICS export."""
             if fmt not in TIMELINE_FORMATS:
                 self._send_json(
                     400, {"error": "unsupported timeline export format"})

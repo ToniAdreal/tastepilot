@@ -4,9 +4,10 @@ timeline (run 34) rendered into Markdown / plain-text exports.
 Doctrine under test: an export's banner and every column verdict
 are recomputed from each plan's own sealed record — a tampered
 branch exports as a FAIL column under a NOT VERIFIED banner, never
-clean; rendering is deterministic; iCalendar is refused
-categorically for a timeline; malformed input is a categorised
-ValueError / 400, never a traceback."""
+clean; rendering is deterministic; iCalendar on a dateless
+timeline is refused with no_dated_legs (dated timelines export as
+ICS event series — see test_timeline_ics.py); malformed input is
+a categorised ValueError / 400, never a traceback."""
 import copy
 import json
 import threading
@@ -102,8 +103,12 @@ def test_timeline_export_deterministic():
 
 
 def test_timeline_export_ics_refused():
+    # The Kyoto fixture plan is dateless: ICS is now a real timeline
+    # format (test_timeline_ics.py), but a dateless timeline has
+    # nothing to put on a calendar — refused with no_dated_legs,
+    # never with invented dates. Unknown formats stay unsupported.
     base = _base()
-    with pytest.raises(ValueError, match="unsupported"):
+    with pytest.raises(ValueError, match="no_dated_legs"):
         export_timeline(base, _branches(base), "ics")
     with pytest.raises(ValueError, match="unsupported"):
         export_timeline(base, _branches(base), "html")

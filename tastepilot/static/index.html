@@ -617,11 +617,12 @@ async function doTimeline(basePlan, okBranches, outEl) {
     }
   }
   outEl.appendChild(table);
-  for (const fmt of ['markdown', 'text']) {
+  for (const fmt of ['markdown', 'text', 'ics']) {
     const dl = document.createElement('button');
     dl.type = 'button'; dl.className = 'timelineexportbtn';
     dl.textContent = fmt === 'markdown'
-      ? 'Download timeline (Markdown)' : 'Download timeline (text)';
+      ? 'Download timeline (Markdown)' : fmt === 'ics'
+      ? 'Download timeline (iCalendar)' : 'Download timeline (text)';
     dl.addEventListener('click', async () => {
       const r = await fetch('/api/export-timeline?format=' + fmt,
         {method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -631,7 +632,7 @@ async function doTimeline(basePlan, okBranches, outEl) {
       const blob = await r.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'tastepilot-timeline.' + (fmt === 'markdown' ? 'md' : 'txt');
+      a.download = 'tastepilot-timeline.' + (fmt === 'markdown' ? 'md' : fmt === 'ics' ? 'ics' : 'txt');
       a.click(); URL.revokeObjectURL(a.href);
     });
     outEl.appendChild(dl);

@@ -171,7 +171,12 @@ the reason recorded (the demo never goes down because the LLM did).
     timeline body → `200` download with `Verification: PASS`;
     edit one affinity in a branch plan first → the download
     still returns `200` but its banner reads NOT VERIFIED and
-    that column heads FAIL; `?format=ics` → `400`.
+    that column heads FAIL. Timeline ICS probe: with a dated
+    base + branch, `POST /api/export-timeline?format=ics` →
+    `200` download `tastepilot-timeline.ics` with one VEVENT
+    series per branch (summaries name the branch; the tampered
+    branch's events read NOT VERIFIED); with a dateless
+    timeline, `?format=ics` → `400` (`no_dated_legs`).
 
 ## Notes
 

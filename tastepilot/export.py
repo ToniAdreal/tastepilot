@@ -36,7 +36,7 @@ from .checker import check_plan, plan_recommendations
 from .timeline import branch_timeline
 
 FORMATS = ("markdown", "text", "ics")
-TIMELINE_FORMATS = ("markdown", "text")
+TIMELINE_FORMATS = ("markdown", "text", "ics")
 
 _MEDIA = {
     "markdown": ("text/markdown; charset=utf-8", "md"),
@@ -555,22 +555,108 @@ def render_timeline_text(base, branches) -> str:
     return "\n".join(out) + "\n"
 
 
+def render_timeline_ics(base, branches) -> str:
+    """Render a branch timeline as iCalendar: one event series per
+    column (the base plan plus each branch) — for every dated leg
+    in that column's own schedule, one all-day VEVENT whose summary
+    names the branch and whose description carries that column's
+    recomputed verdict and that leg's recommendations in that
+    branch, so a recipient can compare swap paths on their own
+    calendar (same dates, different items per branch).
+
+    Doctrine matches every other export: each column's verdict is
+    recomputed from its own sealed record — a tampered branch's
+    events read NOT VERIFIED, never PASS. Deterministic: UIDs hash
+    the column name + plan content (request + item ids/affinities,
+    deliberately excluding the evidence record's wall-clock) + leg
+    + dates, and DTSTAMP derives from the leg start, exactly as
+    the single-plan ICS exporter. A timeline in which no column
+    has any dated leg raises ``no_dated_legs`` instead of
+    inventing dates; a column with no dated legs contributes no
+    events while dated columns still render."""
+    doc = _timeline_doc(base, branches)
+    plans = [base] + [b["plan"] for b in branches]
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0",
+             "PRODID:-//TastePilot//Timeline Export//EN",
+             "CALSCALE:GREGORIAN",
+             "X-WR-CALNAME:TastePilot branch timeline"]
+    events = 0
+    for column, plan in zip(doc["columns"], plans):
+        verdict = recomputed_verdict(plan)
+        dated = [e for e in plan.get("schedule") or [] if e.get("start")]
+        if not dated:
+            continue
+        fingerprint = {
+            "branch": column["name"],
+            "request": plan.get("request"),
+            "items": [[i.get("entity", {}).get("id"), i.get("domain"),
+                       i.get("location"), i.get("affinity")]
+                      for i in plan.get("items") or []],
+        }
+        canonical = json.dumps(fingerprint, sort_keys=True,
+                               ensure_ascii=False,
+                               separators=(",", ":")).encode()
+        plan_hash = hashlib.sha256(canonical).hexdigest()[:24]
+        items = plan.get("items") or []
+        for entry in dated:
+            location = entry.get("location") or "Anywhere"
+            start = date.fromisoformat(entry["start"])
+            end_raw = entry.get("end") or entry["start"]
+            end = date.fromisoformat(end_raw) + timedelta(days=1)
+            uid_src = (f"{plan_hash}:{location}:{entry['start']}:"
+                       f"{end_raw}")
+            uid = hashlib.sha256(uid_src.encode()).hexdigest()[:32]
+            leg_items = [i for i in items
+                         if (i.get("location") or None) ==
+                         (entry.get("location") or None)] or items
+            desc = [f"Branch: {column['name']} "
+                    f"({'PASS' if verdict['passed'] else 'FAIL'} — "
+                    f"recomputed from this plan's sealed evidence)",
+                    _banner_lines(plan, verdict)[0], "",
+                    "Recommendations:"]
+            for item in leg_items:
+                head, _, _ = _item_lines(item)
+                desc.append(f"- {head} [{item.get('domain', '')}]")
+            lines += [
+                "BEGIN:VEVENT",
+                f"UID:{uid}@tastepilot-timeline",
+                f"DTSTAMP:{start.strftime('%Y%m%d')}T000000Z",
+                f"DTSTART;VALUE=DATE:{start.strftime('%Y%m%d')}",
+                f"DTEND;VALUE=DATE:{end.strftime('%Y%m%d')}",
+                "SUMMARY:" + _ics_escape(
+                    f"TastePilot [{column['name']}]: {location}"),
+                "DESCRIPTION:" + _ics_escape("\n".join(desc)),
+                "END:VEVENT",
+            ]
+            events += 1
+    if not events:
+        raise ValueError("no_dated_legs: no timeline column has a leg "
+                         "with a start date to put on a calendar")
+    lines.append("END:VCALENDAR")
+    folded: list[str] = []
+    for line in lines:
+        folded.extend(_ics_fold(line))
+    return "\r\n".join(folded) + "\r\n"
+
+
 _TIMELINE_RENDERERS = {"markdown": render_timeline_markdown,
-                       "text": render_timeline_text}
+                       "text": render_timeline_text,
+                       "ics": render_timeline_ics}
 
 
 def export_timeline(base, branches, fmt: str) -> tuple[str, bool]:
-    """Render a branch timeline in *fmt* (markdown/text only —
-    iCalendar has no branch-grid meaning and is refused
-    categorically); returns (content, all_passed) where
-    all_passed is every column's recomputed verdict. A tampered
-    branch still renders, as a FAIL column under a NOT VERIFIED
-    banner. Raises ValueError with a category for an unsupported
-    format or a malformed base/branch (from branch_timeline)."""
+    """Render a branch timeline in *fmt* (markdown/text grids, or
+    ics: one event series per branch); returns (content,
+    all_passed) where all_passed is every column's recomputed
+    verdict. A tampered branch still renders, as a FAIL column
+    (markdown/text) or a NOT VERIFIED event series (ics) — never
+    clean. Raises ValueError with a category for an unsupported
+    format, a malformed base/branch (from branch_timeline), or
+    (ics) a timeline with no dated leg in any column."""
     if fmt not in TIMELINE_FORMATS:
         raise ValueError(
             f"unsupported: timeline export format {fmt!r} "
-            f"(markdown or text only)")
+            f"(markdown, text or ics only)")
     doc = _timeline_doc(base, branches)
     content = _TIMELINE_RENDERERS[fmt](base, branches)
     return content, bool(doc["summary"]["all_passed"])

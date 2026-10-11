@@ -571,13 +571,24 @@ baked into the image or the repo.
   `POST /api/export?format=...` all render the same exporter.
   A branch timeline leaves the same way — a branch-timeline export:
   `tastepilot export --plan base.json --branch NAME=branch.json
-  [--format markdown|text]`, `POST /api/export-timeline?format=...`,
+  [--format markdown|text|ics]`, `POST /api/export-timeline?format=...`,
   and the branch explorer's "Download timeline" buttons render the
   timeline grid (slots grouped by leg, one column per branch,
   kept/added/removed/re-scored cells with affinities) as a Markdown
   table or plain-text grid, each column headed by its recomputed
   verdict; a tampered branch exports as a FAIL column under a NOT
   VERIFIED banner, and the CLI exits 1 while still writing it.
+  The timeline also exports as iCalendar (`export_timeline` with
+  format `ics`): one event series per branch — for every dated leg
+  in that branch's own schedule, an all-day event whose summary
+  names the branch and whose description carries that branch's
+  recomputed verdict and that leg's recommendations in that
+  branch, so a recipient can compare swap paths on their own
+  calendar. A tampered branch's series reads NOT VERIFIED, UIDs
+  and DTSTAMPs derive from branch name + plan content + leg dates
+  (byte-identical re-exports), and a timeline with no dated leg in
+  any column refuses with `no_dated_legs` instead of inventing
+  dates — the single-plan ICS rule, per timeline.
   Markdown and plain-text exports carry the request, schedule and
   transfer warnings, per-leg domain sections (item, affinity, why,
   evidence reference), rejected items with their reasons, and a
