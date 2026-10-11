@@ -241,7 +241,16 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    even though its body signature still verifies. The
    timestamp is stamped once per delivery, so retries
    of one delivery share it, and a redelivery is
-   stamped fresh. A webhook whose endpoint keeps
+   stamped fresh. Pushes also carry an idempotency
+   key (`X-TastePilot-Idempotency-Key` on the wire,
+   `idempotency_key` on the delivery record): a
+   deterministic digest of the webhook and the exact
+   payload, shared by a delivery's retries and by a
+   redelivery of the same change to the same webhook,
+   so a receiver can drop a duplicate push instead of
+   applying the change twice — dedupe that also works
+   for unsigned webhooks, since the key authenticates
+   nothing and is no secret. A webhook whose endpoint keeps
    failing is paused, not hammered: three consecutive
    failed deliveries pause it (a delivered push resets the
    count), later pushes are recorded as skipped with their
@@ -446,6 +455,10 @@ stops being a liability and becomes pure upside.
   subscriber reject a captured push replayed after a
   five-minute window even though its body signature
   still verifies —
+  and an idempotency key on every push, shared by a
+  delivery's retries and by a redelivery of the same
+  change to the same webhook, so a receiver can drop
+  a duplicate push instead of applying a change twice —
   and a webhook auto-paused after consecutive failures until
   the subscriber resumes it or a half-open probe — the
   next update push after a one-hour cooldown — revives it)

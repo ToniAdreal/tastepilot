@@ -412,6 +412,20 @@ the reason recorded (the demo never goes down because the LLM did).
     resend carries a fresh timestamp, not the original's.
     An unsigned webhook's deliveries carry neither
     timestamp header.
+33. Idempotency probe (every push carries a dedupe
+    key): register a webhook (probe 21; signed or
+    unsigned — the key is independent of signing) and
+    inspect any delivery at the receiver → it carries
+    `X-TastePilot-Idempotency-Key`, and the value equals
+    the `idempotency_key` on that delivery's record in
+    the notifications log. Force a retry (receiver
+    answering `503` once, then `200`) → both attempts
+    carry the same key. Fail an update push, redeliver
+    it (probe 23) → the resend is a new delivery (new
+    `delivery_id`) carrying the original's key, so a
+    receiver that already applied the change can drop
+    it. Push a further update → its deliveries carry a
+    different key.
 
 ## Notes
 

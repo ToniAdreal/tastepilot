@@ -122,6 +122,29 @@ instead of a named service's API:
   so bounded retries of one delivery all carry the
   same timestamp and signature, and a redelivery (a
   new delivery) is stamped fresh.
+- every push also carries an idempotency key:
+  ``X-TastePilot-Idempotency-Key`` on the wire and
+  ``idempotency_key`` on its delivery record — a
+  deterministic digest of the webhook id and the exact
+  payload bytes (``idempotency_key_for``). The key names
+  the *logical* delivery, not the attempt: bounded
+  retries of one delivery carry the same key, and an
+  on-demand redelivery of the same stored payload to the
+  same webhook carries the original's key — so a
+  receiver that already processed that change can drop
+  the duplicate instead of applying it twice. Duplicates
+  are expected in an at-least-once push system (a retry
+  after a lost response, a redelivery after a receiver
+  failure, a bulk redelivery overlapping a late success),
+  and the key is what makes them safe to ignore. A
+  different payload (a new feed version, another event)
+  or a different webhook is a different key. The key is
+  not a secret and proves nothing about authenticity —
+  that remains the signatures' job — so it is carried on
+  unsigned deliveries too: dedupe is orthogonal to
+  signing. A skipped (paused) record carries the key its
+  delivery would have carried, so the redelivery that
+  later makes the missed change good matches it.
 - a subscriber can ask for a test push at any time, not
   only at registration: ``POST /api/multi-feeds/<id>/
   webhooks/<webhook_id>/test`` fires one ``multi_feed.test``
@@ -182,6 +205,7 @@ TIMESTAMP_HEADER = "X-TastePilot-Timestamp"
 TIMESTAMP_SIGNATURE_HEADER = "X-TastePilot-Timestamp-Signature"
 SIGNATURE_TOLERANCE_SECONDS = 300
 EVENT_HEADER = "X-TastePilot-Event"
+IDEMPOTENCY_HEADER = "X-TastePilot-Idempotency-Key"
 WEBHOOK_EVENTS = ("multi_feed.subscribed", "multi_feed.updated",
                   "multi_feed.created", "multi_feed.test")
 """Every event a multi-feed push can carry, in canonical
@@ -404,6 +428,40 @@ def delivery_id_for(feed_id: str, webhook_id, event, version,
     return hashlib.sha256(material.encode()).hexdigest()[:16]
 
 
+def idempotency_key_for(webhook_id, body: bytes):
+    """The idempotency key for one logical delivery: a
+    32-hex-char SHA-256 prefix over the webhook id and a
+    digest of the exact body bytes. Deterministic — the
+    same webhook receiving the same payload bytes always
+    yields the same key (across bounded retries of one
+    delivery and across an on-demand redelivery of the
+    stored payload), while a different payload or a
+    different webhook yields a different key. Returns
+    None for malformed inputs (a missing webhook id or a
+    non-bytes body), so a record built from a malformed
+    stored entry carries no key rather than a wrong one.
+    The key is derived only from facts the record itself
+    already shows (webhook id + payload); it is not a
+    secret and authenticates nothing."""
+    if not isinstance(webhook_id, str) or not webhook_id \
+            or not isinstance(body, (bytes, bytearray)):
+        return None
+    material = json.dumps(
+        [webhook_id, hashlib.sha256(bytes(body)).hexdigest()],
+        ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(material.encode()).hexdigest()[:32]
+
+
+def _payload_bytes(payload: dict) -> bytes:
+    """The one canonical serialization of a notification
+    payload — the exact bytes a delivery POSTs and its
+    idempotency key digests, shared by the delivery path
+    and the skipped-record builder so both name the same
+    logical delivery the same way."""
+    return json.dumps(payload, ensure_ascii=False,
+                      separators=(",", ":")).encode()
+
+
 def build_notification(feed_id: str, kind: str, version: int,
                          etag: str, timelines, all_passed,
                          at: str) -> dict:
@@ -433,7 +491,13 @@ def deliver_notification(url: str, payload: dict, transport=None,
     ``transport`` is injectable for tests: a callable
     ``(url, body_bytes, timeout) -> (status, body_bytes)``. The
     default transport is a plain urllib POST — no key or
-    credential is ever sent. When ``secret`` is given, the
+    credential is ever sent. Every delivery (signed or
+    not) also sends the idempotency header
+    (``IDEMPOTENCY_HEADER``, ``idempotency_key_for`` over
+    the webhook id and the exact body bytes), and the
+    record carries the same key as ``idempotency_key``,
+    so a receiver can dedupe a retry or a redelivery of
+    a change it already applied. When ``secret`` is given, the
     default transport also sends the HMAC signature header
     (``sign_payload`` over the exact body bytes), the event
     header, and the replay-protection headers (the delivery
@@ -449,15 +513,16 @@ def deliver_notification(url: str, payload: dict, transport=None,
     string, or a response body.
     """
     url = validate_webhook_url(url)
+    body = _payload_bytes(payload)
     record = {"webhook_id": webhook_id_for(url),
               "host": webhook_host_label(url),
               "event": payload.get("event"),
               "version": payload.get("version"),
               "status": "failed", "attempts": 0,
               "http_status": None, "error": None,
-              "signed": bool(secret)}
-    body = json.dumps(payload, ensure_ascii=False,
-                      separators=(",", ":")).encode()
+              "signed": bool(secret),
+              "idempotency_key": idempotency_key_for(
+                  webhook_id_for(url), body)}
     # Replay protection: a signed delivery is stamped once,
     # before any attempt, so every bounded retry of this
     # delivery carries the same timestamp and timestamped
@@ -480,7 +545,9 @@ def deliver_notification(url: str, payload: dict, transport=None,
             else:
                 headers = {"Content-Type": "application/json",
                            "accept": "application/json",
-                           EVENT_HEADER: str(payload.get("event"))}
+                           EVENT_HEADER: str(payload.get("event")),
+                           IDEMPOTENCY_HEADER:
+                           record["idempotency_key"]}
                 if secret:
                     headers[SIGNATURE_HEADER] = sign_payload(
                         secret, body)
@@ -525,7 +592,12 @@ def skipped_record(webhook: dict, payload: dict) -> dict:
     store stamps and logs it like any other record — and
     because the store still attaches the attempted payload,
     the missed change stays redeliverable once the webhook is
-    resumed. The webhook is named by id + host label only."""
+    resumed. The webhook is named by id + host label only.
+    The record carries the idempotency key its delivery
+    would have carried (same webhook id, same payload
+    bytes), so the redelivery that later makes the missed
+    change good is recognisable as the same logical
+    delivery."""
     url = webhook.get("url") if isinstance(webhook, dict) else None
     webhook_id = webhook.get("webhook_id") \
         if isinstance(webhook, dict) else None
@@ -534,13 +606,18 @@ def skipped_record(webhook: dict, payload: dict) -> dict:
         webhook_id = webhook_id_for(url)
     if host is None and isinstance(url, str):
         host = webhook_host_label(url)
+    key = idempotency_key_for(webhook_id, _payload_bytes(payload)) \
+        if isinstance(payload, dict) else None
     return {"webhook_id": webhook_id, "host": host,
-            "event": payload.get("event"),
-            "version": payload.get("version"),
+            "event": payload.get("event")
+            if isinstance(payload, dict) else None,
+            "version": payload.get("version")
+            if isinstance(payload, dict) else None,
             "status": "skipped", "attempts": 0,
             "http_status": None, "error": "webhook_paused",
             "signed": bool(isinstance(webhook, dict)
-                           and webhook.get("signing_secret"))}
+                           and webhook.get("signing_secret")),
+            "idempotency_key": key}
 
 
 def deliver_to_webhooks(webhooks, payload: dict, **kwargs) -> list:
@@ -570,5 +647,5 @@ def deliver_to_webhooks(webhooks, payload: dict, **kwargs) -> list:
                 "status": "failed", "attempts": 0,
                 "http_status": None,
                 "error": str(exc).split(":")[0],
-                "signed": False})
+                "signed": False, "idempotency_key": None})
     return records

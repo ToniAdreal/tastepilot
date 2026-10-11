@@ -798,7 +798,11 @@ async function doTimeline(basePlan, okBranches, outEl) {
         : (d.signed ? ' Pushes are HMAC-signed with your secret ' +
                       'and replay-protected (timestamped signature, ' +
                       'verified within 5 minutes).'
-                    : ' Pushes are unsigned.'));
+                    : ' Pushes are unsigned.') +
+      ' Every push also carries an X-TastePilot-Idempotency-Key ' +
+      'header: the retries and redeliveries of one change reuse ' +
+      'its key, so a receiver can drop duplicate pushes ' +
+      'idempotently.');
   });
   outEl.appendChild(hookUrl);
   outEl.appendChild(hookSecret);

@@ -731,7 +731,24 @@ baked into the image or the repo.
   while the legacy header and `verify_signature` stay
   byte-unchanged for subscribers who have not adopted
   the timestamped check. A redelivery is a new delivery
-  and is stamped fresh. A webhook whose endpoint
+  and is stamped fresh. Every delivery — signed or
+  unsigned — also carries an idempotency key
+  (`X-TastePilot-Idempotency-Key` on the wire,
+  `idempotency_key` on its record): a deterministic
+  digest of the webhook id and the exact payload bytes
+  (`idempotency_key_for`). The key names the logical
+  delivery, not the attempt — bounded retries of one
+  delivery share it, and a redelivery of the same stored
+  payload to the same webhook reuses the original's
+  key — so a receiver that already applied a change can
+  drop the duplicate instead of applying it twice; a
+  different payload or a different webhook is a
+  different key. The key is not a secret and
+  authenticates nothing (that remains the signatures'
+  job), and a skipped (paused) record carries the key
+  its delivery would have carried, so the redelivery
+  that later makes the missed change good matches it.
+  A webhook whose endpoint
   keeps failing is paused, not hammered: the store counts
   consecutive failed deliveries per webhook (a delivered
   push resets the count; the count folds in when a delivery
