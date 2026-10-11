@@ -716,7 +716,21 @@ baked into the image or the repo.
   registers an unsigned webhook. Delivery records carry only
   a `signed` flag — the secret never reaches a listing, a
   record, or a log, and a redelivery of a signed delivery is
-  signed with the same secret. Webhooks are
+  signed with the same secret. A webhook whose endpoint
+  keeps failing is paused, not hammered: the store counts
+  consecutive failed deliveries per webhook (a delivered
+  push resets the count; the count folds in when a delivery
+  is recorded, so pings, update pushes, and redeliveries all
+  count the same way), and at 3 the webhook is paused —
+  later pushes to it are recorded as `skipped` deliveries
+  (`webhook_paused`, zero attempts, payload still stored, so
+  the missed change stays redeliverable), redelivery to it
+  is refused as `webhook_paused`, and bulk redelivery skips
+  it with that reason. The subscriber resumes it with
+  `POST .../webhooks/<id>/resume` (or pauses by hand with
+  `.../pause`) under the same owner rule; resuming clears
+  the count. Webhook listings report `paused` and
+  `consecutive_failures`. Webhooks are
   listed (`GET .../webhooks`, host labels only) and removed
   (`DELETE .../webhooks/<id>`) under the same owner rule, and
   persist with the feed in file mode. Bundles expire after 30 days

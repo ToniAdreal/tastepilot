@@ -283,6 +283,23 @@ the reason recorded (the demo never goes down because the LLM did).
     on a feed with a failed record → that record under
     `skipped` as `webhook_not_found`. On an owned feed,
     the bulk call without the owner's token → `403`.
+26. Webhook auto-pause probe (failing endpoints are paused,
+    not hammered): with a receiver answering `500`, register
+    a webhook (ping `failed`), then update the feed twice —
+    after the third consecutive failed delivery,
+    `GET .../webhooks` reports the webhook `paused: true`
+    with `consecutive_failures: 3`. Update once more → the
+    update's delivery record is `skipped` with error
+    `webhook_paused` and the receiver is NOT hit again;
+    a single redelivery of a failed record → `400`
+    `webhook_paused`, and a bulk redelivery reports the
+    records under `skipped` as `webhook_paused`. Make the
+    receiver answer `200`, then
+    `POST .../webhooks/<webhook_id>/resume` → `200` with
+    `paused: false` and `consecutive_failures: 0`; the
+    skipped delivery now redelivers `delivered`, and
+    `.../pause` pauses by hand the same way. On an owned
+    feed, pause/resume without the owner's token → `403`.
 
 ## Notes
 

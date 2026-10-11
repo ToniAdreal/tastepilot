@@ -828,6 +828,51 @@ async function doTimeline(basePlan, okBranches, outEl) {
   });
   outEl.appendChild(redeliverBtn);
   outEl.appendChild(redeliverOut);
+  // A webhook that keeps failing is paused, not hammered:
+  // after 3 consecutive failed deliveries its pushes are
+  // recorded as skipped (webhook_paused) instead of attempted,
+  // and redelivery to it is refused until it is resumed.
+  // Resuming is the subscriber's deliberate act and clears the
+  // failure count; missed pushes stay redeliverable.
+  const resumeBtn = document.createElement('button');
+  resumeBtn.type = 'button'; resumeBtn.className = 'webhookresumebtn';
+  resumeBtn.textContent = 'Resume paused webhooks';
+  const resumeOut = document.createElement('div');
+  resumeOut.className = 'meta webhookresumeout';
+  resumeBtn.addEventListener('click', async () => {
+    if (!multiFeedId) {
+      resumeOut.textContent =
+        'Create the multi-timeline subscription first.';
+      return;
+    }
+    const r = await fetch('/api/multi-feeds/' + multiFeedId + '/webhooks',
+      {headers: {...ownerHeaders()}});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      resumeOut.textContent = 'Webhook error: ' + (d.error || r.status);
+      return;
+    }
+    const paused = (d.webhooks || []).filter(w => w.paused);
+    if (!paused.length) {
+      resumeOut.textContent = 'No paused webhooks on this feed.';
+      return;
+    }
+    const lines = [];
+    for (const w of paused) {
+      const rr = await fetch('/api/multi-feeds/' + multiFeedId +
+        '/webhooks/' + w.webhook_id + '/resume',
+        {method: 'POST', headers: {...ownerHeaders()}});
+      const dd = await rr.json().catch(() => ({}));
+      lines.push(w.host + (rr.ok
+        ? ' resumed (failure count cleared)'
+        : ' resume failed: ' + (dd.error || rr.status)));
+    }
+    resumeOut.textContent = 'Webhooks: ' + lines.join('; ') +
+      '. Pushes that were skipped while a webhook was paused ' +
+      'stay in the delivery log and can be redelivered.';
+  });
+  outEl.appendChild(resumeBtn);
+  outEl.appendChild(resumeOut);
 }
 
 async function doExplore(basePlan, branches, resultsEl) {

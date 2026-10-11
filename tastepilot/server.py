@@ -192,6 +192,17 @@ Routes:
   DELETE /api/multi-feeds/<id>/webhooks/<webhook_id>
                                remove one webhook (owner rule as
                                for the feed).
+  POST /api/multi-feeds/<id>/webhooks/<webhook_id>/pause
+                               pause one webhook (owner rule as
+                               for the feed): later pushes to it
+                               are recorded as skipped, never
+                               attempted. A webhook also pauses
+                               itself after 3 consecutive failed
+                               deliveries.
+  POST /api/multi-feeds/<id>/webhooks/<webhook_id>/resume
+                               resume a paused webhook (owner
+                               rule as for the feed), clearing
+                               its consecutive-failure count.
   GET  /api/multi-feeds/<id>/notifications
                                the feed's capped push delivery
                                log: one record per delivery
@@ -357,9 +368,10 @@ from .export import (TIMELINE_FORMATS, export_multi_timeline_ics,
                      validate_multi_timelines)
 from .imports import parse_import_bytes
 from .notify import (MAX_DELIVERIES, MAX_WEBHOOKS_PER_FEED,
+                     PAUSE_AFTER_CONSECUTIVE_FAILURES,
                      build_notification, deliver_to_webhooks,
                      delivery_id_for, generate_signing_secret,
-                     validate_signing_secret,
+                     skipped_record, validate_signing_secret,
                      validate_webhook_url,
                      webhook_host_label, webhook_id_for)
 from .profiles import ProfileStore
@@ -1078,6 +1090,15 @@ class MultiTimelineFeedStore:
                     validate_signing_secret(secret)
             except ValueError:
                 row.pop("signing_secret", None)
+        # Delivery-health fields, coerced to their defaults
+        # when malformed (a legacy row has neither): a bad
+        # stored counter must never take a feed down either.
+        row["paused"] = row.get("paused") is True
+        failures = row.get("consecutive_failures")
+        row["consecutive_failures"] = failures \
+            if isinstance(failures, int) \
+            and not isinstance(failures, bool) and failures >= 0 \
+            else 0
         return row
 
     def __init__(self, max_feeds: int = MAX_MULTI_TIMELINE_FEEDS,
@@ -1358,10 +1379,16 @@ class MultiTimelineFeedStore:
 
     @staticmethod
     def _webhook_meta(webhook: dict) -> dict:
+        failures = webhook.get("consecutive_failures")
         return {"webhook_id": webhook.get("webhook_id"),
                 "host": webhook.get("host"),
                 "created_at": webhook.get("created_at"),
-                "signed": bool(webhook.get("signing_secret"))}
+                "signed": bool(webhook.get("signing_secret")),
+                "paused": webhook.get("paused") is True,
+                "consecutive_failures": failures
+                if isinstance(failures, int)
+                and not isinstance(failures, bool) and failures >= 0
+                else 0}
 
     def add_webhook(self, feed_id: str, url, owner_token=None,
                     signing_secret="generate", secret_out=None):
@@ -1396,7 +1423,8 @@ class MultiTimelineFeedStore:
                 return "too_many_webhooks", None
             webhook = {"webhook_id": webhook_id, "url": url,
                        "host": webhook_host_label(url),
-                       "created_at": _iso(self._clock())}
+                       "created_at": _iso(self._clock()),
+                       "paused": False, "consecutive_failures": 0}
             generated = signing_secret == "generate"
             secret = generate_signing_secret() if generated \
                 else signing_secret
@@ -1447,6 +1475,66 @@ class MultiTimelineFeedStore:
             self._save()
             return "removed"
 
+    @staticmethod
+    def _note_delivery_outcomes(entry: dict, records) -> None:
+        """Fold recorded delivery outcomes into each webhook's
+        delivery health (called with the store lock held, from
+        record_deliveries — the one path every push takes, so
+        registration pings, update pushes, and redeliveries all
+        count the same way). A delivered record resets its
+        webhook's consecutive-failure count; a failed record
+        increments it, and at
+        notify.PAUSE_AFTER_CONSECUTIVE_FAILURES the webhook is
+        paused — later pushes to it are recorded as skipped
+        instead of attempted, until the subscriber resumes it.
+        A skipped record is not an attempt and never counts.
+        Records naming no registered webhook change nothing."""
+        webhooks = {w.get("webhook_id"): w
+                    for w in entry.get("webhooks", [])
+                    if isinstance(w, dict)}
+        for record in records or []:
+            if not isinstance(record, dict):
+                continue
+            webhook = webhooks.get(record.get("webhook_id"))
+            if webhook is None:
+                continue
+            status = record.get("status")
+            if status == "delivered":
+                webhook["consecutive_failures"] = 0
+            elif status == "failed":
+                failures = webhook.get("consecutive_failures")
+                failures = failures + 1 \
+                    if isinstance(failures, int) \
+                    and not isinstance(failures, bool) \
+                    and failures >= 0 else 1
+                webhook["consecutive_failures"] = failures
+                if failures >= PAUSE_AFTER_CONSECUTIVE_FAILURES:
+                    webhook["paused"] = True
+
+    def set_webhook_paused(self, feed_id: str, webhook_id: str,
+                           paused: bool, owner_token=None):
+        """(status, meta): pause or resume one webhook on a
+        feed, under the feed's owner rule (via the webhook
+        gate). Status is ok / not_found (feed) / forbidden /
+        webhook_not_found. Resuming also clears the
+        consecutive-failure count — the subscriber's
+        deliberate act starts the endpoint fresh; pausing by
+        hand leaves the count as the record of why."""
+        with self._lock:
+            entry, status = self._webhook_gate(feed_id, owner_token)
+            if entry is None:
+                return status, None
+            webhook = next(
+                (w for w in entry.get("webhooks", [])
+                 if w.get("webhook_id") == webhook_id), None)
+            if webhook is None:
+                return "webhook_not_found", None
+            webhook["paused"] = bool(paused)
+            if not paused:
+                webhook["consecutive_failures"] = 0
+            self._save()
+            return "ok", self._webhook_meta(webhook)
+
     def record_deliveries(self, feed_id: str, records,
                           payload=None, redelivery_of=None) -> list:
         """Append delivery records (stamped with the store
@@ -1481,6 +1569,7 @@ class MultiTimelineFeedStore:
             entry.setdefault("deliveries", []).extend(stamped)
             entry["deliveries"] = \
                 entry["deliveries"][-MAX_DELIVERIES:]
+            self._note_delivery_outcomes(entry, stamped)
             self._save()
             return stamped
 
@@ -1493,7 +1582,9 @@ class MultiTimelineFeedStore:
         before payloads were kept, or without one) /
         webhook_not_found (the webhook was removed after the
         original attempt — there is no current address to send
-        to). On ok, target is ``{record, payload, webhook}``:
+        to) / webhook_paused (the webhook is paused after
+        consecutive failures — resume it first, then resend).
+        On ok, target is ``{record, payload, webhook}``:
         deep copies of the original record, the payload it
         attempted, and the webhook's CURRENT registered entry
         (a re-registered endpoint receives the resend)."""
@@ -1518,6 +1609,8 @@ class MultiTimelineFeedStore:
                 None)
             if webhook is None:
                 return "webhook_not_found", None
+            if webhook.get("paused") is True:
+                return "webhook_paused", None
             return "ok", {"record": copy.deepcopy(record),
                           "payload": copy.deepcopy(payload),
                           "webhook": copy.deepcopy(webhook)}
@@ -1537,9 +1630,11 @@ class MultiTimelineFeedStore:
         ``superseded`` (a later record already redelivers it —
         resending it again would duplicate a push its chain
         has moved past), ``not_redeliverable`` (a legacy
-        record stamped without a payload), or
+        record stamped without a payload),
         ``webhook_not_found`` (the webhook was removed; there
-        is no current address). Delivered records are neither
+        is no current address), or ``webhook_paused`` (the
+        webhook is paused — resume it, then resend).
+        Delivered records are neither
         targets nor skipped — they are done."""
         with self._lock:
             entry, status = self._webhook_gate(feed_id, owner_token)
@@ -1577,6 +1672,11 @@ class MultiTimelineFeedStore:
                     skipped.append({
                         "delivery_id": delivery_id,
                         "reason": "webhook_not_found"})
+                    continue
+                if webhook.get("paused") is True:
+                    skipped.append({
+                        "delivery_id": delivery_id,
+                        "reason": "webhook_paused"})
                     continue
                 targets.append({
                     "record": copy.deepcopy(record),
@@ -2756,7 +2856,18 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 kwargs["transport"] = webhook_transport
             if webhook_sleeper is not None:
                 kwargs["sleeper"] = webhook_sleeper
-            records = deliver_to_webhooks(entries, payload, **kwargs)
+            # A paused webhook (consecutive failures at the
+            # threshold) is not attempted: its push is recorded
+            # as a skipped delivery carrying the payload, so
+            # the missed change stays redeliverable after a
+            # resume. Records stay in registration order.
+            active = [e for e in entries
+                      if e.get("paused") is not True]
+            delivered = iter(deliver_to_webhooks(
+                active, payload, **kwargs))
+            records = [next(delivered) if e.get("paused") is not True
+                       else skipped_record(e, payload)
+                       for e in entries]
             return multi_feed_store.record_deliveries(
                 feed_id, records, payload=payload)
 
@@ -2984,6 +3095,36 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                                   "webhooks": webhooks,
                                   "count": len(webhooks)})
 
+        def _handle_webhook_pause(self, feed_id, webhook_id, paused):
+            """Pause or resume one webhook on a multi-feed:
+            POST /api/multi-feeds/<id>/webhooks/<webhook_id>/
+            pause|resume. Pausing by hand stops pushes to a
+            failing endpoint immediately; a webhook also pauses
+            itself after PAUSE_AFTER_CONSECUTIVE_FAILURES
+            consecutive failed deliveries. Resuming clears the
+            consecutive-failure count and is the subscriber's
+            deliberate act (owner rule as for the feed). The
+            response is the webhook meta — host label, paused
+            state, and failure count; never the stored URL."""
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            status, meta = multi_feed_store.set_webhook_paused(
+                feed_id, webhook_id, paused, owner_token=token)
+            if status == "not_found":
+                self._send_json(404, {"error": "unknown multi-feed id"})
+                return
+            if status == "forbidden":
+                self._send_json(
+                    403, {"error": "only the owner can manage "
+                                   "webhooks for this multi-feed"})
+                return
+            if status == "webhook_not_found":
+                self._send_json(404, {"error": "unknown webhook id"})
+                return
+            self._send_json(200, {**meta, "feed_id": feed_id})
+
         def _handle_notifications(self, feed_id):
             """The feed's push delivery log: one record per
             delivery attempt (registration pings + update pushes),
@@ -3162,6 +3303,11 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                         and parts[0] and parts[2]:
                     self._handle_notification_redeliver(
                         parts[0], parts[2])
+                elif len(parts) == 4 and parts[1] == "webhooks" \
+                        and parts[3] in ("pause", "resume") \
+                        and parts[0] and parts[2]:
+                    self._handle_webhook_pause(
+                        parts[0], parts[2], parts[3] == "pause")
                 elif rest.endswith("/webhooks") and \
                         "/" not in rest[:-len("/webhooks")]:
                     self._handle_webhook_create(

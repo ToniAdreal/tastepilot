@@ -231,7 +231,13 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    or has one generated and shown exactly once — so a
    receiver can prove a push genuinely came from TastePilot
    and was not altered, and a signed delivery's redelivery
-   is signed the same way.
+   is signed the same way. A webhook whose endpoint keeps
+   failing is paused, not hammered: three consecutive
+   failed deliveries pause it (a delivered push resets the
+   count), later pushes are recorded as skipped with their
+   payload kept — so the missed change can be redelivered
+   once the subscriber resumes the webhook, which clears
+   the count.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -372,8 +378,10 @@ stops being a liability and becomes pure upside.
   pushes the change to it with bounded retries, each
   delivery recorded in the feed's log, a failed
   delivery redeliverable on demand from its stored payload,
-  and deliveries HMAC-signed with a per-webhook secret the
-  subscriber supplies or has generated and shown once)
+  deliveries HMAC-signed with a per-webhook secret the
+  subscriber supplies or has generated and shown once, and
+  a webhook auto-paused after consecutive failures until
+  the subscriber resumes it)
   graduating to a hosted notification service with
   subscriber accounts — managed endpoints, email delivery,
   and provider-side delivery guarantees — instead of

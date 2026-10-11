@@ -59,6 +59,23 @@ instead of a named service's API:
   any listing, delivery record, or log — records carry only
   a ``signed`` flag. A webhook registered with an explicit
   null secret stays unsigned by the subscriber's choice.
+- a webhook whose endpoint keeps failing is paused, not
+  hammered: the feed store counts consecutive failed
+  deliveries per webhook (a delivered push resets the count;
+  a skipped push is not an attempt and never counts), and
+  at ``PAUSE_AFTER_CONSECUTIVE_FAILURES`` the webhook is
+  paused — later pushes to it are recorded as ``skipped``
+  deliveries (status ``skipped``, error ``webhook_paused``,
+  zero attempts, the payload still stored, so the missed
+  change can be redelivered after a resume) instead of
+  being attempted. Redelivery to a paused webhook is
+  refused (``webhook_paused``) and bulk redelivery skips
+  it with that reason. The subscriber resumes the webhook
+  (``POST /api/multi-feeds/<id>/webhooks/<webhook_id>/
+  resume``, owner rule as for the feed; pausing by hand is
+  the same route with ``/pause``), which clears the count;
+  resuming is the subscriber's deliberate act, exactly like
+  a feed update renewing a feed's expiry.
 
 Email notifications are deliberately absent: sending mail needs
 an account and credentials, both outside the build's hard
@@ -80,6 +97,7 @@ MAX_WEBHOOK_URL_CHARS = 500
 MAX_WEBHOOKS_PER_FEED = 4
 MAX_DELIVERIES = 20
 MAX_ATTEMPTS = 3
+PAUSE_AFTER_CONSECUTIVE_FAILURES = 3
 TRANSIENT_STATUSES = frozenset({429, 500, 502, 503, 504})
 MIN_SIGNING_SECRET_CHARS = 16
 MAX_SIGNING_SECRET_CHARS = 200
@@ -280,6 +298,32 @@ def deliver_notification(url: str, payload: dict, transport=None,
             continue
         return record
     return record
+
+
+def skipped_record(webhook: dict, payload: dict) -> dict:
+    """The delivery record for a push that was never attempted
+    because its webhook is paused: status ``skipped``, zero
+    attempts, error category ``webhook_paused``. It has exactly
+    the shape ``deliver_notification`` returns, so the feed
+    store stamps and logs it like any other record — and
+    because the store still attaches the attempted payload,
+    the missed change stays redeliverable once the webhook is
+    resumed. The webhook is named by id + host label only."""
+    url = webhook.get("url") if isinstance(webhook, dict) else None
+    webhook_id = webhook.get("webhook_id") \
+        if isinstance(webhook, dict) else None
+    host = webhook.get("host") if isinstance(webhook, dict) else None
+    if webhook_id is None and isinstance(url, str):
+        webhook_id = webhook_id_for(url)
+    if host is None and isinstance(url, str):
+        host = webhook_host_label(url)
+    return {"webhook_id": webhook_id, "host": host,
+            "event": payload.get("event"),
+            "version": payload.get("version"),
+            "status": "skipped", "attempts": 0,
+            "http_status": None, "error": "webhook_paused",
+            "signed": bool(isinstance(webhook, dict)
+                           and webhook.get("signing_secret"))}
 
 
 def deliver_to_webhooks(webhooks, payload: dict, **kwargs) -> list:

@@ -156,6 +156,11 @@ def test_store_selects_latest_attempt_of_each_chain():
     other_payload = _payload_for(feed_id, version=3)
     other = store.record_deliveries(
         feed_id, [_record(URL, version=3)], payload=other_payload)[0]
+    # Three consecutive failures auto-pause the webhook
+    # (run 43), and a paused webhook's records are bulk-skipped
+    # as webhook_paused; resume it so this test exercises the
+    # chain selection it is about.
+    store.set_webhook_paused(feed_id, webhook_id_for(URL), False)
     status, result = store.failed_redelivery_targets(feed_id)
     assert status == "ok"
     assert [t["record"]["delivery_id"] for t in result["targets"]] == \
