@@ -167,20 +167,28 @@ Routes:
   DELETE /api/multi-feeds/<id> revoke a multi-feed (owner rule as
                                for feeds).
   POST /api/multi-feeds/<id>/webhooks
-                               {"url": ...} -> register a push
-                               webhook (tastepilot.notify) on the
-                               feed: the URL is stored inside the
-                               feed entry (it is the delivery
-                               address) and named everywhere else
-                               by host label only. Registration
-                               fires one multi_feed.subscribed test
-                               delivery to the new webhook. Owner
+                               {"url": ..., "secret": ...} ->
+                               register a push webhook
+                               (tastepilot.notify) on the feed:
+                               the URL is stored inside the feed
+                               entry (it is the delivery address)
+                               and named everywhere else by host
+                               label only. Registration fires one
+                               multi_feed.subscribed test delivery
+                               to the new webhook. Deliveries are
+                               HMAC-signed when the webhook has
+                               a signing secret: the subscriber
+                               supplies "secret", or the server
+                               generates one and returns it in
+                               this response only (an explicit
+                               null secret stays unsigned). Owner
                                rule as for the feed; at most 4
                                webhooks per feed.
   GET  /api/multi-feeds/<id>/webhooks
                                the feed's registered webhooks
                                (webhook id + host label + created
-                               time; never the stored URLs).
+                               time + signed flag; never the
+                               stored URLs or secrets).
   DELETE /api/multi-feeds/<id>/webhooks/<webhook_id>
                                remove one webhook (owner rule as
                                for the feed).
@@ -341,7 +349,9 @@ from .export import (TIMELINE_FORMATS, export_multi_timeline_ics,
 from .imports import parse_import_bytes
 from .notify import (MAX_DELIVERIES, MAX_WEBHOOKS_PER_FEED,
                      build_notification, deliver_to_webhooks,
-                     delivery_id_for, validate_webhook_url,
+                     delivery_id_for, generate_signing_secret,
+                     validate_signing_secret,
+                     validate_webhook_url,
                      webhook_host_label, webhook_id_for)
 from .profiles import ProfileStore
 from .timeline import branch_timeline
@@ -1045,6 +1055,22 @@ class MultiTimelineFeedStore:
 
     MAX_CHANGES = 20
 
+    @staticmethod
+    def _clean_webhook_row(row: dict) -> dict:
+        """A webhook row as loaded from disk: copied, with a
+        malformed signing secret dropped (the webhook then
+        delivers unsigned) instead of failing the row — a bad
+        stored secret must never take a feed down."""
+        row = dict(row)
+        secret = row.get("signing_secret")
+        if secret is not None:
+            try:
+                row["signing_secret"] = \
+                    validate_signing_secret(secret)
+            except ValueError:
+                row.pop("signing_secret", None)
+        return row
+
     def __init__(self, max_feeds: int = MAX_MULTI_TIMELINE_FEEDS,
                  ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS,
                  path: str | Path | None = None, clock=time.time):
@@ -1110,7 +1136,8 @@ class MultiTimelineFeedStore:
                 "changes": [c for c in changes
                             if isinstance(c, dict)][-self.MAX_CHANGES:]
                 if isinstance(changes, list) else [],
-                "webhooks": [w for w in entry.get("webhooks", [])
+                "webhooks": [self._clean_webhook_row(w)
+                             for w in entry.get("webhooks", [])
                              if isinstance(w, dict)
                              and isinstance(w.get("url"), str)
                              and isinstance(w.get("webhook_id"), str)
@@ -1324,16 +1351,29 @@ class MultiTimelineFeedStore:
     def _webhook_meta(webhook: dict) -> dict:
         return {"webhook_id": webhook.get("webhook_id"),
                 "host": webhook.get("host"),
-                "created_at": webhook.get("created_at")}
+                "created_at": webhook.get("created_at"),
+                "signed": bool(webhook.get("signing_secret"))}
 
-    def add_webhook(self, feed_id: str, url, owner_token=None):
+    def add_webhook(self, feed_id: str, url, owner_token=None,
+                    signing_secret="generate", secret_out=None):
         """Register (or re-register) a webhook URL on a feed.
         Returns (status, meta): status is ok / not_found /
         forbidden / too_many_webhooks; re-registering the same
         URL is idempotent (same deterministic id, original
-        created_at). The URL itself is validated by the caller
-        via notify.validate_webhook_url before this is called
-        for a new URL, and re-validated here for safety."""
+        created_at, original signing secret — a later secret
+        never replaces the first). The URL itself is validated
+        by the caller via notify.validate_webhook_url before
+        this is called for a new URL, and re-validated here
+        for safety.
+
+        ``signing_secret``: ``"generate"`` (the default) mints
+        a fresh secret for a NEW webhook and, when
+        ``secret_out`` (a dict) is given, places it there —
+        that dict is the secret's only exit; meta and listings
+        report only ``signed``. A string is the subscriber's
+        own secret (validated here, never reported back, the
+        subscriber already knows it). None registers an
+        unsigned webhook, by the subscriber's choice."""
         with self._lock:
             entry, status = self._webhook_gate(feed_id, owner_token)
             if entry is None:
@@ -1348,6 +1388,15 @@ class MultiTimelineFeedStore:
             webhook = {"webhook_id": webhook_id, "url": url,
                        "host": webhook_host_label(url),
                        "created_at": _iso(self._clock())}
+            generated = signing_secret == "generate"
+            secret = generate_signing_secret() if generated \
+                else signing_secret
+            if secret is not None:
+                webhook["signing_secret"] = \
+                    validate_signing_secret(secret)
+                if generated and secret_out is not None:
+                    secret_out["signing_secret"] = \
+                        webhook["signing_secret"]
             entry.setdefault("webhooks", []).append(webhook)
             self._save()
             return "ok", self._webhook_meta(webhook)
@@ -2689,13 +2738,23 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
 
         def _handle_webhook_create(self, feed_id):
             """Register a push webhook on a multi-feed:
-            POST /api/multi-feeds/<id>/webhooks {"url": ...}.
-            Registration fires one multi_feed.subscribed test
-            delivery to the new webhook (recorded either way),
-            so the subscriber learns immediately whether their
-            endpoint works. The response names the webhook by id
-            + host label only — the stored URL is never echoed.
-            """
+            POST /api/multi-feeds/<id>/webhooks {"url": ...,
+            "secret": ...}. Registration fires one
+            multi_feed.subscribed test delivery to the new
+            webhook (recorded either way), so the subscriber
+            learns immediately whether their endpoint works.
+            The response names the webhook by id + host label
+            only — the stored URL is never echoed.
+
+            Signing: an optional "secret" is the subscriber's
+            own signing secret (validated, never echoed — they
+            already know it); an explicit null registers an
+            unsigned webhook; with no "secret" key the server
+            generates one and returns it in this response as
+            "signing_secret" — the ONLY surface that ever
+            shows it, so the subscriber saves it now to verify
+            the HMAC signature header on every later push."""
+            
             raw_length = self.headers.get("Content-Length")
             try:
                 length = int(raw_length) if raw_length is not None else 0
@@ -2724,12 +2783,27 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 self._send_json(
                     400, {"error": f"webhook failed: {exc}"})
                 return
+            if "secret" in payload:
+                if payload["secret"] is None:
+                    signing_secret = None
+                else:
+                    try:
+                        signing_secret = validate_signing_secret(
+                            payload["secret"])
+                    except ValueError as exc:  # never echoes it
+                        self._send_json(
+                            400, {"error": f"webhook failed: {exc}"})
+                        return
+            else:
+                signing_secret = "generate"
             token, invalid = self._owner_token()
             if invalid:
                 self._send_json(400, {"error": "invalid owner token"})
                 return
+            secret_out = {}
             status, meta = multi_feed_store.add_webhook(
-                feed_id, url, owner_token=token)
+                feed_id, url, owner_token=token,
+                signing_secret=signing_secret, secret_out=secret_out)
             if status == "not_found":
                 self._send_json(404, {"error": "unknown multi-feed id"})
                 return
@@ -2745,10 +2819,15 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             deliveries = self._notify_multi_feed(
                 feed_id, "subscribed", None,
                 only_webhook_id=meta["webhook_id"])
-            self._send_json(201, {
+            response = {
                 **meta, "feed_id": feed_id,
                 "delivery": deliveries[0] if deliveries else None,
-            })
+            }
+            if "signing_secret" in secret_out:
+                # Shown exactly once, here: the subscriber saves
+                # it now to verify later pushes.
+                response["signing_secret"] = secret_out["signing_secret"]
+            self._send_json(201, response)
 
         def _handle_webhooks_list(self, feed_id):
             """The feed's registered webhooks (host labels only)."""

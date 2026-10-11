@@ -125,8 +125,11 @@ tastepilot/
                label only; delivery is a plain JSON POST with
                bounded retries on transient failures through an
                injectable transport, no credential ever sent;
-               every delivery outcome is a record the feed store
-               keeps (capped per feed)
+               deliveries to a signed webhook carry an
+               HMAC-SHA256 signature header the subscriber can
+               verify (secret supplied at registration, or
+               generated and shown once); every delivery outcome
+               is a record the feed store keeps (capped per feed)
   handoff.py   native handoffs: one-tap links into the user's own
                apps — a Google Calendar template URL per dated leg
                (all-day, exclusive end; a dateless leg gets none —
@@ -691,7 +694,19 @@ baked into the image or the repo.
   never edited, so the log stays an audit trail. A delivered
   record, a payload-less legacy record, and a removed webhook
   are categorised refusals; the timeline view's "Redeliver
-  failed pushes" button drives the same flow. Webhooks are
+  failed pushes" button drives the same flow. Deliveries to a
+  signed webhook carry an HMAC-SHA256 signature header
+  (`X-TastePilot-Signature: sha256=…` over the exact body
+  bytes, plus `X-TastePilot-Event`) so the subscriber can
+  verify a push genuinely came from TastePilot and was not
+  altered — the subscriber supplies their signing secret at
+  registration (`"secret": …`, validated, never echoed), or
+  the server generates one and returns it in the registration
+  response only, shown once; an explicit `"secret": null`
+  registers an unsigned webhook. Delivery records carry only
+  a `signed` flag — the secret never reaches a listing, a
+  record, or a log, and a redelivery of a signed delivery is
+  signed with the same secret. Webhooks are
   listed (`GET .../webhooks`, host labels only) and removed
   (`DELETE .../webhooks/<id>`) under the same owner rule, and
   persist with the feed in file mode. Bundles expire after 30 days

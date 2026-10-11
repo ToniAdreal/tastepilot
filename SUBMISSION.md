@@ -219,7 +219,14 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    payload it attempted, so the subscriber can have it
    redelivered on demand — the resend goes to the webhook's
    current URL and is recorded as a new delivery naming the
-   original, which is never edited.
+   original, which is never edited. Pushes are verifiable,
+   too: a signed webhook's deliveries carry an HMAC-SHA256
+   signature header over the exact body bytes — the
+   subscriber supplies the signing secret at registration
+   or has one generated and shown exactly once — so a
+   receiver can prove a push genuinely came from TastePilot
+   and was not altered, and a signed delivery's redelivery
+   is signed the same way.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -358,8 +365,10 @@ stops being a liability and becomes pure upside.
   registers an endpoint on their multi-timeline feed;
   registration pings it once, and every in-place update
   pushes the change to it with bounded retries, each
-  delivery recorded in the feed's log, and a failed
-  delivery redeliverable on demand from its stored payload)
+  delivery recorded in the feed's log, a failed
+  delivery redeliverable on demand from its stored payload,
+  and deliveries HMAC-signed with a per-webhook secret the
+  subscriber supplies or has generated and shown once)
   graduating to a hosted notification service with
   subscriber accounts — managed endpoints, email delivery,
   and provider-side delivery guarantees — instead of

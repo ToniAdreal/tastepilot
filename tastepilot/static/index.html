@@ -741,6 +741,10 @@ async function doTimeline(basePlan, okBranches, outEl) {
   const hookUrl = document.createElement('input');
   hookUrl.type = 'text'; hookUrl.className = 'webhookurl';
   hookUrl.placeholder = 'Webhook URL for push notifications (https://…)';
+  const hookSecret = document.createElement('input');
+  hookSecret.type = 'text'; hookSecret.className = 'webhooksecret';
+  hookSecret.placeholder =
+    'Signing secret (optional — leave blank to have one generated)';
   const hookBtn = document.createElement('button');
   hookBtn.type = 'button'; hookBtn.className = 'webhookbtn';
   hookBtn.textContent = 'Register push webhook';
@@ -753,10 +757,13 @@ async function doTimeline(basePlan, okBranches, outEl) {
     }
     const url = hookUrl.value.trim();
     if (!url) { hookOut.textContent = 'Enter a webhook URL first.'; return; }
+    const body = {url};
+    const own = hookSecret.value.trim();
+    if (own) body.secret = own;
     const r = await fetch('/api/multi-feeds/' + multiFeedId + '/webhooks',
       {method: 'POST',
        headers: {'Content-Type': 'application/json', ...ownerHeaders()},
-       body: JSON.stringify({url})});
+       body: JSON.stringify(body)});
     const d = await r.json().catch(() => ({}));
     if (!r.ok) {
       hookOut.textContent = 'Webhook error: ' + (d.error || r.status);
@@ -768,9 +775,16 @@ async function doTimeline(basePlan, okBranches, outEl) {
       (dlv.status || 'not attempted') +
       '. Updates to this feed will be pushed here; the delivery ' +
       'log is at ' + location.origin + '/api/multi-feeds/' +
-      multiFeedId + '/notifications.';
+      multiFeedId + '/notifications.' +
+      (d.signing_secret
+        ? ' Signing secret (shown only now — save it to verify ' +
+          'the X-TastePilot-Signature header on each push): ' +
+          d.signing_secret
+        : (d.signed ? ' Pushes are HMAC-signed with your secret.'
+                    : ' Pushes are unsigned.'));
   });
   outEl.appendChild(hookUrl);
+  outEl.appendChild(hookSecret);
   outEl.appendChild(hookBtn);
   outEl.appendChild(hookOut);
   // Failed pushes are not final: redeliver them on demand. The

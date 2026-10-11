@@ -24,8 +24,9 @@ instead of a named service's API:
   retries on transient failures (HTTP 429/5xx and transport-level
   network errors, up to 3 attempts with exponential backoff —
   the real Qloo client's contract), through an injectable
-  transport for tests. No credential or key is ever sent: the
-  only headers are the content type and accept;
+  transport for tests. No credential or API key is ever sent:
+  the headers are the content type, accept, the event name,
+  and — for a signed webhook — its HMAC signature (below);
 - every attempt's outcome is a delivery record (webhook id,
   host, event, feed version, delivered/failed, attempt count,
   last HTTP status, error category). The feed store keeps the
@@ -46,6 +47,18 @@ instead of a named service's API:
   record from before payloads were kept cannot be either;
 - webhook URLs carrying userinfo (``user:pass@host``) are
   refused: a credential does not belong in a stored URL.
+- every delivery to a webhook that has a signing secret is
+  signed: the POST carries ``X-TastePilot-Signature:
+  sha256=<hex>`` (HMAC-SHA256 over the exact body bytes) and
+  ``X-TastePilot-Event``, so the subscriber can verify with
+  ``verify_signature`` that a push genuinely came from
+  TastePilot and was not altered in transit. A subscriber
+  either supplies their own secret at registration or has
+  one generated for them and shown exactly once in the
+  registration response; the secret itself never appears in
+  any listing, delivery record, or log — records carry only
+  a ``signed`` flag. A webhook registered with an explicit
+  null secret stays unsigned by the subscriber's choice.
 
 Email notifications are deliberately absent: sending mail needs
 an account and credentials, both outside the build's hard
@@ -55,7 +68,9 @@ named provider's own API behind this same registry.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import secrets
 import time
 import urllib.error
 import urllib.parse
@@ -66,6 +81,10 @@ MAX_WEBHOOKS_PER_FEED = 4
 MAX_DELIVERIES = 20
 MAX_ATTEMPTS = 3
 TRANSIENT_STATUSES = frozenset({429, 500, 502, 503, 504})
+MIN_SIGNING_SECRET_CHARS = 16
+MAX_SIGNING_SECRET_CHARS = 200
+SIGNATURE_HEADER = "X-TastePilot-Signature"
+EVENT_HEADER = "X-TastePilot-Event"
 
 
 def validate_webhook_url(url) -> str:
@@ -111,6 +130,52 @@ def webhook_id_for(url: str) -> str:
     return hashlib.sha256(url.encode()).hexdigest()[:16]
 
 
+def validate_signing_secret(secret) -> str:
+    """Validate a subscriber-supplied signing secret; returns
+    it stripped. Categorised ValueError (``bad_signing_secret``),
+    never echoing the secret: a string of 16–200 chars with no
+    whitespace."""
+    if not isinstance(secret, str):
+        raise ValueError("bad_signing_secret: signing secret "
+                         "must be a string")
+    secret = secret.strip()
+    if not MIN_SIGNING_SECRET_CHARS <= len(secret) \
+            <= MAX_SIGNING_SECRET_CHARS:
+        raise ValueError("bad_signing_secret: signing secret "
+                         "length")
+    if any(ch.isspace() for ch in secret):
+        raise ValueError("bad_signing_secret: signing secret "
+                         "has whitespace")
+    return secret
+
+
+def generate_signing_secret() -> str:
+    """A fresh server-generated signing secret (48 hex chars).
+    It is returned to the subscriber exactly once, in the
+    registration response; everywhere else only its existence
+    is ever reported."""
+    return secrets.token_hex(24)
+
+
+def sign_payload(secret: str, body: bytes) -> str:
+    """The signature header value for one delivery body:
+    ``sha256=<HMAC-SHA256 hex>`` over the exact body bytes."""
+    digest = hmac.new(secret.encode(), body,
+                      hashlib.sha256).hexdigest()
+    return f"sha256={digest}"
+
+
+def verify_signature(secret, body: bytes, header) -> bool:
+    """What a subscriber runs on receipt: True iff ``header``
+    is the signature of ``body`` under ``secret``. Constant-
+    time comparison; any malformed input is simply False."""
+    if not isinstance(secret, str) or not isinstance(header, str) \
+            or not isinstance(body, (bytes, bytearray)):
+        return False
+    return hmac.compare_digest(sign_payload(secret, bytes(body)),
+                               header)
+
+
 def delivery_id_for(feed_id: str, webhook_id, event, version,
                     at: str, seq: int) -> str:
     """Deterministic id for one stamped delivery record: a
@@ -145,19 +210,24 @@ def build_notification(feed_id: str, kind: str, version: int,
 def deliver_notification(url: str, payload: dict, transport=None,
                          timeout: float = 5.0,
                          max_attempts: int = MAX_ATTEMPTS,
-                         sleeper=None) -> dict:
+                         sleeper=None, secret=None) -> dict:
     """POST one notification to one webhook; returns its
     delivery record.
 
     ``transport`` is injectable for tests: a callable
     ``(url, body_bytes, timeout) -> (status, body_bytes)``. The
-    default transport is a plain urllib POST with no headers
-    beyond the JSON content type — no key or credential is ever
-    sent. Transient failures are retried with exponential
-    backoff through the injectable ``sleeper``; every other
-    outcome is final. The record names the webhook by id + host
-    label only and carries an error *category*, never the URL,
-    its query string, or a response body.
+    default transport is a plain urllib POST — no key or
+    credential is ever sent. When ``secret`` is given, the
+    default transport also sends the HMAC signature header
+    (``sign_payload`` over the exact body bytes) and the event
+    header, so the subscriber can verify the push; the record
+    then carries ``signed: True`` — never the secret or the
+    signature's inputs beyond the payload itself. Transient
+    failures are retried with exponential backoff through the
+    injectable ``sleeper``; every other outcome is final. The
+    record names the webhook by id + host label only and
+    carries an error *category*, never the URL, its query
+    string, or a response body.
     """
     url = validate_webhook_url(url)
     record = {"webhook_id": webhook_id_for(url),
@@ -165,7 +235,8 @@ def deliver_notification(url: str, payload: dict, transport=None,
               "event": payload.get("event"),
               "version": payload.get("version"),
               "status": "failed", "attempts": 0,
-              "http_status": None, "error": None}
+              "http_status": None, "error": None,
+              "signed": bool(secret)}
     body = json.dumps(payload, ensure_ascii=False,
                       separators=(",", ":")).encode()
     sleep = sleeper or time.sleep
@@ -176,10 +247,14 @@ def deliver_notification(url: str, payload: dict, transport=None,
             if transport is not None:
                 status, _resp = transport(url, body, timeout)
             else:
+                headers = {"Content-Type": "application/json",
+                           "accept": "application/json",
+                           EVENT_HEADER: str(payload.get("event"))}
+                if secret:
+                    headers[SIGNATURE_HEADER] = sign_payload(
+                        secret, body)
                 req = urllib.request.Request(
-                    url, data=body, method="POST",
-                    headers={"Content-Type": "application/json",
-                             "accept": "application/json"})
+                    url, data=body, method="POST", headers=headers)
                 try:
                     with urllib.request.urlopen(
                             req, timeout=timeout) as resp:
@@ -209,14 +284,23 @@ def deliver_notification(url: str, payload: dict, transport=None,
 
 def deliver_to_webhooks(webhooks, payload: dict, **kwargs) -> list:
     """Deliver one payload to every webhook entry (``{"url"}``
-    dicts); one record per webhook, in registration order. A
-    malformed stored URL yields a failed record instead of
-    raising — delivery problems are data, never exceptions."""
+    dicts); one record per webhook, in registration order. An
+    entry's own ``signing_secret`` (when present) signs its
+    delivery, unless the caller passed a ``secret`` kwarg,
+    which then applies to every entry. A malformed stored URL
+    yields a failed record instead of raising — delivery
+    problems are data, never exceptions."""
     records = []
     for entry in webhooks or []:
         url = entry.get("url") if isinstance(entry, dict) else None
+        per_entry = dict(kwargs)
+        if "secret" not in per_entry and isinstance(entry, dict):
+            secret = entry.get("signing_secret")
+            if isinstance(secret, str) and secret:
+                per_entry["secret"] = secret
         try:
-            records.append(deliver_notification(url, payload, **kwargs))
+            records.append(
+                deliver_notification(url, payload, **per_entry))
         except ValueError as exc:  # invalid stored URL
             records.append({
                 "webhook_id": None, "host": None,
@@ -224,5 +308,6 @@ def deliver_to_webhooks(webhooks, payload: dict, **kwargs) -> list:
                 "version": payload.get("version"),
                 "status": "failed", "attempts": 0,
                 "http_status": None,
-                "error": str(exc).split(":")[0]})
+                "error": str(exc).split(":")[0],
+                "signed": False})
     return records

@@ -250,6 +250,24 @@ the reason recorded (the demo never goes down because the LLM did).
     redelivering its failed record → `400`
     `webhook_not_found`. On an owned feed, redelivery
     without the owner's token → `403`.
+24. Signed-webhook probe (HMAC signature on pushes):
+    register a webhook on the probe-21 bundle feed WITHOUT
+    a `secret` → `201` returns a `signing_secret` (shown
+    only in this response) and `signed: true`; the test
+    delivery at the receiver carries
+    `X-TastePilot-Signature: sha256=…` and
+    `X-TastePilot-Event`, and the signature verifies
+    (HMAC-SHA256 over the exact received body bytes) under
+    the returned secret. `GET .../webhooks` and `GET
+    .../notifications` contain the secret nowhere — only
+    the `signed` flag. Register a second webhook WITH your
+    own `secret` → `201` has no `signing_secret` field and
+    its deliveries verify under yours; a bad secret
+    (`"short"`, a number) → `400` `bad_signing_secret`
+    with the value nowhere in the response; `"secret":
+    null` → the webhook registers `signed: false` and its
+    deliveries carry no signature header. A redelivery
+    (probe 23) of a signed delivery is signed too.
 
 ## Notes
 
