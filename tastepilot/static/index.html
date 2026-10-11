@@ -121,10 +121,21 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
   the plan above — derived only from its sealed swap history, never
   from weights anyone types in — and later suggestions in any
   session apply it, reporting a stored profile was applied. A plan
-  whose evidence chain does not verify teaches nothing.</p>
+  whose evidence chain does not verify teaches nothing. The profile
+  also travels: export it as a sync document, import that document
+  into another browser or server, and the two copies are merged
+  under the sync conflict rules — where both sides hold a weight
+  for the same tag or domain with different values, the newer
+  document wins (a tie goes to the larger absolute weight), the
+  counts take the maximum so shared history is never counted
+  twice, and every conflict is listed in the import result.</p>
   <div style="margin-top:.5rem"><button type="button" id="profilesavebtn">Save this plan's swap learning to my profile</button>
   <button type="button" id="profileshowbtn">Show my profile</button>
+  <button type="button" id="profileexportbtn">Export profile (sync document)</button>
   <button type="button" id="profileclearbtn">Clear my profile</button></div>
+  <textarea id="profileimport" rows="3" style="width:100%;margin-top:.5rem"
+    placeholder="Paste a profile sync document exported elsewhere, then import it"></textarea>
+  <div><button type="button" id="profileimportbtn">Import profile sync document</button></div>
   <div id="profileout" class="meta" style="margin-top:.4rem"></div>
 </section>
 <section id="subscriberbox" aria-label="Your webhook subscriptions">
@@ -343,6 +354,38 @@ document.getElementById('profileshowbtn').addEventListener('click', async () => 
   if (!res.ok) { out.textContent = 'Error: ' + (data.error || res.status); return; }
   out.textContent = data.exists ? profileLine(data)
     : 'No persistent preference profile stored for this browser yet — save a plan\u2019s swap learning first.';
+});
+
+document.getElementById('profileexportbtn').addEventListener('click', async () => {
+  const out = document.getElementById('profileout');
+  out.textContent = 'Exporting…';
+  const res = await fetch('/api/profile/export', {headers: ownerHeaders()});
+  const data = await res.json();
+  if (!res.ok) { out.textContent = 'Error: ' + (data.error || res.status); return; }
+  const box = document.getElementById('profileimport');
+  box.value = JSON.stringify(data);
+  out.textContent = 'Sync document for fingerprint ' + data.owner_fingerprint +
+    ' (updated ' + new Date(data.updated_at).toLocaleString() + ') is in the box above — ' +
+    'copy it to another browser or server and import it there.';
+});
+
+document.getElementById('profileimportbtn').addEventListener('click', async () => {
+  const out = document.getElementById('profileout');
+  const text = document.getElementById('profileimport').value.trim();
+  if (!text) { out.textContent = 'Paste a profile sync document first.'; return; }
+  let document_;
+  try { document_ = JSON.parse(text); }
+  catch { out.textContent = 'Error: that is not valid JSON.'; return; }
+  out.textContent = 'Importing…';
+  const res = await fetch('/api/profile/import', {method: 'POST',
+    headers: {'Content-Type': 'application/json', ...ownerHeaders()},
+    body: JSON.stringify({document: document_})});
+  const data = await res.json();
+  if (!res.ok) { out.textContent = 'Error: ' + (data.error || res.status); return; }
+  out.textContent = profileLine(data) +
+    ` — import resolved ${data.conflicts.length} conflict(s)` +
+    (data.conflicts.length ? ': ' + data.conflicts.map(c =>
+      `${c.kind} ${c.key} local ${c.local} vs remote ${c.remote} → ${c.resolved} (${c.rule})`).join('; ') : '') + '.';
 });
 
 document.getElementById('subscriberbtn').addEventListener('click', async () => {

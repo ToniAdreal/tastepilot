@@ -548,6 +548,19 @@ the reason recorded (the demo never goes down because the LLM did).
     `counts.artefacts: 0`. No part of the response
     carries a stored payload, a webhook URL, a signing
     secret, or the token (or its full hash).
+43. Profile sync probe:
+    `GET /api/profile/export` (the profile sync export;
+    the demo page's "Your preference profile" panel's
+    export button) with the token from probe 16 →
+    `200` with a sync document whose
+    `owner_fingerprint` matches the profile panel; paste
+    it into the import box and import →
+    `200` with `conflicts: 0`; with no token → `401`,
+    with a malformed token → `400`, with a token that
+    owns no profile → `404`, and importing the document
+    under a different token → `403` (`owner_mismatch`).
+    The document carries the fingerprint and the profile
+    only — never the token.
 
 ## Notes
 

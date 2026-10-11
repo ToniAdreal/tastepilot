@@ -251,6 +251,15 @@ def main(argv: list[str] | None = None) -> int:
                          "the stored profile (repeatable, max 8)")
     pf.add_argument("--show", action="store_true",
                     help="print the stored profile as JSON")
+    pf.add_argument("--export", action="store_true",
+                    help="print the stored profile as a portable "
+                         "sync document (carry it to another store "
+                         "and --import-file it there)")
+    pf.add_argument("--import-file", default=None, metavar="SYNC_JSON",
+                    help="merge a sync document exported elsewhere "
+                         "into the stored profile under the sync "
+                         "conflict rules (conflicts are reported, "
+                         "never silently resolved)")
     pf.add_argument("--clear", action="store_true",
                     help="delete the stored profile")
     pf.add_argument("--owner-token", default=None,
@@ -326,11 +335,50 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         store = ProfileStore(path=args.store)
         fingerprint = owner_token_hash(token)[:12]
-        actions = bool(args.learn_from) + args.show + args.clear
+        actions = bool(args.learn_from) + args.show + args.clear \
+            + args.export + bool(args.import_file)
         if actions != 1:
             print("error: profile failed: choose exactly one of "
-                  "--learn-from, --show, or --clear", file=sys.stderr)
+                  "--learn-from, --show, --export, --import-file, "
+                  "or --clear", file=sys.stderr)
             return 2
+        if args.export:
+            document = store.export_sync(token)
+            if document is None:
+                print("error: profile failed: no_profile",
+                      file=sys.stderr)
+                return 1
+            print(json.dumps(document, indent=1, ensure_ascii=False))
+            return 0
+        if args.import_file:
+            try:
+                document = json.loads(
+                    Path(args.import_file).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                print(f"error: profile failed: cannot read sync "
+                      f"document ({type(exc).__name__})",
+                      file=sys.stderr)
+                return 2
+            try:
+                result = store.import_sync(token, document)
+            except ValueError as exc:  # categorised, no traceback
+                print(f"error: profile failed: {exc}", file=sys.stderr)
+                return 2
+            merged = result["profile"]
+            print(f"profile: owner={fingerprint} "
+                  f"conflicts={len(result['conflicts'])} "
+                  f"kept_swaps={merged['kept_swaps']} "
+                  f"undone_swaps={merged['undone_swaps']} "
+                  f"tag_weights={merged['tag_weights']} "
+                  f"domain_weights={merged['domain_weights']} "
+                  f"store={args.store}")
+            for conflict in result["conflicts"]:
+                print(f"conflict: {conflict['kind']} "
+                      f"{conflict['key']}: local={conflict['local']} "
+                      f"remote={conflict['remote']} "
+                      f"resolved={conflict['resolved']} "
+                      f"rule={conflict['rule']}")
+            return 0
         if args.clear:
             cleared = store.clear(token)
             print(f"profile: owner={fingerprint} cleared={cleared} "

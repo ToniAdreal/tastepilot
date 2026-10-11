@@ -404,6 +404,20 @@ Routes:
                                under the learner's caps; a chain-broken
                                plan is ignored and counted). There is
                                no way to store caller-supplied weights.
+  GET  /api/profile/export     the caller's profile as a portable
+                               sync document (fingerprint + stamp +
+                               profile; 404 when none is stored).
+  POST /api/profile/import     {"document": {...sync document...}}
+                               -> merge another device's export into
+                               the caller's stored profile under the
+                               sync conflict rules (newer wins, ties
+                               by larger absolute weight; counts take
+                               the maximum — sync never double-counts
+                               shared history the way the additive
+                               lesson merge would). The document must
+                               name the caller's fingerprint
+                               (owner_mismatch -> 403); every conflict
+                               is reported in the response.
   DELETE /api/profile          clear the caller's stored profile
                                (200 when one existed, 404 otherwise).
                                DELETE anywhere else outside /api/share
@@ -2687,6 +2701,66 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 "owner_fingerprint": result["meta"]["owner_fingerprint"],
                 "updated_at": result["meta"]["updated_at"]})
 
+        def _handle_profile_export(self):
+            """The caller's profile as a portable sync document
+            (see profiles.export_sync): carry it to another
+            browser or server and import it there. 404 when the
+            token has no stored profile."""
+            token = self._profile_token()
+            if token is None:
+                return
+            document = profile_store.export_sync(token)
+            if document is None:
+                self._send_json(404, {"error": "no profile stored"})
+                return
+            self._send_json(200, document)
+
+        def _handle_profile_import(self):
+            """Merge a sync document into the caller's stored
+            profile. Body: {"document": {...}} — the document is
+            shape-gated and fingerprint-checked against the
+            caller's token (owner_mismatch → 403), then resolved
+            under the sync conflict rules; every conflict is
+            reported in the response, never silently resolved."""
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_VERIFY_BODY_BYTES:
+                self._send_json(413, {"error": "document too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            token = self._profile_token()
+            if token is None:
+                return
+            if not isinstance(payload, dict) \
+                    or not isinstance(payload.get("document"), dict):
+                self._send_json(
+                    400, {"error": "profile failed: bad_sync_document"})
+                return
+            try:
+                result = profile_store.import_sync(
+                    token, payload["document"])
+            except ValueError as exc:  # categorised refusal
+                status = 403 if str(exc) == "owner_mismatch" else 400
+                self._send_json(
+                    status, {"error": f"profile failed: {exc}"})
+                return
+            self._send_json(200, {
+                "profile": result["profile"],
+                "conflicts": result["conflicts"],
+                "owner_fingerprint": result["meta"]["owner_fingerprint"],
+                "updated_at": result["meta"]["updated_at"]})
+
         def do_GET(self):
             path = urlparse(self.path).path
             if path in ("/", "/index.html"):
@@ -2702,6 +2776,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                                           multi_feed_store.info()})
             elif path == "/api/profile":
                 self._handle_profile_get()
+            elif path == "/api/profile/export":
+                self._handle_profile_export()
             elif path == "/api/shares":
                 self._handle_shares()
             elif path == "/api/subscriber/webhooks":
@@ -4615,6 +4691,9 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return
             if path == "/api/profile":
                 self._handle_profile_update()
+                return
+            if path == "/api/profile/import":
+                self._handle_profile_import()
                 return
             if path != "/api/plan":
                 self._send(404, b"not found", "text/plain")

@@ -55,6 +55,110 @@ MIN_OWNER_TOKEN_CHARS = 16    # mirrors server's owner-token rule
 MAX_OWNER_TOKEN_CHARS = 200
 PROFILE_FILE_ENV_VAR = "TASTEPILOT_PROFILE_FILE"
 
+SYNC_FORMAT = "tastepilot-profile-sync"
+SYNC_VERSION = 1
+
+
+def validate_sync_document(document) -> dict:
+    """Shape-gate a profile sync document and return a normalised
+    copy: ``{owner_fingerprint, updated_at, profile}`` with the
+    profile run through validate_preference_profile (weights
+    clamped to the learner's caps — a sync document can never
+    smuggle in weights the learner itself could not produce).
+    ``updated_at`` is kept as the document's ISO string and also
+    parsed, so a malformed stamp is a categorised refusal
+    (bad_sync_document), never a crash."""
+    if not isinstance(document, dict) \
+            or document.get("format") != SYNC_FORMAT \
+            or document.get("version") != SYNC_VERSION:
+        raise ValueError("bad_sync_document")
+    fingerprint = document.get("owner_fingerprint")
+    updated_at = document.get("updated_at")
+    if not isinstance(fingerprint, str) or len(fingerprint) != 12 \
+            or any(ch not in "0123456789abcdef" for ch in fingerprint) \
+            or not isinstance(updated_at, str):
+        raise ValueError("bad_sync_document")
+    try:
+        datetime.fromisoformat(updated_at)
+    except ValueError:
+        raise ValueError("bad_sync_document") from None
+    profile = validate_preference_profile(document.get("profile"))
+    return {"owner_fingerprint": fingerprint,
+            "updated_at": updated_at, "profile": profile}
+
+
+def _resolve_weights(kind: str, local: dict, remote: dict,
+                     local_newer: bool, remote_newer: bool,
+                     conflicts: list) -> dict:
+    """Merge one weight map under the sync rules. A key on both
+    sides with different values is a conflict: the newer
+    document wins; on a timestamp tie the larger absolute weight
+    wins; still tied (+x vs -x) the larger value wins. Every
+    conflict is recorded — resolution is deterministic and
+    order-independent, never silent."""
+    merged = {}
+    for key in sorted(set(local) | set(remote)):
+        if key not in remote:
+            merged[key] = local[key]
+        elif key not in local:
+            merged[key] = remote[key]
+        elif local[key] == remote[key]:
+            merged[key] = local[key]
+        else:
+            if local_newer:
+                resolved, rule = local[key], "newer"
+            elif remote_newer:
+                resolved, rule = remote[key], "newer"
+            elif abs(local[key]) != abs(remote[key]):
+                resolved = local[key] \
+                    if abs(local[key]) > abs(remote[key]) else remote[key]
+                rule = "larger_absolute"
+            else:
+                resolved = max(local[key], remote[key])
+                rule = "larger_value"
+            merged[key] = resolved
+            conflicts.append({"kind": kind, "key": key,
+                              "local": local[key], "remote": remote[key],
+                              "resolved": resolved, "rule": rule})
+    return merged
+
+
+def resolve_profile_sync(local_document, remote_document) -> dict:
+    """Resolve two sync documents for the SAME owner into one
+    profile, with every disagreement reported.
+
+    Sync is not the additive lesson merge (merge_profiles): two
+    devices that learned on their own and later sync hold
+    overlapping history, so summing would double-count it.
+    Instead weights follow _resolve_weights and the counts take
+    the element-wise maximum (both sides already include the
+    shared history). The two documents must name the same owner
+    fingerprint (owner_mismatch otherwise). Returns
+    ``{profile, conflicts}``; resolving a document with itself
+    returns its own profile with no conflicts."""
+    local = validate_sync_document(local_document)
+    remote = validate_sync_document(remote_document)
+    if local["owner_fingerprint"] != remote["owner_fingerprint"]:
+        raise ValueError("owner_mismatch")
+    local_time = datetime.fromisoformat(local["updated_at"])
+    remote_time = datetime.fromisoformat(remote["updated_at"])
+    conflicts: list = []
+    merged = empty_profile()
+    for key in ("plans_used", "plans_ignored", "kept_swaps",
+                "undone_swaps"):
+        merged[key] = max(local["profile"][key], remote["profile"][key])
+    merged["tag_weights"] = _resolve_weights(
+        "tag", local["profile"]["tag_weights"],
+        remote["profile"]["tag_weights"],
+        local_time > remote_time, remote_time > local_time, conflicts)
+    merged["domain_weights"] = _resolve_weights(
+        "domain", local["profile"]["domain_weights"],
+        remote["profile"]["domain_weights"],
+        local_time > remote_time, remote_time > local_time, conflicts)
+    conflicts.sort(key=lambda c: (c["kind"], c["key"]))
+    return {"profile": validate_preference_profile(merged),
+            "conflicts": conflicts}
+
 
 def owner_token_hash(token) -> str | None:
     """SHA-256 hash of an owner token, or None for no/invalid
@@ -233,3 +337,52 @@ class ProfileStore:
             del self._entries[digest]
             self._save()
             return True
+
+    def export_sync(self, owner_token) -> dict | None:
+        """The owner's profile as a portable sync document
+        (format/version/fingerprint/stamp + the profile), or
+        None when the owner has none. The document names the
+        owner only by fingerprint — the token never leaves."""
+        digest = self._digest(owner_token)
+        with self._lock:
+            entry = self._entries.get(digest)
+            if entry is None:
+                return None
+            return {"format": SYNC_FORMAT, "version": SYNC_VERSION,
+                    "owner_fingerprint": digest[:12],
+                    "updated_at": _iso(entry["updated_at"]),
+                    "profile": copy.deepcopy(entry["profile"])}
+
+    def import_sync(self, owner_token, document) -> dict:
+        """Merge a sync document (e.g. exported on another
+        device) into the owner's stored profile under the sync
+        conflict rules. The document must name this token's
+        fingerprint (owner_mismatch). With no stored profile the
+        document's profile is adopted as-is. Returns
+        ``{profile, conflicts, meta}``."""
+        digest = self._digest(owner_token)
+        incoming = validate_sync_document(document)
+        if incoming["owner_fingerprint"] != digest[:12]:
+            raise ValueError("owner_mismatch")
+        with self._lock:
+            entry = self._entries.get(digest)
+            if entry is None:
+                merged, conflicts = incoming["profile"], []
+            else:
+                local_document = {
+                    "format": SYNC_FORMAT, "version": SYNC_VERSION,
+                    "owner_fingerprint": digest[:12],
+                    "updated_at": _iso(entry["updated_at"]),
+                    "profile": entry["profile"]}
+                resolved = resolve_profile_sync(local_document, document)
+                merged, conflicts = resolved["profile"], \
+                    resolved["conflicts"]
+            entry = {"profile": merged, "updated_at": self._clock()}
+            self._entries[digest] = entry
+            self._entries.move_to_end(digest)
+            while len(self._entries) > self.max_profiles:
+                self._entries.popitem(last=False)
+            self._save()
+            return {"profile": copy.deepcopy(merged),
+                    "conflicts": conflicts,
+                    "meta": self._meta(digest, entry)}

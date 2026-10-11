@@ -195,7 +195,12 @@ tastepilot/
                stored), additive merges under the learner's caps,
                bounded, clearable by its owner, and file-persistent
                across restarts when a path is given
-               (TASTEPILOT_PROFILE_FILE), exactly like the share store
+               (TASTEPILOT_PROFILE_FILE), exactly like the share store;
+               a profile also travels between stores as a profile
+               sync document (export_sync / import_sync) merged
+               under deterministic conflict rules — newer document
+               wins, counts take the maximum — with every conflict
+               reported, never silently resolved
   diff.py      plan comparison: two plans diffed item by item
                (keyed by entity + domain + leg, so a move between
                legs reads as remove + add) — added/removed/kept
@@ -564,6 +569,24 @@ baked into the image or the repo.
   result's `learning` field reports `stored_applied`; the
   owner can read or clear their profile at any time, and one
   owner's profile never affects another's ranking.
+* That profile also syncs between devices and servers:
+  profile sync (`GET /api/profile/export`, `POST
+  /api/profile/import`, `tastepilot profile --export /
+  --import-file`, the profile panel's export/import controls)
+  carries the profile as a portable document — format, version,
+  the owner's fingerprint (never the token), an updated-at
+  stamp, and the profile itself, shape-gated and clamped to the
+  learner's caps on entry. Merging two copies is deliberately
+  NOT the additive lesson merge: two devices that learned
+  independently hold overlapping history, so a weight both
+  sides hold with different values is a conflict resolved by
+  rule (the newer document wins; a timestamp tie goes to the
+  larger absolute weight, then the larger value) and the
+  counts take the element-wise maximum, so shared history is
+  never double-counted. Every conflict is listed in the import
+  result with both values, the resolved value, and the rule
+  that decided it; a document naming another owner's
+  fingerprint is refused (`owner_mismatch`).
 * Anyone holding a plan JSON can re-verify it in the browser: the UI's
   "Verify a shared plan" panel posts it to `POST /api/verify`, which
   recomputes the hash chain and every per-item checker verdict from the

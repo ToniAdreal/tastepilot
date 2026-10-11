@@ -157,7 +157,16 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    it survives restarts, clearable by its owner at any time,
    and folded into later suggestion rankings for that token —
    reported as a stored profile applied — while other owners'
-   rankings are never touched. And any two plans can be compared
+   rankings are never touched. The profile also travels
+   between devices and servers as a sync document (export /
+   import over the API, the CLI, and the profile panel): two
+   copies of one owner's profile merge under deterministic
+   conflict rules — the newer document wins a disputed weight,
+   a timestamp tie goes to the larger absolute weight, and the
+   counts take the maximum so the shared history two devices
+   both learned from is never double-counted — with every
+   conflict reported in the import result, and a document
+   naming another owner refused outright. And any two plans can be compared
    directly: the diff names the items one plan has that the other
    lacks, the affinity changes on the slots both keep, and the
    alternatives and schedule changes between them — with both
@@ -509,10 +518,14 @@ stops being a liability and becomes pure upside.
 - Cloud-synced, account-backed preference profiles — the
   built token-owned persistent profile (derived only from
   sealed swap histories, stored beside the token-owned share
-  data) graduating to a synced account artefact that follows
-  the user across devices without them carrying a token, with
-  conflict resolution when two devices save lessons offline,
-  instead of the single-server store the built profile uses.
+  data) and its built sync documents with deterministic
+  conflict resolution (newer document wins a disputed weight,
+  counts take the maximum so shared history is never counted
+  twice, every conflict reported) graduating to a hosted sync
+  service behind an account, so the profile follows the user
+  across devices without them carrying a token or a document,
+  instead of the single-server store and hand-carried exports
+  the built profile uses.
 - Hosted push-notification accounts for calendar
   subscriptions — the built generic webhooks (a subscriber
   registers an endpoint on their multi-timeline feed;
