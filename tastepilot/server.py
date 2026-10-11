@@ -361,6 +361,18 @@ Routes:
                                (management stays on the per-feed
                                routes); webhooks on unowned or other
                                owners' feeds never appear.
+  GET  /api/subscriber/feeds   the caller's feed directory: every
+                               live calendar subscription — single-
+                               timeline feeds and multi-timeline
+                               feeds alike — that the presenting
+                               token owns, each with its stable
+                               URLs (leg-level and paced), expiry,
+                               and its verdict recomputed at list
+                               time. Requires an ``X-Owner-Token``
+                               header; read-only (management stays
+                               on the per-feed routes); feeds owned
+                               by another token, or by no token,
+                               never appear.
   GET  /api/profile            the caller's persistent preference
                                profile: requires an ``X-Owner-Token``
                                header; returns the stored profile (the
@@ -1211,6 +1223,24 @@ class TimelineFeedStore:
     def revoke(self, feed_id: str, owner_token=None) -> bool:
         return self.revoke_status(feed_id, owner_token) == "revoked"
 
+    def list_for_owner(self, owner_token) -> list[dict]:
+        """Feed metadata for every live feed the token owns,
+        oldest first. An absent or invalid token owns nothing
+        (empty list) — and unowned feeds never appear in any
+        owner's directory, exactly as unowned shares never
+        appear in any owner's dashboard. Metadata only: the
+        stored payload (and with it the token or its full
+        hash) is never part of a row."""
+        digest = owner_token_hash(owner_token)
+        if digest is None:
+            return []
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            return [self._meta(feed_id, entry)
+                    for feed_id, entry in self._entries.items()
+                    if entry.get("owner_hash") == digest]
+
 
 def multi_feed_etag(payload: dict, version: int) -> str:
     """Change detector for a multi-timeline feed: a truncated
@@ -1751,6 +1781,25 @@ class MultiTimelineFeedStore:
                         mine[-1].get("status") if mine else None
                     out.append(row)
             return out
+
+    def list_for_owner(self, owner_token) -> list[dict]:
+        """Feed metadata for every live multi-feed the token
+        owns, oldest first. An absent or invalid token owns
+        nothing (empty list) — and unowned feeds never appear
+        in any owner's directory, exactly as unowned shares
+        never appear in any owner's dashboard. Metadata only:
+        the stored payload, its webhooks' URLs and secrets,
+        and the token or its full hash are never part of a
+        row."""
+        digest = owner_token_hash(owner_token)
+        if digest is None:
+            return []
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            return [self._meta(feed_id, entry)
+                    for feed_id, entry in self._entries.items()
+                    if entry.get("owner_hash") == digest]
 
     def webhook_entries(self, feed_id: str) -> list:
         """The raw webhook entries (URLs included) for delivery.
@@ -2350,6 +2399,76 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 "feeds": len({r["feed_id"] for r in rows}),
                 "owner_fingerprint": owner_fingerprint(token)})
 
+        def _handle_subscriber_feeds(self):
+            """The subscriber feed directory: every live
+            calendar subscription the presenting token owns —
+            single-timeline feeds and multi-timeline feeds in
+            one view — each row carrying its stable URLs and
+            the verdict recomputed from its stored timeline at
+            list time, so a feed whose branch was tampered
+            with lists as FAIL, never as the verdict it was
+            created with. Read-only: listing grants nothing
+            and changes nothing; management (update, revoke)
+            stays on the per-feed routes under the same owner
+            rule. No token → 401; a malformed one → 400."""
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            if token is None:
+                self._send_json(401, {"error": "owner token required"})
+                return
+            feeds = []
+            for meta in feed_store.list_for_owner(token):
+                entry = dict(meta)
+                feed_id = meta["feed_id"]
+                entry["url"] = f"/api/feeds/{feed_id}.ics"
+                entry["feed_url"] = f"/api/feeds/{feed_id}.ics"
+                entry["paced_url"] = \
+                    f"/api/feeds/{feed_id}.ics?format=ics-days"
+                payload = feed_store.get(feed_id)
+                all_passed = None
+                if payload is not None:
+                    try:
+                        doc = branch_timeline(payload["base"],
+                                              payload["branches"])
+                        all_passed = bool(
+                            doc["summary"]["all_passed"])
+                    except (ValueError, KeyError, TypeError,
+                            AttributeError, IndexError):
+                        all_passed = None
+                entry["all_passed"] = all_passed
+                feeds.append(entry)
+            multi_feeds = []
+            for meta in multi_feed_store.list_for_owner(token):
+                entry = dict(meta)
+                feed_id = meta["feed_id"]
+                entry["url"] = f"/api/multi-feeds/{feed_id}.ics"
+                entry["feed_url"] = f"/api/multi-feeds/{feed_id}.ics"
+                entry["paced_url"] = \
+                    f"/api/multi-feeds/{feed_id}.ics?format=ics-days"
+                entry["changes_url"] = \
+                    f"/api/multi-feeds/{feed_id}/changes"
+                entry["notifications_url"] = \
+                    f"/api/multi-feeds/{feed_id}/notifications"
+                payload = multi_feed_store.get(feed_id)
+                all_passed, summaries = None, []
+                if payload is not None:
+                    try:
+                        _content, all_passed, summaries = \
+                            export_multi_timeline_ics(
+                                payload["timelines"])
+                    except (ValueError, KeyError, TypeError,
+                            AttributeError, IndexError):
+                        all_passed, summaries = None, []
+                entry["all_passed"] = all_passed
+                entry["timelines_summary"] = summaries
+                multi_feeds.append(entry)
+            self._send_json(200, {
+                "feeds": feeds, "multi_feeds": multi_feeds,
+                "count": len(feeds) + len(multi_feeds),
+                "owner_fingerprint": owner_fingerprint(token)})
+
         def _profile_token(self):
             """Owner-token gate for the profile routes, mirroring
             the shares dashboard: no token → 401, malformed → 400.
@@ -2456,6 +2575,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 self._handle_shares()
             elif path == "/api/subscriber/webhooks":
                 self._handle_subscriber_webhooks()
+            elif path == "/api/subscriber/feeds":
+                self._handle_subscriber_feeds()
             elif path.startswith("/api/share/"):
                 rest = unquote(path[len("/api/share/"):])
                 want_verify = rest.endswith("/verify")

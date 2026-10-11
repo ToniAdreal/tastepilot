@@ -948,6 +948,23 @@ baked into the image or the repo.
   feeds, never appear in it; listings carry host labels
   only, never a stored URL or secret. The demo page's
   "Your webhook subscriptions" panel renders it.
+  Subscriptions themselves have the same cross-feed
+  view: the subscriber feed directory
+  (`GET /api/subscriber/feeds`, owner token required)
+  lists every live calendar subscription the presenting
+  token owns — single-timeline feeds and multi-timeline
+  feeds in one response — each row with its stable feed
+  URLs (leg-level and paced), expiry, branch/timeline
+  names, and the verdict recomputed from its stored
+  timeline at list time, so a feed whose branch no
+  longer verifies lists as FAIL, never as the verdict
+  it was created with. The directory is read-only —
+  update and revocation stay on the per-feed routes
+  under the same owner rule — and feeds owned by
+  another token, or by no token, never appear in it;
+  rows carry metadata only, never a stored payload.
+  The demo page's "Your calendar subscriptions" panel
+  renders it.
   Webhooks are
   listed (`GET .../webhooks`, host labels only) and removed
   (`DELETE .../webhooks/<id>`) under the same owner rule, and

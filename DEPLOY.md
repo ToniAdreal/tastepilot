@@ -520,6 +520,19 @@ the reason recorded (the demo never goes down because the LLM did).
     --bundle bundle.json --format markdown` exits `0` on a
     clean bundle and `1` on a tampered one, the document
     written either way.
+41. Feed directory probe: create a single-timeline feed
+    and a multi-timeline feed with an owner token, then
+    `GET /api/subscriber/feeds` (the subscriber feed
+    directory; the demo page's "Your calendar
+    subscriptions" panel) with that token → `200` listing
+    both feeds with their `feed_url` / `paced_url`,
+    expiry, and `all_passed: true`; with no token →
+    `401`, with a malformed token → `400`, and with a
+    different token → `200` with `count: 0`. A feed
+    created from a plan with one affinity edited lists
+    with `all_passed: false`. An unowned feed appears in
+    no token's directory, and no row carries a stored
+    payload or the token (or its full hash).
 
 ## Notes
 

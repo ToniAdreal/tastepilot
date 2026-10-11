@@ -139,6 +139,20 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
   <div style="margin-top:.5rem"><button type="button" id="subscriberbtn">List my webhook subscriptions</button></div>
   <div id="subscriberout" class="meta" style="margin-top:.4rem"></div>
 </section>
+<section id="feedbox" aria-label="Your calendar subscriptions">
+  <h2 style="margin-top:0">Your calendar subscriptions</h2>
+  <p class="meta">Calendar feeds are created one at a time above —
+  this feed directory is the cross-feed view: every live single-
+  timeline and multi-timeline subscription this browser's owner
+  token owns, with its stable feed URLs (leg-level and paced), its
+  expiry, and its verification recomputed at list time — a feed
+  whose branch no longer verifies lists as FAIL. Feeds owned by
+  another token — or by no token — never appear here. Listing is
+  read-only; update or revoke each feed from its own controls
+  above.</p>
+  <div style="margin-top:.5rem"><button type="button" id="feeddirbtn">List my calendar subscriptions</button></div>
+  <div id="feeddirout" class="meta" style="margin-top:.4rem"></div>
+</section>
 <script>
 const statusEl = document.getElementById('status');
 const out = document.getElementById('out');
@@ -336,6 +350,31 @@ document.getElementById('subscriberbtn').addEventListener('click', async () => {
       (w.paused ? ', PAUSED' : '') +
       ' — deliveries: ' + w.deliveries + ' (' + w.delivered + ' delivered, ' +
       w.failed + ' failed, ' + w.skipped + ' skipped)').join(' | ');
+});
+
+document.getElementById('feeddirbtn').addEventListener('click', async () => {
+  const out = document.getElementById('feeddirout');
+  out.textContent = 'Loading…';
+  const res = await fetch('/api/subscriber/feeds', {headers: ownerHeaders()});
+  const data = await res.json();
+  if (!res.ok) { out.textContent = 'Error: ' + (data.error || res.status); return; }
+  if (!data.count) {
+    out.textContent = 'No calendar subscriptions owned by this browser yet — ' +
+      'create a timeline or multi-timeline subscription above first.';
+    return;
+  }
+  const verdict = v => v === true ? 'PASS' : (v === false ? 'FAIL' : 'unverified');
+  const singles = (data.feeds || []).map(f =>
+    'timeline feed ' + f.feed_id.slice(0, 8) + ' (' +
+    ['As planned'].concat(f.branches || []).join(' · ') + ') — ' +
+    verdict(f.all_passed) + ', expires ' + f.expires_at + ', ' + f.feed_url);
+  const multis = (data.multi_feeds || []).map(f =>
+    'multi-timeline feed ' + f.feed_id.slice(0, 8) + ' (' +
+    (f.timelines || []).join(' · ') + ', v' + f.version + ') — ' +
+    verdict(f.all_passed) + ', expires ' + f.expires_at + ', ' + f.feed_url);
+  out.textContent = data.count + ' calendar subscription(s) owned by this browser ' +
+    '(fingerprint ' + data.owner_fingerprint + '): ' +
+    singles.concat(multis).join(' | ');
 });
 
 document.getElementById('profileclearbtn').addEventListener('click', async () => {

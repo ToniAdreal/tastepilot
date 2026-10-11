@@ -345,6 +345,17 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    feed's log — read-only, host labels only, and
    webhooks on unowned or other owners' feeds never
    appear in it.
+   And a subscriber can see every one of their
+   calendar subscriptions at once: the subscriber
+   feed directory (`GET /api/subscriber/feeds`, owner
+   token required) lists each live single-timeline
+   and multi-timeline feed that token owns, with its
+   stable feed URLs (leg-level and paced), expiry,
+   branch/timeline names, and the verdict recomputed
+   from its stored timeline at list time — a feed
+   whose branch no longer verifies lists as FAIL —
+   read-only, metadata only, and feeds owned by
+   another token, or by no token, never appear in it.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -526,7 +537,10 @@ stops being a liability and becomes pure upside.
   the subscriber resumes it or a half-open probe — the
   next update push after a one-hour cooldown — revives it,
   and a subscriber directory listing a token's webhooks
-  across all of its feeds with their delivery tallies)
+  across all of its feeds with their delivery tallies,
+  and a feed directory listing a token's single- and
+  multi-timeline subscriptions with their recomputed
+  verdicts)
   graduating to a hosted notification service with
   subscriber accounts — managed endpoints, email delivery,
   and provider-side delivery guarantees — instead of
