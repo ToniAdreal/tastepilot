@@ -927,6 +927,62 @@ async function doTimeline(basePlan, okBranches, outEl) {
   });
   outEl.appendChild(rotateBtn);
   outEl.appendChild(rotateOut);
+  // Endpoint URLs rotate in place, too: when a
+  // subscriber's endpoint moves (a new domain, a rotated
+  // tunnel), the webhook is pointed at the new URL without
+  // removing and re-registering it — its signing secret,
+  // pause state, failure count, and registration moment
+  // survive, and only its id changes (the id is the URL's
+  // hash). Rotation itself delivers nothing; the next
+  // update push goes to the new endpoint.
+  const rotateUrlBtn = document.createElement('button');
+  rotateUrlBtn.type = 'button';
+  rotateUrlBtn.className = 'webhookrotateurlbtn';
+  rotateUrlBtn.textContent = 'Rotate webhook endpoints';
+  const rotateUrlOut = document.createElement('div');
+  rotateUrlOut.className = 'meta webhookrotateurlout';
+  rotateUrlBtn.addEventListener('click', async () => {
+    if (!multiFeedId) {
+      rotateUrlOut.textContent =
+        'Create the multi-timeline subscription first.';
+      return;
+    }
+    const r = await fetch('/api/multi-feeds/' + multiFeedId + '/webhooks',
+      {headers: {...ownerHeaders()}});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      rotateUrlOut.textContent =
+        'Webhook error: ' + (d.error || r.status);
+      return;
+    }
+    if (!(d.webhooks || []).length) {
+      rotateUrlOut.textContent = 'No webhooks on this feed.';
+      return;
+    }
+    const lines = [];
+    for (const w of d.webhooks) {
+      const next = window.prompt(
+        'New endpoint URL for the webhook at ' + w.host +
+        ' (leave empty to keep it):', '');
+      if (!next) { lines.push(w.host + ' kept'); continue; }
+      const rr = await fetch('/api/multi-feeds/' + multiFeedId +
+        '/webhooks/' + w.webhook_id + '/rotate-url',
+        {method: 'POST',
+         headers: {'Content-Type': 'application/json',
+                   ...ownerHeaders()},
+         body: JSON.stringify({url: next})});
+      const dd = await rr.json().catch(() => ({}));
+      lines.push(w.host + (rr.ok
+        ? ' rotated to ' + dd.host + ' at ' + dd.url_rotated_at +
+          ' (new webhook id ' + dd.webhook_id + ')'
+        : ' rotation failed: ' + (dd.error || rr.status)));
+    }
+    rotateUrlOut.textContent = 'Webhooks: ' + lines.join('; ') +
+      '. Secrets, pause state, and failure counts survive an ' +
+      'endpoint rotation.';
+  });
+  outEl.appendChild(rotateUrlBtn);
+  outEl.appendChild(rotateUrlOut);
 }
 
 async function doExplore(basePlan, branches, resultsEl) {

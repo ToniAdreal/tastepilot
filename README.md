@@ -759,7 +759,31 @@ baked into the image or the repo.
   "Rotate webhook signing secrets" button rotates every
   signed webhook on the feed and shows each new secret
   once, in its output, for the subscriber to save.
-  Webhooks are
+  A webhook's endpoint rotates in place, too:
+  `POST .../webhooks/<id>/rotate-url` (owner rule as
+  for the feed) points the webhook at a new endpoint
+  URL — `{"url": …}` is required and validated exactly
+  as at registration (categorised errors, the URL never
+  echoed) — without removing and re-registering it.
+  The webhook id is recomputed from the new URL (the id
+  is the URL's hash everywhere), the rotation moment is
+  stamped (`url_rotated_at` in listings), and the
+  signing secret, pause state, failure count, and
+  registration moment all survive; a paused webhook can
+  be rotated (it stays paused), and rotation itself
+  delivers nothing — the next update push simply goes
+  to the new endpoint, still signed with the surviving
+  secret. Rotating onto a URL another webhook on the
+  feed already holds is refused (`webhook_exists`):
+  one endpoint, one registration. Rotating to the
+  current URL is idempotent and stamps nothing.
+  Delivery records are never edited, so records from
+  before a rotation keep the old id and host label as
+  the audit trail (and can no longer be redelivered —
+  their id names no current registration). The timeline
+  view's "Rotate webhook endpoints" button asks for a
+  new URL per webhook and reports each rotation's new
+  host, moment, and id. Webhooks are
   listed (`GET .../webhooks`, host labels only) and removed
   (`DELETE .../webhooks/<id>`) under the same owner rule, and
   persist with the feed in file mode. Bundles expire after 30 days

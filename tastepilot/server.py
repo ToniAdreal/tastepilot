@@ -220,6 +220,26 @@ Routes:
                                stops verifying immediately;
                                pause state and failure count
                                are untouched.
+  POST /api/multi-feeds/<id>/webhooks/<webhook_id>/rotate-url
+                               point a webhook at a new
+                               endpoint URL in place (owner
+                               rule as for the feed):
+                               {"url": ...} is required and
+                               validated exactly as at
+                               registration. The webhook's id
+                               is recomputed from the new URL;
+                               its signing secret, pause
+                               state, failure count, and
+                               registration moment survive,
+                               and the rotation moment is
+                               stamped (url_rotated_at).
+                               Rotating onto a URL already
+                               registered on the feed is
+                               refused; rotating to the
+                               current URL is idempotent.
+                               Delivery records are never
+                               edited — they keep the old id
+                               and host as the audit trail.
   GET  /api/multi-feeds/<id>/notifications
                                the feed's capped push delivery
                                log: one record per delivery
@@ -1146,6 +1166,12 @@ class MultiTimelineFeedStore:
         row["paused_at"] = paused_at \
             if row["paused"] and _epoch_of(paused_at) is not None \
             else None
+        # Endpoint-rotation provenance, coerced the same way:
+        # only a parseable moment survives; a legacy row has
+        # never been rotated and reads as None.
+        rotated_at = row.get("url_rotated_at")
+        row["url_rotated_at"] = rotated_at \
+            if _epoch_of(rotated_at) is not None else None
         return row
 
     def __init__(self, max_feeds: int = MAX_MULTI_TIMELINE_FEEDS,
@@ -1445,7 +1471,10 @@ class MultiTimelineFeedStore:
                 else 0,
                 "paused_reason": reason,
                 "paused_at": paused_at,
-                "probe_eligible_at": probe_eligible_at}
+                "probe_eligible_at": probe_eligible_at,
+                "url_rotated_at": webhook.get("url_rotated_at")
+                if isinstance(webhook.get("url_rotated_at"), str)
+                else None}
 
     def add_webhook(self, feed_id: str, url, owner_token=None,
                     signing_secret="generate", secret_out=None):
@@ -1482,7 +1511,8 @@ class MultiTimelineFeedStore:
                        "host": webhook_host_label(url),
                        "created_at": _iso(self._clock()),
                        "paused": False, "consecutive_failures": 0,
-                       "paused_reason": None, "paused_at": None}
+                       "paused_reason": None, "paused_at": None,
+                       "url_rotated_at": None}
             generated = signing_secret == "generate"
             secret = generate_signing_secret() if generated \
                 else signing_secret
@@ -1573,6 +1603,63 @@ class MultiTimelineFeedStore:
                 if generated and secret_out is not None:
                     secret_out["signing_secret"] = \
                         webhook["signing_secret"]
+            self._save()
+            return "ok", self._webhook_meta(webhook)
+
+    def rotate_webhook_url(self, feed_id: str, webhook_id: str,
+                           new_url, owner_token=None):
+        """(status, meta): point one webhook at a new endpoint
+        URL in place, under the feed's owner rule (via the
+        webhook gate). Status is ok / not_found (feed) /
+        forbidden / webhook_not_found / webhook_exists (the
+        new URL is already registered on this feed under a
+        different webhook — two registrations for one endpoint
+        would double-deliver every push). ``new_url`` is
+        validated exactly as at registration, here, before
+        any assignment, so a categorised ValueError leaves the
+        webhook byte-unchanged. Rotating to the webhook's
+        current URL is idempotent: ok, and nothing is stamped.
+
+        A real rotation updates the stored URL and host label,
+        recomputes the webhook id from the new URL (the id is
+        the URL's hash everywhere in this store — listings,
+        delivery records, and redelivery all key on it), and
+        stamps ``url_rotated_at``. Everything else about the
+        webhook survives: the signing secret (a secret signs
+        payloads, not addresses), the pause state and its
+        provenance, the consecutive-failure count, and
+        created_at — the registration moment is when the
+        subscription began, not when its endpoint last moved.
+        A paused webhook can be rotated (it stays paused).
+        Rotation is a management act, not a delivery: nothing
+        is sent to either endpoint. Delivery records are never
+        edited — records from before the rotation keep the old
+        webhook id and host label as the audit trail, which
+        also means a failed pre-rotation record can no longer
+        be redelivered (its webhook id names no current
+        registration); the missed change itself is superseded
+        by the next update push to the new endpoint."""
+        with self._lock:
+            entry, status = self._webhook_gate(feed_id, owner_token)
+            if entry is None:
+                return status, None
+            webhook = next(
+                (w for w in entry.get("webhooks", [])
+                 if w.get("webhook_id") == webhook_id), None)
+            if webhook is None:
+                return "webhook_not_found", None
+            url = validate_webhook_url(new_url)
+            if url == webhook.get("url"):
+                return "ok", self._webhook_meta(webhook)
+            new_id = webhook_id_for(url)
+            for other in entry.get("webhooks", []):
+                if other is not webhook \
+                        and other.get("webhook_id") == new_id:
+                    return "webhook_exists", None
+            webhook["url"] = url
+            webhook["host"] = webhook_host_label(url)
+            webhook["webhook_id"] = new_id
+            webhook["url_rotated_at"] = _iso(self._clock())
             self._save()
             return "ok", self._webhook_meta(webhook)
 
@@ -3373,6 +3460,77 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 response["signing_secret"] = secret_out["signing_secret"]
             self._send_json(200, response)
 
+        def _handle_webhook_rotate_url(self, feed_id, webhook_id):
+            """Point one webhook at a new endpoint URL in place:
+            POST /api/multi-feeds/<id>/webhooks/<webhook_id>/
+            rotate-url {"url": ...}. Until now a subscriber
+            whose endpoint moved (a new domain, a rotated
+            tunnel) had one remedy — remove the webhook and
+            register it again, resetting its pause state,
+            failure count, and registration moment, and
+            orphaning its signing secret. Rotation is the
+            managed-endpoint remedy: the URL is validated
+            exactly as at registration (categorised 400s, the
+            URL itself never echoed beyond its category), the
+            webhook id is recomputed from the new URL, and the
+            secret, pause state, failure count, and created_at
+            all survive; the response meta names the new host
+            label and the rotation moment. Rotating onto a URL
+            another webhook on the feed already holds is a 400
+            (webhook_exists) — one endpoint, one registration.
+            Rotation never delivers anything (owner rule as
+            for the feed)."""
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_WEBHOOK_BODY_BYTES:
+                self._send_json(413, {"error": "request body too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            if not isinstance(payload, dict) or \
+                    not isinstance(payload.get("url"), str):
+                self._send_json(
+                    400, {"error": "webhook failed: bad_webhook_url"})
+                return
+            try:
+                url = validate_webhook_url(payload["url"])
+            except ValueError as exc:  # categorised, never echoes URL
+                self._send_json(
+                    400, {"error": f"webhook failed: {exc}"})
+                return
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            status, meta = multi_feed_store.rotate_webhook_url(
+                feed_id, webhook_id, url, owner_token=token)
+            if status == "not_found":
+                self._send_json(404, {"error": "unknown multi-feed id"})
+                return
+            if status == "forbidden":
+                self._send_json(
+                    403, {"error": "only the owner can manage "
+                                   "webhooks for this multi-feed"})
+                return
+            if status == "webhook_not_found":
+                self._send_json(404, {"error": "unknown webhook id"})
+                return
+            if status == "webhook_exists":
+                self._send_json(
+                    400, {"error": "webhook failed: webhook_exists"})
+                return
+            self._send_json(200, {**meta, "feed_id": feed_id})
+
         def _handle_notifications(self, feed_id):
             """The feed's push delivery log: one record per
             delivery attempt (registration pings + update pushes),
@@ -3560,6 +3718,11 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                         and parts[3] == "rotate-secret" \
                         and parts[0] and parts[2]:
                     self._handle_webhook_rotate_secret(
+                        parts[0], parts[2])
+                elif len(parts) == 4 and parts[1] == "webhooks" \
+                        and parts[3] == "rotate-url" \
+                        and parts[0] and parts[2]:
+                    self._handle_webhook_rotate_url(
                         parts[0], parts[2])
                 elif rest.endswith("/webhooks") and \
                         "/" not in rest[:-len("/webhooks")]:

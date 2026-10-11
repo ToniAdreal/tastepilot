@@ -253,6 +253,16 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    secret stops verifying the moment the new one is
    stored, without the webhook losing its id, pause
    state, or failure count to a remove-and-re-register.
+   Endpoints are maintainable the same way: a webhook's
+   URL rotates in place (`rotate-url`) — validated
+   exactly as at registration, the id recomputed from
+   the new URL, the rotation moment stamped — and the
+   signing secret, pause state, failure count, and
+   registration moment all survive, so an endpoint
+   migration costs the subscriber nothing but the edit;
+   rotating onto an already-registered URL is refused,
+   and delivery records keep the old id and host as the
+   audit trail.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -396,7 +406,10 @@ stops being a liability and becomes pure upside.
   deliveries HMAC-signed with a per-webhook secret the
   subscriber supplies or has generated and shown once —
   a secret that also rotates in place, the old one
-  stopping verifying the moment the new one is stored —
+  stopping verifying the moment the new one is stored,
+  and an endpoint URL that likewise rotates in place,
+  the id recomputed from the new URL while the secret,
+  pause state, and registration moment survive —
   and a webhook auto-paused after consecutive failures until
   the subscriber resumes it or a half-open probe — the
   next update push after a one-hour cooldown — revives it)

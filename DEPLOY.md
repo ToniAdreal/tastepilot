@@ -335,6 +335,22 @@ the reason recorded (the demo never goes down because the LLM did).
     carry no signature header. On an owned feed,
     rotation without the owner's token → `403`; an
     unknown webhook id → `404`.
+29. Webhook endpoint rotation probe (an endpoint URL is
+    replaced in place): register a webhook against
+    receiver A and note its id, `created_at`, and
+    signing secret; an update push lands on A.
+    `POST .../webhooks/<webhook_id>/rotate-url` with
+    `{"url": <receiver B>}` → `200` with a new
+    `webhook_id` (the hash of B's URL), B's host label,
+    a stamped `url_rotated_at`, the same `created_at`,
+    and `signed: true`; the response never contains
+    B's full URL. The next update push lands on B (and
+    verifies under the same signing secret); A receives
+    nothing more. Rotating another webhook onto B's URL
+    → `400` (`webhook_exists`); rotating to the current
+    URL → `200` with `url_rotated_at` unchanged. On an
+    owned feed, rotation without the owner's token →
+    `403`; an unknown webhook id → `404`.
 
 ## Notes
 

@@ -76,6 +76,16 @@ instead of a named service's API:
   the same route with ``/pause``), which clears the count;
   resuming is the subscriber's deliberate act, exactly like
   a feed update renewing a feed's expiry.
+- a webhook's endpoint is maintainable, not just its
+  secret: the feed store can point a webhook at a new URL
+  in place (``rotate_webhook_url``) — the id is recomputed
+  from the new URL, the moment is stamped, and the signing
+  secret, pause state, failure count, and registration
+  moment all survive, so an endpoint migration costs the
+  subscriber nothing but the edit. Rotating onto a URL
+  another webhook on the feed already holds is refused,
+  and delivery records are never edited: pre-rotation
+  records keep the old id and host as the audit trail.
 - an auto-pause is a circuit breaker, not a life sentence:
   the store stamps it with its reason (``auto``) and the
   moment it paused, and after ``PAUSE_COOLDOWN_SECONDS``
