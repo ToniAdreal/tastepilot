@@ -106,7 +106,12 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    that creates a link presents an owner token (generated locally,
    kept in localStorage; the server stores only its hash), and only
    that token can list the owner's links — each shown with its
-   recomputed verdict — or revoke them.
+   recomputed verdict — or revoke them. And a plan leaves the app
+   as a take-away itinerary: Markdown, plain-text, and iCalendar
+   exports (one all-day event per dated leg; a dateless plan is
+   refused rather than assigned invented dates), each carrying a
+   verification banner recomputed at export time — a tampered
+   plan exports as NOT VERIFIED, never clean.
 
 **[FINALIZE: one real-mode example — a plan produced against the live
 Qloo API, with its item count and checker verdict.]**
@@ -182,6 +187,10 @@ stops being a liability and becomes pure upside.
   of the built token-owned share management, so a user's link list
   and dashboard follow them between browsers instead of living in
   one browser's localStorage.
+- Native handoffs on top of the built file exports: adding an
+  itinerary to a calendar or maps app in one tap from the user's
+  own account, instead of downloading the iCalendar file the
+  exporter already produces.
 
 ## Built with
 

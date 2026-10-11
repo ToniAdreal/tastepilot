@@ -35,6 +35,14 @@ Routes:
                                verdict for the stored plan — exactly the
                                /api/verify report, plus the share id
                                and the link's expiry.
+  POST /api/export?format=...  a plan JSON (same shape/gates as
+                               /api/verify) -> the take-away itinerary
+                               in markdown (default), text, or ics,
+                               rendered by tastepilot.export with its
+                               verification recomputed — a tampered
+                               plan exports with a NOT VERIFIED banner,
+                               never a clean one. ics on a plan with no
+                               dated leg -> 400.
   GET  /api/shares             the caller's own share links (dashboard):
                                requires an ``X-Owner-Token`` header and
                                returns only the shares that token owns —
@@ -113,10 +121,11 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from .checker import check_plan, item_reports
 from .evidence import qloo_responses, verify_chain
+from .export import export_plan, media_for
 
 STATIC = Path(__file__).resolve().parent / "static"
 
@@ -468,7 +477,7 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
         def log_message(self, *args):  # keep demo logs clean
             pass
 
-        def _send(self, code, body: bytes, ctype: str):
+        def _send(self, code, body: bytes, ctype: str, extra=None):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
@@ -476,6 +485,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 self.send_header(name, value)
             if ctype.startswith("application/json"):
                 self.send_header("Cache-Control", "no-store")
+            for name, value in (extra or {}).items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(body)
 
@@ -625,6 +636,51 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             # never read from that field.
             self._send_json(200, report)
 
+        def _handle_export(self, fmt: str):
+            """Render a submitted plan as a take-away itinerary.
+
+            Same untrusted-input gates as /api/verify (size cap +
+            shape validation). The rendered banner carries the
+            recomputed verdict — a tampered plan exports as NOT
+            VERIFIED, never clean — and the response is a download
+            (Content-Disposition) with no-store, like every API body.
+            """
+            try:
+                ctype, ext = media_for(fmt)
+            except ValueError:
+                self._send_json(400, {"error": "unsupported export format"})
+                return
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_VERIFY_BODY_BYTES:
+                self._send_json(413, {"error": "plan too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            error = validate_plan_payload(payload)
+            if error is not None:
+                self._send_json(400, {"error": error})
+                return
+            try:
+                content, _verified = export_plan(payload, fmt)
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            self._send(200, content.encode("utf-8"), ctype, extra={
+                "Cache-Control": "no-store",
+                "Content-Disposition":
+                    f'attachment; filename="tastepilot-itinerary.{ext}"'})
+
         def _handle_share(self):
             """Store a plan under its content-addressed share id.
 
@@ -671,6 +727,11 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             path = urlparse(self.path).path
             if path == "/api/verify":
                 self._handle_verify()
+                return
+            if path == "/api/export":
+                fmt = parse_qs(urlparse(self.path).query).get(
+                    "format", ["markdown"])[0]
+                self._handle_export(fmt)
                 return
             if path == "/api/share":
                 self._handle_share()

@@ -66,6 +66,12 @@ the reason recorded (the demo never goes down because the LLM did).
    Without `TASTEPILOT_SHARE_FILE`
    links live in the server process — a restart clears them; with it
    set (on a persistent volume) they survive restarts.
+7. Export probe: export a generated plan (the "Export itinerary as"
+   row, or `POST /api/export?format=markdown` with a sample plan) →
+   the download carries a `Verification: PASS` banner; export a
+   tampered copy → the banner reads `NOT VERIFIED`. iCalendar export
+   of a dated multi-city plan yields one all-day event per leg;
+   of a dateless plan → `400 no_dated_legs`.
 
 ## Notes
 

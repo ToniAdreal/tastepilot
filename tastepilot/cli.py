@@ -8,6 +8,8 @@
   python -m tastepilot smoke [--mode real|auto|mock] [--query Q] [--domain D]
                              [--out smoke.json]
   python -m tastepilot verify --record plan.json
+  python -m tastepilot export --plan plan.json
+                             [--format markdown|text|ics] [--out file]
   python -m tastepilot serve [--host 127.0.0.1] [--port 8765]
                              [--mode mock|auto] [--llm template|nebius]
                              [--share-file shares.json]
@@ -31,6 +33,7 @@ from pathlib import Path
 from .agent import TastePilotAgent
 from .checker import check_plan
 from .evidence import verify_chain
+from .export import FORMATS as EXPORT_FORMATS, export_plan
 from .imports import fetch_import, load_import
 from .llm import NebiusExplainer, TemplateExplainer
 from .models import DOMAIN_URNS
@@ -84,6 +87,13 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("--out")
     v = sub.add_parser("verify")
     v.add_argument("--record", required=True)
+    e = sub.add_parser("export")
+    e.add_argument("--plan", required=True,
+                   help="a saved plan JSON (e.g. from plan --out)")
+    e.add_argument("--format", default="markdown",
+                   choices=list(EXPORT_FORMATS),
+                   help="itinerary format (ics needs a dated leg)")
+    e.add_argument("--out", help="write the export here instead of stdout")
     s = sub.add_parser("serve")
     s.add_argument("--host", default="127.0.0.1",
                    help="bind host (hosted deployments: 0.0.0.0)")
@@ -134,6 +144,31 @@ def main(argv: list[str] | None = None) -> int:
               f"chain_valid={report['evidence']['chain_valid']} "
               f"sealed={report['evidence']['sealed_responses']}")
         return 0 if report["passed"] else 1
+    if args.cmd == "export":
+        try:
+            plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: export failed: cannot read plan "
+                  f"({type(exc).__name__})", file=sys.stderr)
+            return 2
+        if not isinstance(plan, dict):
+            print("error: export failed: plan must be a JSON object",
+                  file=sys.stderr)
+            return 2
+        try:
+            content, verified = export_plan(plan, args.format)
+        except ValueError as exc:
+            print(f"error: export failed: {exc}", file=sys.stderr)
+            return 2
+        if args.out:
+            Path(args.out).write_text(content, encoding="utf-8")
+            print(f"export format={args.format} verified={verified} "
+                  f"out={args.out}")
+        else:
+            sys.stdout.write(content)
+        # Mirror the plan/verify contract: an unverified plan still
+        # exports (with its NOT VERIFIED banner) but exits 1.
+        return 0 if verified else 1
     if args.cmd == "verify":
         data = json.loads(Path(args.record).read_text(encoding="utf-8"))
         record = data.get("evidence", data)

@@ -82,6 +82,11 @@ tastepilot/
                links via GET /api/shares);
                hardened: input caps, security headers, bounded caches,
                leak-free 500s)
+  export.py    take-away itinerary exports (Markdown / plain text /
+               iCalendar, one all-day event per dated leg): every
+               export carries a verification banner recomputed from
+               the sealed record — a tampered plan exports as NOT
+               VERIFIED, never clean; rendering is deterministic
   smoke.py     real-mode smoke check: one search + one insights call,
                payload-shape validation, both sealed + chain re-verified
   imports.py   external taste-file imports: Spotify playlist-export JSON,
@@ -315,6 +320,23 @@ baked into the image or the repo.
   remain legacy links: link-holder revocation, and they appear in
   no owner's list. Ownership governs management only — every read
   still recomputes verification from the sealed record.
+* A plan also leaves as a take-away itinerary: `tastepilot export
+  --plan plan.json [--format markdown|text|ics] [--out file]`, the
+  demo UI's export row and verify-panel button, and
+  `POST /api/export?format=...` all render the same exporter.
+  Markdown and plain-text exports carry the request, schedule and
+  transfer warnings, per-leg domain sections (item, affinity, why,
+  evidence reference), rejected items with their reasons, and a
+  provenance block. The iCalendar export emits one all-day event
+  per dated leg (DTEND exclusive; UID and DTSTAMP derived from the
+  plan content and leg dates, so re-exporting the same plan is
+  byte-identical) and refuses a dateless plan with a categorised
+  `no_dated_legs` error instead of inventing dates. Every format
+  carries a verification banner **recomputed** from the sealed
+  record at export time: a tampered plan exports with a NOT
+  VERIFIED banner and its violations — never a clean one — and the
+  CLI mirrors the verify contract (unverified export still writes,
+  exits 1).
 
 ## Hackathon submission
 
