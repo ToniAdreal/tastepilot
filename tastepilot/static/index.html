@@ -789,9 +789,15 @@ async function doTimeline(basePlan, okBranches, outEl) {
       multiFeedId + '/notifications.' +
       (d.signing_secret
         ? ' Signing secret (shown only now — save it to verify ' +
-          'the X-TastePilot-Signature header on each push): ' +
+          'the X-TastePilot-Signature header on each push, and ' +
+          'to check its replay protection: the ' +
+          'X-TastePilot-Timestamp + X-TastePilot-Timestamp-Signature ' +
+          'headers, verified within 5 minutes of the timestamp, ' +
+          'reject a replayed push): ' +
           d.signing_secret
-        : (d.signed ? ' Pushes are HMAC-signed with your secret.'
+        : (d.signed ? ' Pushes are HMAC-signed with your secret ' +
+                      'and replay-protected (timestamped signature, ' +
+                      'verified within 5 minutes).'
                     : ' Pushes are unsigned.'));
   });
   outEl.appendChild(hookUrl);

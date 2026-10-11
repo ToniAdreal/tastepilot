@@ -716,7 +716,22 @@ baked into the image or the repo.
   registers an unsigned webhook. Delivery records carry only
   a `signed` flag — the secret never reaches a listing, a
   record, or a log, and a redelivery of a signed delivery is
-  signed with the same secret. A webhook whose endpoint
+  signed with the same secret. Signed deliveries are also
+  replay-protected: beside the legacy body signature they
+  carry `X-TastePilot-Timestamp` (the delivery's Unix time,
+  stamped once per delivery, so bounded retries of one
+  delivery share it) and `X-TastePilot-Timestamp-Signature`
+  (`sha256=…`, HMAC-SHA256 over `"<timestamp>." + body`
+  under the same secret). A subscriber who runs
+  `verify_timestamped_signature` rejects a push whose
+  timestamp is more than 300 s
+  (`SIGNATURE_TOLERANCE_SECONDS`) from now in either
+  direction — so a captured push replayed later is
+  rejected even though its body signature still verifies,
+  while the legacy header and `verify_signature` stay
+  byte-unchanged for subscribers who have not adopted
+  the timestamped check. A redelivery is a new delivery
+  and is stamped fresh. A webhook whose endpoint
   keeps failing is paused, not hammered: the store counts
   consecutive failed deliveries per webhook (a delivered
   push resets the count; the count folds in when a delivery

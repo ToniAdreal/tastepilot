@@ -231,7 +231,17 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    or has one generated and shown exactly once — so a
    receiver can prove a push genuinely came from TastePilot
    and was not altered, and a signed delivery's redelivery
-   is signed the same way. A webhook whose endpoint keeps
+   is signed the same way. Signed pushes are also
+   replay-protected: each carries an
+   `X-TastePilot-Timestamp` header and a second,
+   timestamped signature (`X-TastePilot-Timestamp-Signature`,
+   over `"<timestamp>." + body`), and a subscriber who
+   verifies that signature within five minutes of the
+   timestamp rejects a captured push replayed later —
+   even though its body signature still verifies. The
+   timestamp is stamped once per delivery, so retries
+   of one delivery share it, and a redelivery is
+   stamped fresh. A webhook whose endpoint keeps
    failing is paused, not hammered: three consecutive
    failed deliveries pause it (a delivered push resets the
    count), later pushes are recorded as skipped with their
@@ -429,7 +439,13 @@ stops being a liability and becomes pure upside.
   events it named and a filtered-out push is never
   sent to it at all, and an on-demand test push the
   subscriber can fire at any time to verify a rotated
-  endpoint or secret without forcing a feed update —
+  endpoint or secret without forcing a feed update,
+  and a timestamped second signature on every signed
+  push (`X-TastePilot-Timestamp` +
+  `X-TastePilot-Timestamp-Signature`) that lets a
+  subscriber reject a captured push replayed after a
+  five-minute window even though its body signature
+  still verifies —
   and a webhook auto-paused after consecutive failures until
   the subscriber resumes it or a half-open probe — the
   next update push after a one-hour cooldown — revives it)

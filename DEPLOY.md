@@ -395,6 +395,23 @@ the reason recorded (the demo never goes down because the LLM did).
     the test delivers again. On an owned feed, a test
     without the owner's token → `403`; an unknown
     webhook id → `404`; an unknown feed id → `404`.
+32. Replay-protection probe (signed pushes carry a
+    timestamped second signature): register a signed
+    webhook (probe 22) and inspect the test delivery at
+    the receiver → beside `X-TastePilot-Signature` it
+    carries `X-TastePilot-Timestamp` (the delivery's
+    Unix time) and `X-TastePilot-Timestamp-Signature`;
+    `verify_timestamped_signature` under the webhook's
+    secret over the received body + timestamp → true.
+    Replay the captured body + headers at the receiver's
+    verifier with the clock advanced 301 s → the
+    timestamped check fails (the legacy
+    `X-TastePilot-Signature` check still passes — the
+    freshness window is what rejects the replay).
+    Redeliver a failed signed push (probe 23) → the
+    resend carries a fresh timestamp, not the original's.
+    An unsigned webhook's deliveries carry neither
+    timestamp header.
 
 ## Notes
 

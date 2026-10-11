@@ -105,6 +105,23 @@ instead of a named service's API:
   count, registration moment — untouched; setting the same
   effective filter is idempotent and stamps nothing, and an
   explicit null filter resets the webhook to every event.
+- a signed push is also replay-protected: beside the
+  legacy body signature, every signed delivery carries
+  ``X-TastePilot-Timestamp`` (the delivery's Unix time)
+  and ``X-TastePilot-Timestamp-Signature`` — an
+  HMAC-SHA256 over ``"<timestamp>." + body`` under the
+  same secret. A captured push replayed later carries
+  its original timestamp, so a subscriber running
+  ``verify_timestamped_signature`` (which rejects any
+  timestamp more than ``SIGNATURE_TOLERANCE_SECONDS``
+  from now, in either direction) rejects the replay
+  even though the body signature still verifies; the
+  legacy header and ``verify_signature`` are unchanged
+  for subscribers who have not adopted the timestamped
+  check. The timestamp is stamped once per delivery,
+  so bounded retries of one delivery all carry the
+  same timestamp and signature, and a redelivery (a
+  new delivery) is stamped fresh.
 - a subscriber can ask for a test push at any time, not
   only at registration: ``POST /api/multi-feeds/<id>/
   webhooks/<webhook_id>/test`` fires one ``multi_feed.test``
@@ -161,6 +178,9 @@ TRANSIENT_STATUSES = frozenset({429, 500, 502, 503, 504})
 MIN_SIGNING_SECRET_CHARS = 16
 MAX_SIGNING_SECRET_CHARS = 200
 SIGNATURE_HEADER = "X-TastePilot-Signature"
+TIMESTAMP_HEADER = "X-TastePilot-Timestamp"
+TIMESTAMP_SIGNATURE_HEADER = "X-TastePilot-Timestamp-Signature"
+SIGNATURE_TOLERANCE_SECONDS = 300
 EVENT_HEADER = "X-TastePilot-Event"
 WEBHOOK_EVENTS = ("multi_feed.subscribed", "multi_feed.updated",
                   "multi_feed.created", "multi_feed.test")
@@ -302,6 +322,74 @@ def verify_signature(secret, body: bytes, header) -> bool:
                                header)
 
 
+def _timestamp_value(timestamp):
+    """Normalise a delivery timestamp to an int Unix time,
+    or None when malformed: an int (never a bool), or a
+    string of digits as it arrives in a header."""
+    if isinstance(timestamp, bool):
+        return None
+    if isinstance(timestamp, int):
+        return timestamp if timestamp > 0 else None
+    if isinstance(timestamp, str) and timestamp.isdigit():
+        value = int(timestamp)
+        return value if value > 0 else None
+    return None
+
+
+def sign_timestamped_payload(secret: str, timestamp, body: bytes) -> str:
+    """The replay-protected signature header value for one
+    delivery: ``sha256=<HMAC-SHA256 hex>`` over
+    ``"<timestamp>."`` followed by the exact body bytes,
+    so the signature binds the body to the moment it was
+    sent — a replayed body with a fresh timestamp does
+    not verify, and neither does the original signature
+    under a different timestamp. Raises ValueError
+    (``bad_timestamp``) for a malformed timestamp."""
+    value = _timestamp_value(timestamp)
+    if value is None:
+        raise ValueError("bad_timestamp: timestamp must be a "
+                         "positive Unix time")
+    digest = hmac.new(secret.encode(),
+                      f"{value}.".encode() + bytes(body),
+                      hashlib.sha256).hexdigest()
+    return f"sha256={digest}"
+
+
+def verify_timestamped_signature(secret, body: bytes, header,
+                                 timestamp,
+                                 tolerance_seconds:
+                                 int = SIGNATURE_TOLERANCE_SECONDS,
+                                 now=None) -> bool:
+    """The replay-protected receipt check: True iff
+    ``header`` is the timestamped signature of ``body``
+    under ``secret`` for ``timestamp``, AND ``timestamp``
+    is within ``tolerance_seconds`` of ``now`` (default:
+    the current time) in either direction — a captured
+    push replayed after the window fails the freshness
+    check even though its signatures are genuine.
+    Constant-time signature comparison; any malformed
+    input is simply False."""
+    if not isinstance(secret, str) or not isinstance(header, str) \
+            or not isinstance(body, (bytes, bytearray)):
+        return False
+    value = _timestamp_value(timestamp)
+    if value is None:
+        return False
+    if isinstance(tolerance_seconds, bool) \
+            or not isinstance(tolerance_seconds, (int, float)) \
+            or tolerance_seconds < 0:
+        return False
+    moment = time.time() if now is None else now
+    if isinstance(moment, bool) \
+            or not isinstance(moment, (int, float)):
+        return False
+    if abs(float(moment) - value) > float(tolerance_seconds):
+        return False
+    return hmac.compare_digest(
+        sign_timestamped_payload(secret, value, bytes(body)),
+        header)
+
+
 def delivery_id_for(feed_id: str, webhook_id, event, version,
                     at: str, seq: int) -> str:
     """Deterministic id for one stamped delivery record: a
@@ -337,7 +425,8 @@ def build_notification(feed_id: str, kind: str, version: int,
 def deliver_notification(url: str, payload: dict, transport=None,
                          timeout: float = 5.0,
                          max_attempts: int = MAX_ATTEMPTS,
-                         sleeper=None, secret=None) -> dict:
+                         sleeper=None, secret=None,
+                         timestamp=None) -> dict:
     """POST one notification to one webhook; returns its
     delivery record.
 
@@ -346,8 +435,11 @@ def deliver_notification(url: str, payload: dict, transport=None,
     default transport is a plain urllib POST — no key or
     credential is ever sent. When ``secret`` is given, the
     default transport also sends the HMAC signature header
-    (``sign_payload`` over the exact body bytes) and the event
-    header, so the subscriber can verify the push; the record
+    (``sign_payload`` over the exact body bytes), the event
+    header, and the replay-protection headers (the delivery
+    timestamp and its timestamped signature), so the
+    subscriber can verify the push and reject a replay of
+    it; the record
     then carries ``signed: True`` — never the secret or the
     signature's inputs beyond the payload itself. Transient
     failures are retried with exponential backoff through the
@@ -366,6 +458,18 @@ def deliver_notification(url: str, payload: dict, transport=None,
               "signed": bool(secret)}
     body = json.dumps(payload, ensure_ascii=False,
                       separators=(",", ":")).encode()
+    # Replay protection: a signed delivery is stamped once,
+    # before any attempt, so every bounded retry of this
+    # delivery carries the same timestamp and timestamped
+    # signature (a retry is the same delivery, not a new
+    # one). ``timestamp`` is injectable for tests.
+    signed_at = None
+    if secret:
+        signed_at = int(time.time()) if timestamp is None \
+            else _timestamp_value(timestamp)
+        if signed_at is None:
+            raise ValueError("bad_timestamp: timestamp must be a "
+                             "positive Unix time")
     sleep = sleeper or time.sleep
     attempts = max(1, max_attempts)
     for attempt in range(attempts):
@@ -380,6 +484,10 @@ def deliver_notification(url: str, payload: dict, transport=None,
                 if secret:
                     headers[SIGNATURE_HEADER] = sign_payload(
                         secret, body)
+                    headers[TIMESTAMP_HEADER] = str(signed_at)
+                    headers[TIMESTAMP_SIGNATURE_HEADER] = \
+                        sign_timestamped_payload(secret, signed_at,
+                                                 body)
                 req = urllib.request.Request(
                     url, data=body, method="POST", headers=headers)
                 try:
