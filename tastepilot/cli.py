@@ -133,7 +133,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="a saved plan JSON (e.g. from plan --out)")
     e.add_argument("--format", default="markdown",
                    choices=list(EXPORT_FORMATS),
-                   help="itinerary format (ics needs a dated leg)")
+                   help="itinerary format (ics needs a dated leg; "
+                        "ics-days emits one event per paced day)")
     e.add_argument("--out", help="write the export here instead of stdout")
     e.add_argument("--branch", action="append", default=[],
                    metavar="NAME=PLAN_JSON",

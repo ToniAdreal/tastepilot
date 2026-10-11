@@ -25,6 +25,16 @@ iCalendar scope: one VEVENT per leg that has a start date (all-day,
 DTEND exclusive per RFC 5545), summarising that leg's items and the
 recomputed verdict. A plan with no dated legs has nothing to put on
 a calendar and raises ``no_dated_legs`` instead of inventing dates.
+
+The ``ics-days`` format is the paced variant of the same calendar:
+one all-day VEVENT per *day* of the day-by-day pacing (pacing.py,
+recomputed here — a stored ``itinerary`` field is never read
+back), each event carrying only that day's recommendations. Days
+the pacing leaves empty get no event, undated legs contribute
+none, and a plan with no dated day at all raises ``no_dated_legs``
+exactly like the leg-level format. Paced UIDs are namespaced apart
+from leg UIDs, so both calendars can be imported side by side
+without collisions.
 """
 from __future__ import annotations
 
@@ -35,13 +45,14 @@ from datetime import date, timedelta
 from .checker import check_plan, plan_recommendations
 from .timeline import branch_timeline
 
-FORMATS = ("markdown", "text", "ics")
+FORMATS = ("markdown", "text", "ics", "ics-days")
 TIMELINE_FORMATS = ("markdown", "text", "ics")
 
 _MEDIA = {
     "markdown": ("text/markdown; charset=utf-8", "md"),
     "text": ("text/plain; charset=utf-8", "txt"),
     "ics": ("text/calendar; charset=utf-8", "ics"),
+    "ics-days": ("text/calendar; charset=utf-8", "ics"),
 }
 
 
@@ -496,6 +507,73 @@ def render_ics(plan: dict) -> str:
     return "\r\n".join(folded) + "\r\n"
 
 
+def render_paced_ics(plan: dict) -> str:
+    """The paced iCalendar: one all-day VEVENT per dated day of
+    the plan's day-by-day pacing, each carrying only that day's
+    recommendations. Pacing is recomputed from the plan (schedule
+    + primary items) — a stored ``itinerary`` field is never read
+    back. Empty days and undated legs produce no event; a plan
+    with no dated day raises ``no_dated_legs``. The recomputed
+    verdict banner rides in every event's description, exactly as
+    in the leg-level calendar, so a tampered plan's days export as
+    NOT VERIFIED, never clean."""
+    from .pacing import plan_itinerary
+    verdict = recomputed_verdict(plan)
+    itinerary = plan_itinerary(plan)
+    days = [(leg.get("location"), day)
+            for leg in itinerary["legs"] for day in leg["days"]
+            if day["date"] is not None and day["items"]]
+    if not days:
+        raise ValueError("no_dated_legs: this plan has no dated "
+                         "day with recommendations to put on a "
+                         "calendar")
+    # Same content fingerprint doctrine as render_ics: the
+    # evidence record (with its wall-clock created_at) is excluded,
+    # so regenerating the same plan keeps the same UIDs.
+    fingerprint = {
+        "request": plan.get("request"),
+        "items": [[i.get("entity", {}).get("id"), i.get("domain"),
+                   i.get("location"), i.get("affinity")]
+                  for i in plan.get("items") or []],
+    }
+    canonical = json.dumps(fingerprint, sort_keys=True,
+                           ensure_ascii=False,
+                           separators=(",", ":")).encode()
+    plan_hash = hashlib.sha256(canonical).hexdigest()[:24]
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0",
+             "PRODID:-//TastePilot//Itinerary Export//EN",
+             "CALSCALE:GREGORIAN"]
+    for location, day in days:
+        where = location or "Anywhere"
+        day_date = date.fromisoformat(day["date"])
+        next_day = day_date + timedelta(days=1)
+        uid_src = f"paced:{plan_hash}:{location}:{day['date']}"
+        uid = hashlib.sha256(uid_src.encode()).hexdigest()[:32]
+        desc = [_banner_lines(plan, verdict)[0], "",
+                "Today's recommendations:"]
+        for ref in day["items"]:
+            head = _one_line(ref.get("name", "Untitled"))
+            if ref.get("affinity") is not None:
+                head += f" (affinity {ref['affinity']:.2f})"
+            desc.append(f"- {head} [{ref.get('domain', '')}]")
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:{uid}@tastepilot",
+            f"DTSTAMP:{day_date.strftime('%Y%m%d')}T000000Z",
+            f"DTSTART;VALUE=DATE:{day_date.strftime('%Y%m%d')}",
+            f"DTEND;VALUE=DATE:{next_day.strftime('%Y%m%d')}",
+            "SUMMARY:" + _ics_escape(
+                f"TastePilot: {where} · {day['date']}"),
+            "DESCRIPTION:" + _ics_escape("\n".join(desc)),
+            "END:VEVENT",
+        ]
+    lines.append("END:VCALENDAR")
+    folded: list[str] = []
+    for line in lines:
+        folded.extend(_ics_fold(line))
+    return "\r\n".join(folded) + "\r\n"
+
+
 def _timeline_cell_text(cell) -> str:
     status = cell.get("status", "absent")
     affinity = cell.get("affinity")
@@ -829,7 +907,7 @@ def export_timeline(base, branches, fmt: str) -> tuple[str, bool]:
 
 
 _RENDERERS = {"markdown": render_markdown, "text": render_text,
-              "ics": render_ics}
+              "ics": render_ics, "ics-days": render_paced_ics}
 
 
 def export_plan(plan: dict, fmt: str) -> tuple[str, bool]:

@@ -361,6 +361,13 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    exports — recomputed from the plan on every surface, with
    undated legs left unscheduled rather than assigned invented
    days, and every primary recommendation paced exactly once.
+   The pacing also drives a paced iCalendar export (format
+   `ics-days`, alongside the leg-level `ics`): one all-day event
+   per dated day carrying only that day's recommendations, so a
+   calendar import shows the trip day by day instead of as one
+   block per leg — empty days and undated legs get no event, and
+   paced event UIDs are namespaced apart from the leg calendar's,
+   so both files can be imported side by side.
 
 **[FINALIZE: one real-mode example — a plan produced against the live
 Qloo API, with its item count and checker verdict.]**

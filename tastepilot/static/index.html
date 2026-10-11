@@ -54,7 +54,7 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
 <div id="status"></div>
 <div style="margin:.5rem 0"><button type="button" id="sharebtn" style="display:none">Create shareable verification link</button> <button type="button" id="ossharebtn" style="display:none">Share via OS share sheet ↗</button> <span id="shareout" class="meta"></span></div>
 <div style="margin:.5rem 0" id="exportrow" hidden><label class="meta" for="exportfmt">Export itinerary as</label>
-<select id="exportfmt"><option value="markdown">Markdown</option><option value="text">Plain text</option><option value="ics">iCalendar (.ics, dated legs)</option></select>
+<select id="exportfmt"><option value="markdown">Markdown</option><option value="text">Plain text</option><option value="ics">iCalendar (.ics, dated legs)</option><option value="ics-days">iCalendar by day (.ics, one event per paced day)</option></select>
 <button type="button" id="exportbtn">Download export</button> <span id="exportout" class="meta"></span></div>
 <div id="out"></div>
 <section id="viewer" aria-label="Evidence record viewer">
@@ -385,7 +385,7 @@ async function downloadExport(payload, fmt) {
     throw new Error(data.error || ('HTTP ' + res.status));
   }
   const blob = await res.blob();
-  const ext = {markdown: 'md', text: 'txt', ics: 'ics'}[fmt] || 'md';
+  const ext = {markdown: 'md', text: 'txt', ics: 'ics', 'ics-days': 'ics'}[fmt] || 'md';
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'tastepilot-itinerary.' + ext;

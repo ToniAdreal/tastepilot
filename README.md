@@ -943,7 +943,14 @@ baked into the image or the repo.
   itinerary" section, the CLI prints one `itinerary:` line per
   day, and Markdown/text exports carry a Day-by-day itinerary
   section — all recomputed from the plan's schedule + items,
-  never read back from a stored `itinerary` field.
+  never read back from a stored `itinerary` field. The same
+  pacing drives a paced iCalendar export (format `ics-days`,
+  alongside the leg-level `ics`): one all-day event per dated
+  day carrying only that day's recommendations — empty days and
+  undated legs get no event, a dateless plan fails with the same
+  `no_dated_legs` category, and paced UIDs are namespaced apart
+  from the leg calendar's so both files import side by side
+  without collisions.
 
 ## Hackathon submission
 

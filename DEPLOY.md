@@ -447,6 +447,13 @@ the reason recorded (the demo never goes down because the LLM did).
     carries the same section. A dateless plan's items appear
     under a single "unscheduled" bucket per leg — no dates
     are invented.
+36. Paced calendar probe: export a dated plan with format
+    `ics-days` (UI export menu or CLI) → one all-day event per
+    paced day, each carrying only that day's recommendations
+    and the recomputed verification banner; the event count
+    equals the number of dated days that hold at least one
+    recommendation. The leg-level `ics` export still emits one
+    event per leg, and the two calendars' UIDs never collide.
 
 ## Notes
 
