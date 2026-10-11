@@ -13,6 +13,13 @@
                              [--branch NAME=branch.json ...]
                              (with --branch: a branch-timeline export,
                              markdown|text only)
+  python -m tastepilot export --bundle bundle.json
+                             [--format markdown|text|ics|ics-days]
+                             [--out file]
+                             (a multi-timeline bundle export: the
+                             file holds {"timelines": [...]} or a
+                             bare list; markdown/text render one
+                             grid document and need no dates)
   python -m tastepilot swap --plan plan.json --primary NAME
                              --alternative NAME [--out swapped.json]
   python -m tastepilot undo --plan plan.json [--out undone.json]
@@ -74,7 +81,8 @@ from pathlib import Path
 from .agent import TastePilotAgent
 from .checker import check_plan, plan_recommendations
 from .evidence import verify_chain
-from .export import FORMATS as EXPORT_FORMATS, export_plan, export_timeline
+from .export import (FORMATS as EXPORT_FORMATS, export_multi_timeline,
+                     export_plan, export_timeline)
 from .imports import fetch_import, load_import
 from .llm import NebiusExplainer, TemplateExplainer
 from .models import DOMAIN_URNS
@@ -129,8 +137,18 @@ def main(argv: list[str] | None = None) -> int:
     v = sub.add_parser("verify")
     v.add_argument("--record", required=True)
     e = sub.add_parser("export")
-    e.add_argument("--plan", required=True,
+    e.add_argument("--plan",
                    help="a saved plan JSON (e.g. from plan --out)")
+    e.add_argument("--bundle",
+                   help="a saved multi-timeline bundle JSON "
+                        "({\"timelines\": [...]} or a bare list) to "
+                        "export instead of a single plan: "
+                        "markdown|text render one grid document "
+                        "(a section per timeline, no dates needed), "
+                        "ics one event series per column per "
+                        "timeline, ics-days one paced event per "
+                        "dated day per column per timeline; every "
+                        "column's verdict is recomputed")
     e.add_argument("--format", default="markdown",
                    choices=list(EXPORT_FORMATS),
                    help="itinerary format (ics needs a dated leg; "
@@ -380,6 +398,49 @@ def main(argv: list[str] | None = None) -> int:
               f"sealed={report['evidence']['sealed_responses']}")
         return 0 if report["passed"] else 1
     if args.cmd == "export":
+        if args.bundle and args.plan:
+            print("error: export failed: --plan and --bundle are "
+                  "mutually exclusive", file=sys.stderr)
+            return 2
+        if args.bundle and args.branch:
+            print("error: export failed: --branch applies to --plan, "
+                  "not --bundle", file=sys.stderr)
+            return 2
+        if args.bundle:
+            try:
+                bundle = json.loads(
+                    Path(args.bundle).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                print(f"error: export failed: cannot read bundle "
+                      f"({type(exc).__name__})", file=sys.stderr)
+                return 2
+            timelines = bundle.get("timelines") \
+                if isinstance(bundle, dict) else bundle
+            if not isinstance(timelines, list):
+                print("error: export failed: bundle must hold a "
+                      "timelines list", file=sys.stderr)
+                return 2
+            try:
+                content, verified, summaries = export_multi_timeline(
+                    timelines, args.format)
+            except ValueError as exc:
+                print(f"error: export failed: {exc}", file=sys.stderr)
+                return 2
+            except (KeyError, TypeError, AttributeError, IndexError):
+                print("error: export failed: bad_plan", file=sys.stderr)
+                return 2
+            if args.out:
+                Path(args.out).write_text(content, encoding="utf-8")
+                print(f"export format={args.format} bundle=True "
+                      f"timelines={len(summaries)} "
+                      f"verified={verified} out={args.out}")
+            else:
+                sys.stdout.write(content)
+            return 0 if verified else 1
+        if not args.plan:
+            print("error: export failed: --plan or --bundle is "
+                  "required", file=sys.stderr)
+            return 2
         try:
             plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:

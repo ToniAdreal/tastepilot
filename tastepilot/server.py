@@ -168,7 +168,7 @@ Routes:
                                its own etag (the feed etag with a
                                -days suffix), so the two variants
                                never answer each other's polls.
-  POST /api/export-multi-timeline?format=ics|ics-days
+  POST /api/export-multi-timeline?format=markdown|text|ics|ics-days
                                {"timelines": [...]} -> the bundle
                                as a take-away export download
                                (tastepilot.export.export_multi_
@@ -176,13 +176,16 @@ Routes:
                                /api/multi-feeds creation; every
                                verdict recomputed — a tampered
                                branch exports as a NOT VERIFIED
-                               series, never clean. ics renders
+                               series/column, never clean.
+                               markdown/text render one grid
+                               document (a section per timeline)
+                               and need no dates; ics renders
                                one event series per column per
                                timeline; ics-days renders one
                                paced event per dated day per
                                column per timeline; a bundle with
                                no dated leg/day anywhere -> 400
-                               (no_dated_legs).
+                               (no_dated_legs, calendars only).
   GET  /api/multi-feeds/<id>   metadata + per-timeline recomputed
                                verdicts + version + etag.
   GET  /api/multi-feeds/<id>/changes
@@ -490,7 +493,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 from .checker import check_plan, item_reports
 from .diff import diff_plans
 from .evidence import qloo_responses, verify_chain
-from .export import (MULTI_TIMELINE_FORMATS, TIMELINE_FORMATS,
+from .export import (MULTI_FEED_FORMATS, MULTI_TIMELINE_FORMATS,
+                     TIMELINE_FORMATS,
                      export_multi_timeline,
                      export_multi_timeline_ics, export_plan,
                      export_timeline, media_for,
@@ -2980,7 +2984,10 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             column per timeline. A bundle with no dated leg
             (ics) or no dated day holding recommendations
             (ics-days) anywhere is a categorised 400
-            (no_dated_legs)."""
+            (no_dated_legs). markdown/text render the bundle as
+            one grid document (a section per timeline) and need
+            no dates, so an undated bundle downloads as a
+            document even though its calendars are refused."""
             if fmt not in MULTI_TIMELINE_FORMATS:
                 self._send_json(
                     400, {"error": "unsupported multi-timeline "
@@ -3383,9 +3390,12 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             its own etag — the feed etag with a -days suffix —
             so a leg-level poller and a paced poller never
             answer each other's conditional requests with a
-            304 for a calendar they did not ask for. Any other
-            format is a categorised 400."""
-            if fmt not in MULTI_TIMELINE_FORMATS:
+            304 for a calendar they did not ask for. Feeds are
+            calendars only (MULTI_FEED_FORMATS): the bundle
+            document formats the exporter also supports are
+            downloads, not feed variants, and any other format
+            here is a categorised 400."""
+            if fmt not in MULTI_FEED_FORMATS:
                 self._send_json(
                     400, {"error": "unsupported multi-feed format"})
                 return

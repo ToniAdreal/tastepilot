@@ -232,7 +232,7 @@ def test_paced_bundle_rfc_shape_and_dispatcher():
         direct_leg, dl_passed, dl_summaries)
     assert leg.count("BEGIN:VEVENT") == 6
     with pytest.raises(ValueError, match="unsupported"):
-        export_multi_timeline(timelines, "markdown")
+        export_multi_timeline(timelines, "html")
 
 
 def test_stored_itinerary_field_never_read_back():

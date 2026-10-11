@@ -225,7 +225,17 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    without a subscription as a take-away export; a tampered
    branch's paced days read NOT VERIFIED, and a bundle with
    no dated day holding recommendations anywhere is refused
-   rather than assigned invented dates.
+   rather than assigned invented dates. The bundle also
+   leaves as a document, not just a calendar: a Markdown or
+   plain-text bundle export with one grid section per
+   timeline under a bundle banner recomputed over every
+   column of every timeline — a tampered branch deep in the
+   bundle is a FAIL column under a NOT VERIFIED banner
+   naming its timeline and column — downloadable from the
+   demo, renderable from the CLI (`export --bundle`), and
+   available for undated bundles too, since documents need
+   no dates even though calendars refuse them; the
+   subscription feeds themselves stay calendar-only.
    The bundle feed is versioned and keeps a change log —
    one entry per creation and per in-place update, naming
    the timelines it carries and the verdict recomputed at

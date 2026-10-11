@@ -121,8 +121,14 @@ tastepilot/
                per branch) under the same doctrine, and
                export_multi_timeline_paced_ics renders the same
                bundle by day (one paced event per dated day per
-               timeline per branch; export_multi_timeline
-               dispatches both bundle formats)
+               timeline per branch); export_multi_timeline_markdown
+               and export_multi_timeline_text render the bundle as
+               one take-away grid document (a section per timeline
+               under a bundle banner recomputed over every column
+               of every timeline; no dates needed, unlike the
+               calendars), and export_multi_timeline dispatches
+               all four bundle formats — while subscription feeds
+               stay calendar-only (MULTI_FEED_FORMATS)
   notify.py    push change notifications for calendar
                subscriptions: subscriber-registered webhooks on
                multi-feeds — a URL is validated (http(s), no
@@ -710,12 +716,24 @@ baked into the image or the repo.
   feed etag with a `-days` suffix), so the two variants never
   answer each other's conditional polls. The bundle also
   downloads without a subscription: `POST
-  /api/export-multi-timeline?format=ics|ics-days` with the
-  same `{"timelines": [...]}` body renders it as a take-away
-  file (`tastepilot-multi-timeline.ics`) under the same
-  gates, and the timeline view's "Download bundle
-  (iCalendar)" / "Download bundle (iCalendar by day)" buttons
-  drive it. Change
+  /api/export-multi-timeline?format=markdown|text|ics|ics-days`
+  with the same `{"timelines": [...]}` body renders it as a
+  take-away file under the same gates — the calendars as
+  `tastepilot-multi-timeline.ics`, and markdown/text as one
+  grid document (`tastepilot-multi-timeline.md` / `.txt`): a
+  section per timeline (its own banner, columns line, and
+  per-leg tables) under a bundle banner recomputed over every
+  column of every timeline, so a tampered branch deep in the
+  bundle is a FAIL column under a NOT VERIFIED bundle banner
+  naming its timeline and column. The document formats need
+  no dates — an undated bundle downloads as a document even
+  though both calendars refuse it — and the CLI renders the
+  same documents with `tastepilot export --bundle bundle.json
+  [--format markdown|text|ics|ics-days]` (exit 1 when any
+  column fails, the document still written). The timeline
+  view's "Download bundle (Markdown)" / "(Text)" /
+  "(iCalendar)" / "(iCalendar by day)" buttons drive the
+  endpoint. Change
   notification is poll-based and explicit: the feed carries a
   version (incremented by every in-place update via `POST
   /api/multi-feeds/<id>`) and a capped change log (`GET

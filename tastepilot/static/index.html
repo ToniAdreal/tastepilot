@@ -772,15 +772,19 @@ async function doTimeline(basePlan, okBranches, outEl) {
   outEl.appendChild(multiBtn);
   outEl.appendChild(multiOut);
   // Take-away downloads of the bundle itself (no subscription):
-  // the leg-level calendar and its paced by-day counterpart,
-  // rendered on the spot by /api/export-multi-timeline with
-  // every verdict recomputed.
-  for (const fmt of ['ics', 'ics-days']) {
+  // the Markdown and plain-text grid documents (a section per
+  // timeline, no dates needed) plus the leg-level calendar and
+  // its paced by-day counterpart, rendered on the spot by
+  // /api/export-multi-timeline with every verdict recomputed.
+  const bundleFormats = [
+    ['markdown', 'Download bundle (Markdown)', 'md'],
+    ['text', 'Download bundle (Text)', 'txt'],
+    ['ics', 'Download bundle (iCalendar)', 'ics'],
+    ['ics-days', 'Download bundle (iCalendar by day)', 'ics']];
+  for (const [fmt, label, ext] of bundleFormats) {
     const dl = document.createElement('button');
     dl.type = 'button'; dl.className = 'multiexportbtn';
-    dl.textContent = fmt === 'ics-days'
-      ? 'Download bundle (iCalendar by day)'
-      : 'Download bundle (iCalendar)';
+    dl.textContent = label;
     dl.addEventListener('click', async () => {
       if (!multiBundle.length) { showBundle(); return; }
       const r = await fetch('/api/export-multi-timeline?format=' + fmt,
@@ -790,7 +794,7 @@ async function doTimeline(basePlan, okBranches, outEl) {
       const blob = await r.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'tastepilot-multi-timeline.ics';
+      a.download = 'tastepilot-multi-timeline.' + ext;
       a.click(); URL.revokeObjectURL(a.href);
     });
     outEl.appendChild(dl);

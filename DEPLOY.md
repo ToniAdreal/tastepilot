@@ -502,6 +502,24 @@ the reason recorded (the demo never goes down because the LLM did).
     tampered branch's paced days read NOT VERIFIED, and an
     unknown format on the feed URL returns `400`
     (`unsupported feed format`).
+40. Bundle document probe: POST a two-timeline bundle to
+    `/api/export-multi-timeline?format=markdown` → a `200`
+    download named `tastepilot-multi-timeline.md` carrying a
+    PASS bundle banner, one `## Timeline:` section per
+    timeline with its own banner, columns line, and per-leg
+    tables; `?format=text` returns the same grids as plain
+    text (`tastepilot-multi-timeline.txt`). A bundle with one
+    affinity edited downloads still `200` but under a NOT
+    VERIFIED bundle banner naming the failing timeline and
+    column, that column marked FAIL. An undated bundle
+    downloads as a document while `?format=ics` on it is
+    refused `no_dated_legs`, and `?format=markdown` on a
+    multi-feed URL (`/api/multi-feeds/<id>.ics`) returns
+    `400` (`unsupported multi-feed format`) — feeds stay
+    calendar-only. The CLI agrees: `tastepilot export
+    --bundle bundle.json --format markdown` exits `0` on a
+    clean bundle and `1` on a tampered one, the document
+    written either way.
 
 ## Notes
 

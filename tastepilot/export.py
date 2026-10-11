@@ -64,6 +64,20 @@ the timeline name too and are namespaced apart from the
 leg-level bundle UIDs, the paced timeline UIDs, and the
 single-plan paced UIDs, so all four calendars import side by
 side without collisions.
+
+Bundles also export as take-away documents in the same two
+document formats a single timeline uses
+(``export_multi_timeline_markdown`` / ``export_multi_timeline_text``):
+one grid section per timeline — that timeline's own banner,
+columns line, and per-leg tables under its name — headed by a
+bundle banner recomputed over every column of every timeline.
+Unlike the calendars, the document formats need no dates: an
+undated timeline renders its grid exactly as a single-timeline
+document does, and no bundle is ever refused ``no_dated_legs``
+in markdown or text. Subscription feeds stay calendar-only
+(``MULTI_FEED_FORMATS``): a feed URL serves ``ics`` / ``ics-days``
+and nothing else, however many document formats the bundle
+exporter itself supports.
 """
 from __future__ import annotations
 
@@ -1004,7 +1018,163 @@ def export_multi_timeline_ics(timelines) -> tuple[str, bool, list[dict]]:
     return content, all(s["all_passed"] for s in summaries), summaries
 
 
-MULTI_TIMELINE_FORMATS = ("ics", "ics-days")
+MULTI_TIMELINE_FORMATS = ("markdown", "text", "ics", "ics-days")
+
+# Subscription feeds are calendars and only calendars: a feed URL
+# serves these two formats even though the bundle exporter itself
+# also renders documents.
+MULTI_FEED_FORMATS = ("ics", "ics-days")
+
+
+def _multi_timeline_docs(timelines) -> list[tuple[str, dict]]:
+    """Validate a bundle and recompute every timeline's grid doc:
+    [(timeline name, branch_timeline doc)] in bundle order. Each
+    doc's verdicts are recomputed from that timeline's own sealed
+    records by branch_timeline, exactly as a single-timeline
+    export recomputes them."""
+    validate_multi_timelines(timelines)
+    return [(t["name"].strip(), _timeline_doc(t["base"], t["branches"]))
+            for t in timelines]
+
+
+def _multi_timeline_summaries(docs) -> list[dict]:
+    """Per-timeline summaries for the document formats: the
+    timeline's name, whether every one of its columns recomputes
+    as PASS, its column names, and its leg count."""
+    return [{"name": name,
+             "all_passed": bool(doc["summary"]["all_passed"]),
+             "columns": [c["name"] for c in doc["columns"]],
+             "legs": len(doc["legs"])}
+            for name, doc in docs]
+
+
+def _multi_timeline_banner(docs) -> str:
+    """The bundle banner, recomputed over every column of every
+    timeline: PASS only when every column of every timeline
+    recomputes as PASS; otherwise NOT VERIFIED naming each
+    failing timeline / column — never a clean banner over a
+    tampered branch, however deep in the bundle it sits."""
+    total = sum(len(doc["columns"]) for _, doc in docs)
+    if all(doc["summary"]["all_passed"] for _, doc in docs):
+        return (f"Verification: PASS — every one of the {total} "
+                f"column(s) across {len(docs)} timeline(s) "
+                f"recomputes as PASS from its own sealed evidence "
+                f"record.")
+    failing = ", ".join(
+        f"{name} / {c['name']}"
+        for name, doc in docs for c in doc["columns"]
+        if not c.get("passed")) or "unknown"
+    return (f"Verification: NOT VERIFIED — bundle column(s) FAIL "
+            f"their recomputed evidence check: {failing}. Do not "
+            f"trust those columns' recommendations.")
+
+
+def render_multi_timeline_markdown(timelines) -> tuple[str, list[dict]]:
+    """Render a bundle of branch timelines as ONE Markdown
+    take-away document: a bundle banner recomputed over every
+    column of every timeline, then one section per timeline —
+    its own banner, columns line, and per-leg tables in exactly
+    the single-timeline grid's shape, headed by the timeline's
+    name. Returns (content, summaries).
+
+    No dates are required (unlike the bundle calendars): an
+    undated timeline renders its grid, and nothing here ever
+    raises ``no_dated_legs`` or invents a date. Deterministic,
+    like every export."""
+    docs = _multi_timeline_docs(timelines)
+    summaries = _multi_timeline_summaries(docs)
+    out = ["# TastePilot multi-timeline bundle", ""]
+    out += [f"> {_multi_timeline_banner(docs)}", ""]
+    out += ["Timelines: " + " · ".join(
+        f"{name} ({len(doc['columns'])} column(s))"
+        for name, doc in docs), ""]
+    for (name, doc), timeline in zip(docs, timelines):
+        out += [f"## Timeline: {_one_line(name)}", ""]
+        base = timeline["base"]
+        if isinstance(base, dict) and base.get("request"):
+            out += [f"> {_one_line(base['request'])}", ""]
+        out += [f"> {_timeline_banner(doc)}", ""]
+        out += ["Columns: " + " · ".join(
+            f"{c['name']} ({'PASS' if c['passed'] else 'FAIL'}, "
+            f"{c['item_count']} item(s), {c['swap_count']} swap(s))"
+            for c in doc["columns"]), ""]
+        for leg in doc["legs"]:
+            where = leg.get("location") or "Anywhere"
+            out += [f"### Leg: {where}", ""]
+            header = ["Recommendation", "Domain"] + \
+                [_one_line(c["name"]).replace("|", "\\|")
+                 for c in doc["columns"]]
+            out.append("| " + " | ".join(header) + " |")
+            out.append("| " + " | ".join(["---"] * len(header)) + " |")
+            for row in leg["rows"]:
+                cells = [_one_line(row.get("name") or "").replace("|", "\\|"),
+                         _one_line(row.get("domain") or "")]
+                cells += [_timeline_cell_text(c) for c in row["cells"]]
+                out.append("| " + " | ".join(cells) + " |")
+            out.append("")
+    out += ["Re-verify each plan in this bundle with: "
+            "`python3 -m tastepilot verify --record <plan.json>` — "
+            "a column whose plan was edited FAILs here, never "
+            "renders clean."]
+    return "\n".join(out) + "\n", summaries
+
+
+def render_multi_timeline_text(timelines) -> tuple[str, list[dict]]:
+    """Render a bundle of branch timelines as ONE plain-text
+    take-away document: the same bundle banner, per-timeline
+    banners, and per-leg slot lines as the Markdown bundle,
+    with no Markdown syntax. Returns (content, summaries).
+    No dates are required; deterministic, like every export."""
+    docs = _multi_timeline_docs(timelines)
+    summaries = _multi_timeline_summaries(docs)
+    title = "TastePilot multi-timeline bundle"
+    out = [title, "=" * len(title), ""]
+    out += [_multi_timeline_banner(docs), ""]
+    out += ["Timelines: " + " | ".join(
+        f"{name} ({len(doc['columns'])} column(s))"
+        for name, doc in docs), ""]
+    for (name, doc), timeline in zip(docs, timelines):
+        heading = f"Timeline: {name}"
+        out += [heading, "-" * len(heading), ""]
+        base = timeline["base"]
+        if isinstance(base, dict) and base.get("request"):
+            out += [_one_line(base["request"]), ""]
+        out += [_timeline_banner(doc), ""]
+        out += ["Columns: " + " | ".join(
+            f"{c['name']} ({'PASS' if c['passed'] else 'FAIL'})"
+            for c in doc["columns"]), ""]
+        for leg in doc["legs"]:
+            leg_heading = f"Leg: {leg.get('location') or 'Anywhere'}"
+            out += [leg_heading, "-" * len(leg_heading)]
+            for row in leg["rows"]:
+                cells = " | ".join(
+                    f"{c['name']}: {_timeline_cell_text(cell)}"
+                    for c, cell in zip(doc["columns"], row["cells"]))
+                out.append(f"  * {_one_line(row.get('name') or '')} "
+                           f"[{row.get('domain', '')}] — {cells}")
+            out.append("")
+    out += ["Re-verify each plan with: python3 -m tastepilot "
+            "verify --record <plan.json>"]
+    return "\n".join(out) + "\n", summaries
+
+
+def export_multi_timeline_markdown(timelines) -> tuple[str, bool, list[dict]]:
+    """Render a multi-timeline bundle as one Markdown document;
+    returns (content, all_passed, summaries) — all_passed is
+    every timeline's every column recomputing as PASS. A
+    tampered branch still renders, as a FAIL column under a
+    NOT VERIFIED bundle banner — never clean."""
+    content, summaries = render_multi_timeline_markdown(timelines)
+    return content, all(s["all_passed"] for s in summaries), summaries
+
+
+def export_multi_timeline_text(timelines) -> tuple[str, bool, list[dict]]:
+    """Render a multi-timeline bundle as one plain-text document;
+    returns (content, all_passed, summaries). A tampered branch
+    still renders, as a FAIL column under a NOT VERIFIED bundle
+    banner — never clean."""
+    content, summaries = render_multi_timeline_text(timelines)
+    return content, all(s["all_passed"] for s in summaries), summaries
 
 
 def render_multi_timeline_paced_ics(timelines) -> tuple[str, list[dict]]:
@@ -1126,23 +1296,27 @@ def export_multi_timeline_paced_ics(timelines) -> tuple[str, bool, list[dict]]:
     return content, all(s["all_passed"] for s in summaries), summaries
 
 
-_MULTI_TIMELINE_RENDERERS = {"ics": export_multi_timeline_ics,
+_MULTI_TIMELINE_RENDERERS = {"markdown": export_multi_timeline_markdown,
+                             "text": export_multi_timeline_text,
+                             "ics": export_multi_timeline_ics,
                              "ics-days": export_multi_timeline_paced_ics}
 
 
 def export_multi_timeline(timelines, fmt: str) -> tuple[str, bool, list[dict]]:
-    """Render a multi-timeline bundle in *fmt* (ics: one event
-    series per column per timeline at leg granularity, or
+    """Render a multi-timeline bundle in *fmt* (markdown/text:
+    one grid document with a section per timeline; ics: one
+    event series per column per timeline at leg granularity;
     ics-days: one paced event series per column per timeline at
     day granularity); returns (content, all_passed, summaries).
     Raises ValueError with a category for an unsupported format,
     a malformed bundle (from validate_multi_timelines /
-    branch_timeline), or a bundle with no dated leg (ics) / no
-    dated day holding recommendations (ics-days) anywhere."""
+    branch_timeline), or — calendars only — a bundle with no
+    dated leg (ics) / no dated day holding recommendations
+    (ics-days) anywhere. The document formats need no dates."""
     if fmt not in MULTI_TIMELINE_FORMATS:
         raise ValueError(
             f"unsupported: multi-timeline export format {fmt!r} "
-            f"(ics or ics-days only)")
+            f"(markdown, text, ics or ics-days only)")
     return _MULTI_TIMELINE_RENDERERS[fmt](timelines)
 
 
