@@ -35,6 +35,7 @@ No build/install step is required — there are no dependencies.
 | `QLOO_API_KEY` | no | When set (platform secret store only), `--mode auto` serves **real** Qloo responses; when unset it serves mock Judge Mode. Never bake the key into an image or commit it — `.env` is gitignored and dockerignored. |
 | `TASTEPILOT_SIGNING_KEY` | no | Overrides the development HMAC key for evidence records. |
 | `TASTEPILOT_SHARE_FILE` | no | Path of a JSON file the share-link store persists to (atomic writes), so verification links survive restarts. Needs a writable, persistent volume; unset = in-memory links. The CLI equivalent is `serve --share-file <path>`, and `--share-ttl-days` tunes the 7-day default link lifetime. The file holds only shared plan payloads (fictional demo data) and, for owner-managed links, SHA-256 hashes of owner tokens — never the tokens themselves, and never the Qloo key. |
+| `TASTEPILOT_FEED_FILE` | no | Path of a JSON file the timeline calendar-feed store persists to (atomic writes), so subscription URLs survive restarts. Needs a writable, persistent volume; unset = in-memory feeds. The CLI equivalent is `serve --feed-file <path>`, and `--feed-ttl-days` tunes the 30-day default feed lifetime (an owner's in-place update renews it). The file holds only stored timeline payloads (fictional demo data) and, for owner-managed feeds, SHA-256 hashes of owner tokens — never the tokens themselves, and never the Qloo key. |
 | `TASTEPILOT_PROFILE_FILE` | no | Path of a JSON file the persistent preference-profile store persists to (atomic writes), so learned suggestion profiles survive restarts. Needs a writable, persistent volume; unset = in-memory profiles. The CLI equivalent is `serve --profile-file <path>`. The file holds only owner-token SHA-256 hashes and profiles derived from sealed swap histories — never the tokens themselves, never caller-supplied weights, and never the Qloo key. |
 
 For live Nemotron explanations instead of the deterministic template,
@@ -177,6 +178,20 @@ the reason recorded (the demo never goes down because the LLM did).
     series per branch (summaries name the branch; the tampered
     branch's events read NOT VERIFIED); with a dateless
     timeline, `?format=ics` → `400` (`no_dated_legs`).
+20. Feed probe (live calendar subscriptions): in the timeline
+    view, "Subscribe to timeline feed (iCalendar)" →
+    `POST /api/feeds` returns `201` with a stable
+    `/api/feeds/<id>.ics` URL; fetching it returns `200`
+    `text/calendar` with the per-branch series and
+    `Cache-Control: public, max-age=300` (subscribable, not
+    no-store). `POST /api/feeds/<id>` with a re-sealed timeline
+    → `200`, and the same URL then serves the new series;
+    a dateless timeline create → `400` (`no_dated_legs`);
+    `DELETE /api/feeds/<id>` → `200` and the URL then `404`s.
+    Without `TASTEPILOT_FEED_FILE` feeds live in the server
+    process — a restart clears them; with it set (on a
+    persistent volume) they survive restarts. `GET /api/health`
+    reports the feed store's mode, count, and TTL.
 
 ## Notes
 

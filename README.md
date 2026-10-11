@@ -85,7 +85,12 @@ tastepilot/
                links via GET /api/shares; persistent preference
                profiles under the same token via GET/POST/DELETE
                /api/profile, folded into /api/suggest rankings for
-               the token's owner);
+               the token's owner; live calendar subscription feeds
+               for branch timelines under stable /api/feeds/<id>.ics
+               URLs — a TimelineFeedStore (bounded, 30-day expiry,
+               DELETE revocation, owner-managed updates, optional
+               file persistence) whose every fetch re-renders the
+               stored timeline with verdicts recomputed);
                hardened: input caps, security headers, bounded caches,
                leak-free 500s)
   export.py    take-away itinerary exports (Markdown / plain text /
@@ -97,8 +102,9 @@ tastepilot/
                grid: one table/section per leg, one column per branch)
                into Markdown/text take-away exports under the same
                recomputed-verdict doctrine — a tampered branch is a
-               FAIL column under a NOT VERIFIED banner; ics is
-               refused for timelines (no calendar meaning)
+               FAIL column under a NOT VERIFIED banner; ics renders
+               one event series per branch (see the Demo section),
+               and a dateless timeline refuses with no_dated_legs
   handoff.py   native handoffs: one-tap links into the user's own
                apps — a Google Calendar template URL per dated leg
                (all-day, exclusive end; a dateless leg gets none —
@@ -602,6 +608,26 @@ baked into the image or the repo.
   VERIFIED banner and its violations — never a clean one — and the
   CLI mirrors the verify contract (unverified export still writes,
   exits 1).
+* A branch timeline also lives as a calendar subscription:
+  `POST /api/feeds` stores the timeline (gated exactly like the
+  iCalendar export — a dateless timeline is refused
+  `no_dated_legs`) under a stable, unguessable feed id, and
+  `GET /api/feeds/<id>.ics` renders it fresh on every fetch, so a
+  calendar app subscribed to that URL polls the current series
+  instead of importing a one-off file. The feed's owner replaces
+  the timeline in place (`POST /api/feeds/<id>` — how a branch
+  re-sealed after another swap reaches subscribers; the update
+  renews the 30-day expiry) or revokes it (`DELETE
+  /api/feeds/<id>`); feeds created with an owner token answer
+  update/revoke only to that token, exactly like owner-managed
+  share links, and only the token's hash is stored. With
+  `serve --feed-file <path>` (or the `TASTEPILOT_FEED_FILE` env
+  var) feeds persist across restarts in an atomically-written
+  JSON file; `GET /api/health` reports the feed store, and the
+  timeline view's "Subscribe to timeline feed (iCalendar)"
+  button creates or updates the feed for the timeline on screen.
+  Every fetch recomputes the verdicts: a tampered branch's series
+  reads NOT VERIFIED under the same URL, never PASS.
 * A plan also hands off to the user's own apps in one tap: every
   plan carries `handoffs` — per leg, a Google Calendar template
   link (dated legs only; a dateless leg gets no calendar link

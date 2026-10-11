@@ -34,6 +34,8 @@
                              [--share-file shares.json]
                              [--share-ttl-days 7]
                              [--profile-file profiles.json]
+                             [--feed-file feeds.json]
+                             [--feed-ttl-days 30]
 
 For hosted deployments the port defaults to the platform's ``PORT``
 environment variable when ``--port`` is not given (see DEPLOY.md).
@@ -48,6 +50,11 @@ token itself is never stored) and is written only from plans'
 sealed swap histories — the ``profile`` command saves the lesson
 of one or more saved plans into the store, and ``suggest
 --profile-store`` folds the stored profile into the ranking.
+Timeline calendar feeds are in-memory unless ``--feed-file`` (or
+the ``TASTEPILOT_FEED_FILE`` env var) names a JSON file they
+persist to; every feed expires after ``--feed-ttl-days`` unless
+its owner updates it, and can be revoked with
+``DELETE /api/feeds/<id>``.
 """
 from __future__ import annotations
 
@@ -238,12 +245,21 @@ def main(argv: list[str] | None = None) -> int:
                    help="persist preference profiles to this JSON "
                         "file (default: $TASTEPILOT_PROFILE_FILE, "
                         "else in-memory)")
+    s.add_argument("--feed-file", default=None,
+                   help="persist timeline calendar feeds to this "
+                        "JSON file (default: $TASTEPILOT_FEED_FILE, "
+                        "else in-memory)")
+    s.add_argument("--feed-ttl-days", type=float, default=30.0,
+                   help="timeline feed lifetime in days (default 30)")
     args = ap.parse_args(argv)
 
     if args.cmd == "serve":
         from .server import serve
         if args.share_ttl_days <= 0:
             print("error: --share-ttl-days must be > 0", file=sys.stderr)
+            return 2
+        if args.feed_ttl_days <= 0:
+            print("error: --feed-ttl-days must be > 0", file=sys.stderr)
             return 2
         try:
             agent = _agent_for(args.mode, args.llm)
@@ -254,7 +270,9 @@ def main(argv: list[str] | None = None) -> int:
             else int(os.environ.get("PORT", "8765"))
         serve(agent, port=port, host=args.host, share_file=args.share_file,
               share_ttl_seconds=args.share_ttl_days * 24 * 3600,
-              profile_file=args.profile_file)
+              profile_file=args.profile_file,
+              feed_file=args.feed_file,
+              feed_ttl_seconds=args.feed_ttl_days * 24 * 3600)
         return 0
     if args.cmd == "profile":
         from .profiles import ProfileStore, owner_token_hash

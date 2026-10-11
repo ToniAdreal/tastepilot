@@ -637,6 +637,39 @@ async function doTimeline(basePlan, okBranches, outEl) {
     });
     outEl.appendChild(dl);
   }
+  // Live calendar subscription: the same timeline as a feed a
+  // calendar app can poll. Creating sends the timeline to
+  // /api/feeds (owned by this browser's token); clicking again
+  // after a branch is re-sealed updates the same feed URL in
+  // place, so subscribers see the new series on their next poll.
+  let feedId = null;
+  const feedBtn = document.createElement('button');
+  feedBtn.type = 'button'; feedBtn.className = 'feedbtn';
+  feedBtn.textContent = 'Subscribe to timeline feed (iCalendar)';
+  const feedOut = document.createElement('div');
+  feedOut.className = 'meta feedout';
+  feedBtn.addEventListener('click', async () => {
+    const body = JSON.stringify({base: basePlan,
+      branches: okBranches.map(b => ({name: b.name, plan: b.plan}))});
+    const r = await fetch(feedId ? '/api/feeds/' + feedId : '/api/feeds',
+      {method: 'POST',
+       headers: {'Content-Type': 'application/json', ...ownerHeaders()},
+       body});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      feedOut.textContent = 'Feed error: ' + (d.error || r.status);
+      return;
+    }
+    feedId = d.feed_id;
+    feedBtn.textContent = 'Update timeline feed';
+    feedOut.textContent = 'Calendar subscription: ' +
+      location.origin + d.url + ' — add this URL to your calendar ' +
+      'app as a subscription; it refreshes when this feed is ' +
+      'updated. Expires ' + new Date(d.expires_at).toLocaleString() +
+      ' unless updated.';
+  });
+  outEl.appendChild(feedBtn);
+  outEl.appendChild(feedOut);
 }
 
 async function doExplore(basePlan, branches, resultsEl) {

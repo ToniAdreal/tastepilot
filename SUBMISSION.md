@@ -185,6 +185,15 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    swap paths on their own calendar; a tampered branch's series
    reads NOT VERIFIED, and a timeline with no dated leg in any
    column is refused rather than assigned invented dates.
+   And that calendar also travels as live calendar subscriptions,
+   not just a file: a timeline can be stored as a feed under a stable
+   URL that a calendar app subscribes to and polls — every poll
+   re-renders the stored timeline with its verdicts recomputed
+   — and the feed's owner can replace the timeline in place
+   when a branch is re-sealed, so subscribers see the new
+   series under the same URL instead of importing a new file;
+   feeds expire, can be revoked, and follow the same
+   owner-token rules as share links.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -318,14 +327,13 @@ stops being a liability and becomes pure upside.
   the user across devices without them carrying a token, with
   conflict resolution when two devices save lessons offline,
   instead of the single-server store the built profile uses.
-- Branch timelines as live calendar subscriptions — the built
-  branch-timeline iCalendar export (one downloadable event
-  series per branch, every series carrying its branch's
-  recomputed verdict) extended to a hosted, subscribable
-  calendar feed per timeline, so a recipient's calendar app
-  refreshes the series when a branch is re-sealed instead of
-  importing a one-off file, instead of the static .ics download
-  the timeline export already produces.
+- Hosted multi-timeline calendar subscriptions — the built
+  live calendar subscription feed (one stable, subscribable
+  URL per timeline, re-rendered on every poll, updatable in
+  place by its owner) graduating to a hosted service where one
+  calendar subscription can carry many timelines at once and
+  subscribers are notified when a feed changes, instead of one
+  feed per timeline that calendar apps poll silently.
 
 ## Built with
 

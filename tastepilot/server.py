@@ -105,7 +105,35 @@ Routes:
                                verdicts are recomputed — a tampered
                                branch exports as a FAIL column under
                                a NOT VERIFIED banner, never clean.
-                               ics -> 400 (no timeline meaning).
+                               ics renders one event series per
+                               branch; a dateless timeline -> 400
+                               (no_dated_legs).
+  POST /api/feeds              {"base": {...}, "branches": [...]}
+                               -> create a live calendar subscription
+                               feed for that branch timeline: the
+                               timeline is gated exactly as the ics
+                               export is (a dateless timeline is
+                               refused no_dated_legs), stored under
+                               a stable feed id, and served at the
+                               returned url so a calendar app can
+                               subscribe and poll it.
+  GET  /api/feeds/<id>.ics     the feed's current timeline, rendered
+                               fresh as iCalendar on every fetch —
+                               when the feed is updated, the next
+                               poll serves the new series under the
+                               same URL. A tampered branch's series
+                               reads NOT VERIFIED, never PASS.
+  GET  /api/feeds/<id>         the feed's metadata plus its timeline
+                               verdict, recomputed on the spot.
+  POST /api/feeds/<id>         replace the feed's timeline in place
+                               (same id, expiry renewed) — how a
+                               re-sealed branch reaches subscribers.
+                               An owner-managed feed requires its
+                               owner's token (403 otherwise).
+  DELETE /api/feeds/<id>       revoke a feed: its URL 404s from then
+                               on; the ownership rule matches share
+                               revocation (an unowned feed may be
+                               revoked by whoever holds its URL).
   GET  /api/shares             the caller's own share links (dashboard):
                                requires an ``X-Owner-Token`` header and
                                returns only the shares that token owns —
@@ -127,7 +155,8 @@ Routes:
   DELETE /api/profile          clear the caller's stored profile
                                (200 when one existed, 404 otherwise).
                                DELETE anywhere else outside /api/share
-                               stays 405 like the other methods.
+                               and /api/feeds/<id> stays 405 like the
+                               other methods.
   DELETE /api/share/<id>       revoke a share link: the stored plan is
                                dropped and the id 404s from then on
                                ({"revoked": true}). For an owner-managed
@@ -138,9 +167,10 @@ Routes:
                                the link can revoke it; that is the
                                documented demo trade-off for unowned
                                links. DELETE is otherwise supported
-                               only for /api/profile (below); every
-                               other DELETE target stays 405 like the
-                               other unsupported methods.
+                               only for /api/profile (above) and
+                               /api/feeds/<id>; every other DELETE
+                               target stays 405 like the other
+                               unsupported methods.
 
 Owner-managed shares (no account system):
   * A client may send an ``X-Owner-Token`` header when creating a
@@ -179,6 +209,15 @@ Persistence, expiry, revocation:
     eagerly on every store.
   * The store stays bounded (``MAX_SHARED_PLANS``, oldest evicted
     first) in both modes.
+  * Timeline feeds follow the same pattern in a TimelineFeedStore:
+    in-memory by default, file-backed via ``serve(...,
+    feed_file=...)``, ``--feed-file``, or ``TASTEPILOT_FEED_FILE``;
+    bounded (``MAX_TIMELINE_FEEDS``); expiring after
+    ``DEFAULT_FEED_TTL_SECONDS`` (30 days) unless the owner updates
+    the feed, which renews it; revocable via DELETE. A feed's .ics
+    response is the one API response that is not ``no-store`` — it
+    carries a short public cache lifetime so calendar apps re-poll
+    instead of caching the series forever.
 
 Hardening (Oct 21–24 milestone):
   * Request bodies are capped (``MAX_BODY_BYTES``) and plan text is capped
@@ -203,6 +242,7 @@ import copy
 import hashlib
 import json
 import os
+import secrets
 import threading
 import time
 from collections import OrderedDict
@@ -241,6 +281,12 @@ MAX_SHARED_PLANS = 128           # shared plans kept for link verification
 MAX_SHARE_BODY_BYTES = MAX_VERIFY_BODY_BYTES  # a shared plan is a plan
 DEFAULT_SHARE_TTL_SECONDS = 7 * 24 * 3600  # share links live for 7 days
 SHARE_FILE_ENV_VAR = "TASTEPILOT_SHARE_FILE"  # opt-in persistence path
+MAX_TIMELINE_FEEDS = 64          # live calendar feeds kept at once
+DEFAULT_FEED_TTL_SECONDS = 30 * 24 * 3600  # feeds live for 30 days;
+                                 # an explicit update renews a feed,
+                                 # because a subscription is long-lived
+                                 # by design (unlike a share link)
+FEED_FILE_ENV_VAR = "TASTEPILOT_FEED_FILE"  # opt-in persistence path
 PROFILE_FILE_ENV_VAR = "TASTEPILOT_PROFILE_FILE"  # opt-in profile store
 MAX_PROFILES = 256               # owners with a persistent profile
 OWNER_TOKEN_HEADER = "X-Owner-Token"  # per-browser owner credential
@@ -650,6 +696,215 @@ class ShareStore:
         return self.revoke_status(share_id, owner_token) == "revoked"
 
 
+class TimelineFeedStore:
+    """Bounded store behind the live calendar subscription feeds.
+
+    A feed holds one branch-timeline payload (``{"base", "branches"}``)
+    under a stable, unguessable id (128 bits from ``secrets`` — unlike
+    a share id it is NOT content-addressed, because a subscription's
+    whole point is that its content changes under the same URL when
+    the owner updates it in place). Every fetch re-renders the stored
+    timeline, so an update — a branch re-sealed after another swap —
+    is what subscribers see on their next poll. Entries carry
+    ``created_at`` / ``updated_at`` / ``expires_at`` stamps from an
+    injectable clock; expiry makes a feed indistinguishable from an
+    unknown one, and an explicit update is the only renewal (it is an
+    owner's deliberate act, not the share store's idempotent re-post).
+    Optional ownership mirrors the share store: only the token's
+    SHA-256 hash is kept, and updating or revoking an owned feed
+    requires that token. With ``path`` set, every mutation rewrites
+    that JSON file atomically, exactly like the share store; a
+    missing or corrupt file starts an empty store. Payloads are
+    deep-copied in and out."""
+
+    def __init__(self, max_feeds: int = MAX_TIMELINE_FEEDS,
+                 ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS,
+                 path: str | Path | None = None, clock=time.time):
+        if max_feeds < 1:
+            raise ValueError("max_feeds must be >= 1")
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be > 0")
+        self.max_feeds = max_feeds
+        self.ttl_seconds = ttl_seconds
+        self.path = Path(path) if path is not None else None
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._entries: OrderedDict[str, dict] = OrderedDict()
+        self._load()
+
+    def _load(self) -> None:
+        if self.path is None:
+            return
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+            entries = data["entries"]
+            if not isinstance(entries, list):
+                return
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            return
+        now = self._clock()
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            feed_id = entry.get("feed_id")
+            payload = entry.get("payload")
+            expires_at = entry.get("expires_at")
+            if not isinstance(feed_id, str) or \
+                    not isinstance(payload, dict) or \
+                    not isinstance(payload.get("base"), dict) or \
+                    not isinstance(payload.get("branches"), list) or \
+                    not isinstance(expires_at, (int, float)) or \
+                    expires_at <= now:
+                continue
+            created_at = entry.get("created_at")
+            updated_at = entry.get("updated_at")
+            loaded = {
+                "payload": copy.deepcopy(payload),
+                "created_at": created_at if isinstance(
+                    created_at, (int, float)) else expires_at,
+                "updated_at": updated_at if isinstance(
+                    updated_at, (int, float)) else expires_at,
+                "expires_at": float(expires_at),
+            }
+            if isinstance(entry.get("owner_hash"), str):
+                loaded["owner_hash"] = entry["owner_hash"]
+            self._entries[feed_id] = loaded
+            self._entries.move_to_end(feed_id)
+        while len(self._entries) > self.max_feeds:
+            self._entries.popitem(last=False)
+
+    def _save(self) -> None:
+        if self.path is None:
+            return
+        data = {"version": 1, "entries": [
+            {"feed_id": feed_id, **entry}
+            for feed_id, entry in self._entries.items()]}
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp.write_text(json.dumps(data, ensure_ascii=False),
+                           encoding="utf-8")
+            os.replace(tmp, self.path)
+        except OSError:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    def _prune_expired(self) -> bool:
+        now = self._clock()
+        expired = [fid for fid, e in self._entries.items()
+                   if e["expires_at"] <= now]
+        for fid in expired:
+            del self._entries[fid]
+        return bool(expired)
+
+    @staticmethod
+    def _meta(feed_id: str, entry: dict) -> dict:
+        owner_hash = entry.get("owner_hash")
+        payload = entry["payload"]
+        branches = payload.get("branches") or []
+        return {"feed_id": feed_id,
+                "created_at": _iso(entry["created_at"]),
+                "updated_at": _iso(entry["updated_at"]),
+                "expires_at": _iso(entry["expires_at"]),
+                "owned": owner_hash is not None,
+                "owner_fingerprint": owner_hash[:12]
+                if owner_hash is not None else None,
+                "branches": [b.get("name") if isinstance(b, dict)
+                             else None for b in branches],
+                "columns": 1 + len(branches)}
+
+    def _new_id(self) -> str:
+        for _ in range(100):
+            feed_id = secrets.token_hex(16)
+            if feed_id not in self._entries:
+                return feed_id
+        raise ValueError("feed_id_exhausted")
+
+    @property
+    def persistent(self) -> bool:
+        return self.path is not None
+
+    def info(self) -> dict:
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            return {"persistent": self.persistent,
+                    "count": len(self._entries),
+                    "max": self.max_feeds,
+                    "ttl_seconds": self.ttl_seconds}
+
+    def create(self, payload: dict, owner_token=None) -> dict:
+        with self._lock:
+            self._prune_expired()
+            feed_id = self._new_id()
+            now = self._clock()
+            entry = {"payload": copy.deepcopy(payload),
+                     "created_at": now, "updated_at": now,
+                     "expires_at": now + self.ttl_seconds}
+            digest = owner_token_hash(owner_token)
+            if digest is not None:
+                entry["owner_hash"] = digest
+            self._entries[feed_id] = entry
+            while len(self._entries) > self.max_feeds:
+                self._entries.popitem(last=False)
+            self._save()
+            return self._meta(feed_id, entry)
+
+    def get(self, feed_id: str) -> dict | None:
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            entry = self._entries.get(feed_id)
+            if entry is None:
+                return None
+            return copy.deepcopy(entry["payload"])
+
+    def meta(self, feed_id: str) -> dict | None:
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            entry = self._entries.get(feed_id)
+            return None if entry is None else self._meta(feed_id, entry)
+
+    def update_status(self, feed_id: str, payload: dict, owner_token=None):
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            entry = self._entries.get(feed_id)
+            if entry is None:
+                return "not_found", None
+            digest = entry.get("owner_hash")
+            if digest is not None and \
+                    owner_token_hash(owner_token) != digest:
+                return "forbidden", None
+            now = self._clock()
+            entry["payload"] = copy.deepcopy(payload)
+            entry["updated_at"] = now
+            entry["expires_at"] = now + self.ttl_seconds
+            self._entries.move_to_end(feed_id)
+            self._save()
+            return "updated", self._meta(feed_id, entry)
+
+    def revoke_status(self, feed_id: str, owner_token=None) -> str:
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            entry = self._entries.get(feed_id)
+            if entry is None:
+                return "not_found"
+            digest = entry.get("owner_hash")
+            if digest is not None and \
+                    owner_token_hash(owner_token) != digest:
+                return "forbidden"
+            del self._entries[feed_id]
+            self._save()
+            return "revoked"
+
+    def revoke(self, feed_id: str, owner_token=None) -> bool:
+        return self.revoke_status(feed_id, owner_token) == "revoked"
+
 def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                  max_shared_plans: int = MAX_SHARED_PLANS,
                  share_ttl_seconds: float = DEFAULT_SHARE_TTL_SECONDS,
@@ -657,7 +912,11 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                  share_clock=None,
                  max_profiles: int = MAX_PROFILES,
                  profile_file: str | Path | None = None,
-                 profile_clock=None):
+                 profile_clock=None,
+                 max_feeds: int = MAX_TIMELINE_FEEDS,
+                 feed_ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS,
+                 feed_file: str | Path | None = None,
+                 feed_clock=None):
     # response_id -> (record, response) for plans produced by this server,
     # bounded FIFO: the oldest sealed responses are evicted first.
     evidence_cache: OrderedDict[str, tuple[dict, dict]] = OrderedDict()
@@ -678,6 +937,15 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
     if profile_clock is not None:
         profile_kwargs["clock"] = profile_clock
     profile_store = ProfileStore(**profile_kwargs)
+    # Live calendar feeds live in a TimelineFeedStore: bounded,
+    # expiring, revocable, optionally owner-managed, and — when
+    # feed_file is given — file-persistent across restarts exactly
+    # like the share store.
+    feed_kwargs = {"max_feeds": max_feeds,
+                   "ttl_seconds": feed_ttl_seconds, "path": feed_file}
+    if feed_clock is not None:
+        feed_kwargs["clock"] = feed_clock
+    feed_store = TimelineFeedStore(**feed_kwargs)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):  # keep demo logs clean
@@ -845,7 +1113,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 self._send_json(200, {"ok": True, "mode": agent.mode,
                                       "explainer": agent.explainer_info,
                                       "shares": share_store.info(),
-                                      "profiles": profile_store.info()})
+                                      "profiles": profile_store.info(),
+                                      "feeds": feed_store.info()})
             elif path == "/api/profile":
                 self._handle_profile_get()
             elif path == "/api/shares":
@@ -873,6 +1142,14 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 if meta is not None:
                     report["expires_at"] = meta["expires_at"]
                 self._send_json(200, report)
+            elif path.startswith("/api/feeds/"):
+                rest = unquote(path[len("/api/feeds/"):])
+                if rest.endswith(".ics"):
+                    self._handle_feed_fetch(rest[:-len(".ics")])
+                elif rest and "/" not in rest:
+                    self._handle_feed_meta(rest)
+                else:
+                    self._send_json(404, {"error": "unknown feed id"})
             elif path.startswith("/api/evidence/"):
                 response_id = unquote(path[len("/api/evidence/"):])
                 hit = evidence_cache.get(response_id)
@@ -1325,6 +1602,172 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 "Content-Disposition":
                     f'attachment; filename="tastepilot-timeline.{ext}"'})
 
+        def _timeline_body(self):
+            """Read and shape-gate a {"base", "branches"} body under
+            exactly the /api/timeline gates. Returns the payload, or
+            None after sending the categorised error."""
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return None
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return None
+            if length > MAX_VERIFY_BODY_BYTES:
+                self._send_json(413, {"error": "plan too large"})
+                return None
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return None
+            if not isinstance(payload, dict) or \
+                    not isinstance(payload.get("base"), dict) or \
+                    not isinstance(payload.get("branches"), list):
+                self._send_json(
+                    400, {"error": "base plan and branches are required"})
+                return None
+            error = validate_plan_payload(payload["base"])
+            if error is not None:
+                self._send_json(400, {"error": error})
+                return None
+            for branch in payload["branches"]:
+                if isinstance(branch, dict) and \
+                        isinstance(branch.get("plan"), dict):
+                    error = validate_plan_payload(branch["plan"])
+                    if error is not None:
+                        self._send_json(400, {"error": error})
+                        return None
+            return payload
+
+        def _feed_gate(self, payload):
+            """Prove a timeline can be a calendar feed: rendering it
+            as iCalendar recomputes every column's verdict and
+            refuses a dateless timeline (no_dated_legs). Returns
+            all_passed, or None after sending a categorised 400 —
+            a tampered branch is NOT refused: it passes the gate and
+            its series will read NOT VERIFIED, exactly as in the
+            static export."""
+            try:
+                _content, all_passed = export_timeline(
+                    payload["base"], payload["branches"], "ics")
+            except ValueError as exc:  # categorised refusal
+                self._send_json(
+                    400, {"error": f"feed failed: {exc}"})
+                return None
+            except (KeyError, TypeError, AttributeError, IndexError):
+                self._send_json(
+                    400, {"error": "feed failed: bad_plan"})
+                return None
+            return all_passed
+
+        def _handle_feed_create(self):
+            """Create a live calendar subscription feed for a branch
+            timeline: POST /api/feeds with the /api/timeline body.
+            The feed id is stable and unguessable; subscribers poll
+            its .ics URL, and the owner can replace the timeline in
+            place or revoke the feed outright."""
+            payload = self._timeline_body()
+            if payload is None:
+                return
+            all_passed = self._feed_gate(payload)
+            if all_passed is None:
+                return
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            meta = feed_store.create(payload, owner_token=token)
+            feed_id = meta["feed_id"]
+            self._send_json(201, {
+                **meta,
+                "url": f"/api/feeds/{feed_id}.ics",
+                "feed_url": f"/api/feeds/{feed_id}.ics",
+                "all_passed": all_passed,
+            })
+
+        def _handle_feed_update(self, feed_id):
+            """Replace a feed's timeline in place (POST
+            /api/feeds/<id>): the same URL now serves the new
+            series, and the expiry is renewed by this deliberate
+            act. An owned feed requires its owner's token."""
+            payload = self._timeline_body()
+            if payload is None:
+                return
+            all_passed = self._feed_gate(payload)
+            if all_passed is None:
+                return
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            status, meta = feed_store.update_status(
+                feed_id, payload, owner_token=token)
+            if status == "not_found":
+                self._send_json(404, {"error": "unknown feed id"})
+                return
+            if status == "forbidden":
+                self._send_json(
+                    403, {"error": "only the owner can update "
+                                   "this feed"})
+                return
+            self._send_json(200, {
+                **meta,
+                "url": f"/api/feeds/{feed_id}.ics",
+                "feed_url": f"/api/feeds/{feed_id}.ics",
+                "all_passed": all_passed,
+                "updated": True,
+            })
+
+        def _handle_feed_fetch(self, feed_id):
+            """Serve a feed's calendar: GET /api/feeds/<id>.ics.
+            The stored timeline is rendered fresh on every fetch —
+            verdicts recomputed, so a re-sealed (or tampered) branch
+            shows exactly what it verifies as — with a short public
+            cache lifetime so calendar apps actually re-poll."""
+            payload = feed_store.get(feed_id) if feed_id else None
+            if payload is None:
+                self._send_json(404, {"error": "unknown feed id"})
+                return
+            try:
+                content, _all_passed = export_timeline(
+                    payload["base"], payload["branches"], "ics")
+            except ValueError as exc:  # stored feeds were gated at
+                # write time; a refusal here is a categorised 400.
+                self._send_json(
+                    400, {"error": f"feed failed: {exc}"})
+                return
+            except (KeyError, TypeError, AttributeError, IndexError):
+                self._send_json(
+                    400, {"error": "feed failed: bad_plan"})
+                return
+            self._send(200, content.encode("utf-8"), "text/calendar",
+                       extra={"Cache-Control": "public, max-age=300"})
+
+        def _handle_feed_meta(self, feed_id):
+            """Feed metadata + the recomputed timeline verdict."""
+            payload = feed_store.get(feed_id) if feed_id else None
+            meta = feed_store.meta(feed_id) if payload is not None \
+                else None
+            if payload is None or meta is None:
+                self._send_json(404, {"error": "unknown feed id"})
+                return
+            try:
+                doc = branch_timeline(payload["base"],
+                                      payload["branches"])
+                all_passed = bool(doc["summary"]["all_passed"])
+            except (ValueError, KeyError, TypeError, AttributeError,
+                    IndexError):
+                all_passed = None
+            self._send_json(200, {
+                **meta,
+                "url": f"/api/feeds/{feed_id}.ics",
+                "feed_url": f"/api/feeds/{feed_id}.ics",
+                "all_passed": all_passed,
+            })
+
         def _handle_suggest(self):
             """Guided branch suggestions for one base plan.
 
@@ -1462,6 +1905,16 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                     "format", ["markdown"])[0]
                 self._handle_export_timeline(fmt)
                 return
+            if path == "/api/feeds":
+                self._handle_feed_create()
+                return
+            if path.startswith("/api/feeds/"):
+                feed_id = unquote(path[len("/api/feeds/"):])
+                if feed_id and "/" not in feed_id:
+                    self._handle_feed_update(feed_id)
+                else:
+                    self._send_json(404, {"error": "unknown feed id"})
+                return
             if path == "/api/share":
                 self._handle_share()
                 return
@@ -1555,10 +2008,11 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
         do_PATCH = _method_not_allowed
 
         def do_DELETE(self):
-            """DELETE is supported for exactly two routes: revoking
-            a share link and clearing the caller's own preference
-            profile. Every other DELETE target stays 405, matching
-            the hardening contract for unsupported methods."""
+            """DELETE is supported for exactly three routes:
+            revoking a share link, revoking a timeline feed, and
+            clearing the caller's own preference profile. Every
+            other DELETE target stays 405, matching the hardening
+            contract for unsupported methods."""
             path = urlparse(self.path).path
             if path == "/api/profile":
                 token = self._profile_token()
@@ -1568,6 +2022,28 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                     self._send_json(200, {"cleared": True})
                 else:
                     self._send_json(404, {"error": "no profile stored"})
+                return
+            if path.startswith("/api/feeds/"):
+                feed_id = unquote(path[len("/api/feeds/"):])
+                if not feed_id or "/" in feed_id:
+                    self._send_json(404, {"error": "unknown feed id"})
+                    return
+                token, invalid = self._owner_token()
+                if invalid:
+                    self._send_json(400, {"error": "invalid owner token"})
+                    return
+                status = feed_store.revoke_status(feed_id,
+                                                  owner_token=token)
+                if status == "revoked":
+                    self._send_json(200, {"revoked": True,
+                                          "feed_id": feed_id})
+                    return
+                if status == "forbidden":
+                    self._send_json(
+                        403, {"error": "only the owner can revoke "
+                                       "this feed"})
+                    return
+                self._send_json(404, {"error": "unknown feed id"})
                 return
             if path.startswith("/api/share/"):
                 share_id = unquote(path[len("/api/share/"):])
@@ -1599,19 +2075,26 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
 def serve(agent, port: int = 8765, host: str = "127.0.0.1",
           share_file: str | Path | None = None,
           share_ttl_seconds: float = DEFAULT_SHARE_TTL_SECONDS,
-          profile_file: str | Path | None = None) -> None:
+          profile_file: str | Path | None = None,
+          feed_file: str | Path | None = None,
+          feed_ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS) -> None:
     if share_file is None:
         share_file = os.environ.get(SHARE_FILE_ENV_VAR) or None
     if profile_file is None:
         profile_file = os.environ.get(PROFILE_FILE_ENV_VAR) or None
+    if feed_file is None:
+        feed_file = os.environ.get(FEED_FILE_ENV_VAR) or None
     handler = make_handler(agent, share_file=share_file,
                            share_ttl_seconds=share_ttl_seconds,
-                           profile_file=profile_file)
+                           profile_file=profile_file,
+                           feed_file=feed_file,
+                           feed_ttl_seconds=feed_ttl_seconds)
     server = ThreadingHTTPServer((host, port), handler)
     shares = "persistent" if share_file else "in-memory"
     profiles = "persistent" if profile_file else "in-memory"
+    feeds = "persistent" if feed_file else "in-memory"
     print(f"TastePilot listening on http://{host}:{port} "
           f"(mode={agent.mode}, explainer={agent.explainer_info['source']}, "
-          f"shares={shares}, profiles={profiles})",
+          f"shares={shares}, profiles={profiles}, feeds={feeds})",
           flush=True)  # hosted log streams must see startup immediately
     server.serve_forever()
