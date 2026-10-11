@@ -105,6 +105,24 @@ instead of a named service's API:
   count, registration moment — untouched; setting the same
   effective filter is idempotent and stamps nothing, and an
   explicit null filter resets the webhook to every event.
+- a subscriber can ask for a test push at any time, not
+  only at registration: ``POST /api/multi-feeds/<id>/
+  webhooks/<webhook_id>/test`` fires one ``multi_feed.test``
+  delivery to that webhook alone (owner rule as for the
+  feed), so a subscriber who just rotated an endpoint,
+  rotated a signing secret, or replaced an event filter can
+  verify the endpoint works — and that the signature
+  verifies — without waiting for (or forcing) a feed
+  update. The test is the subscriber's explicit act, so
+  like an on-demand redelivery it is sent regardless of
+  the webhook's event filter; unlike a redelivery it is a
+  fresh payload (the feed's current version, etag, timeline
+  names, and verdict), not a resend. A paused webhook is
+  refused (``webhook_paused``), exactly as for redelivery —
+  resuming is how a paused endpoint comes back, and the
+  test delivery counts toward the webhook's delivery
+  health like any other push, so testing a still-failing
+  endpoint can itself reach the pause threshold.
 - an auto-pause is a circuit breaker, not a life sentence:
   the store stamps it with its reason (``auto``) and the
   moment it paused, and after ``PAUSE_COOLDOWN_SECONDS``
@@ -145,12 +163,14 @@ MAX_SIGNING_SECRET_CHARS = 200
 SIGNATURE_HEADER = "X-TastePilot-Signature"
 EVENT_HEADER = "X-TastePilot-Event"
 WEBHOOK_EVENTS = ("multi_feed.subscribed", "multi_feed.updated",
-                  "multi_feed.created")
+                  "multi_feed.created", "multi_feed.test")
 """Every event a multi-feed push can carry, in canonical
 order. ``multi_feed.created`` is listed for completeness —
 a feed has no webhooks at its own creation moment, so in
 practice pushes carry ``subscribed`` (the registration
-test delivery) or ``updated`` (an in-place update)."""
+test delivery), ``updated`` (an in-place update), or
+``test`` (an on-demand test push the subscriber asked
+for via the webhook's test route)."""
 
 
 def validate_webhook_url(url) -> str:
@@ -305,6 +325,7 @@ def build_notification(feed_id: str, kind: str, version: int,
     event name — nothing else, and never a plan body."""
     event = {"created": "multi_feed.created",
              "updated": "multi_feed.updated",
+             "test": "multi_feed.test",
              "subscribed": "multi_feed.subscribed"}.get(
                  kind, f"multi_feed.{kind}")
     return {"event": event, "kind": kind, "feed_id": feed_id,

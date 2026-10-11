@@ -812,7 +812,23 @@ baked into the image or the repo.
   timeline view's "Set webhook event filters" button
   asks for a comma-separated list per webhook (empty
   resets to every event) and reports each webhook's new
-  subscription. Webhooks are
+  subscription. A webhook can also be test-pushed on
+  demand: `POST .../webhooks/<id>/test` (owner rule as
+  for the feed, no body) fires one `multi_feed.test`
+  delivery to that webhook alone, carrying the feed's
+  current version, etag, timeline names, and verdict —
+  so a subscriber who just rotated an endpoint, rotated
+  a signing secret, or replaced an event filter can
+  verify the endpoint works (and that the signature
+  verifies) without forcing a feed update. The test is
+  the subscriber's explicit act, so it is sent
+  regardless of the webhook's event filter (like an
+  on-demand redelivery); a paused webhook is refused
+  (`webhook_paused`), and the delivery is recorded and
+  counts toward the webhook's delivery health like any
+  push. The timeline view's "Test webhooks" button
+  test-pushes each webhook on the feed and reports each
+  outcome. Webhooks are
   listed (`GET .../webhooks`, host labels only) and removed
   (`DELETE .../webhooks/<id>`) under the same owner rule, and
   persist with the feed in file mode. Bundles expire after 30 days

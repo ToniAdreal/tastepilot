@@ -1056,6 +1056,55 @@ async function doTimeline(basePlan, okBranches, outEl) {
   });
   outEl.appendChild(setEventsBtn);
   outEl.appendChild(setEventsOut);
+  // A webhook can be test-pushed on demand, not only at
+  // registration: one multi_feed.test delivery to that
+  // webhook alone, sent regardless of its event filter
+  // (the subscriber's explicit act), so a subscriber who
+  // rotated an endpoint or a secret can verify the
+  // endpoint works without forcing a feed update. A
+  // paused webhook is refused (webhook_paused).
+  const testBtn = document.createElement('button');
+  testBtn.type = 'button';
+  testBtn.className = 'webhooktestbtn';
+  testBtn.textContent = 'Test webhooks';
+  const testOut = document.createElement('div');
+  testOut.className = 'meta webhooktestout';
+  testBtn.addEventListener('click', async () => {
+    if (!multiFeedId) {
+      testOut.textContent =
+        'Create the multi-timeline subscription first.';
+      return;
+    }
+    const r = await fetch('/api/multi-feeds/' + multiFeedId + '/webhooks',
+      {headers: {...ownerHeaders()}});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      testOut.textContent =
+        'Webhook error: ' + (d.error || r.status);
+      return;
+    }
+    if (!(d.webhooks || []).length) {
+      testOut.textContent = 'No webhooks on this feed.';
+      return;
+    }
+    const lines = [];
+    for (const w of d.webhooks) {
+      const rr = await fetch('/api/multi-feeds/' + multiFeedId +
+        '/webhooks/' + w.webhook_id + '/test',
+        {method: 'POST', headers: {...ownerHeaders()}});
+      const dd = await rr.json().catch(() => ({}));
+      lines.push(w.host + (rr.ok
+        ? ' test ' + (dd.delivery
+            ? dd.delivery.status + ' (' + dd.delivery.event + ')'
+            : 'not sent')
+        : ' test failed: ' + (dd.error || rr.status)));
+    }
+    testOut.textContent = 'Webhooks: ' + lines.join('; ') +
+      '. A test push is sent regardless of a webhook\'s ' +
+      'event filter; a paused webhook is refused.';
+  });
+  outEl.appendChild(testBtn);
+  outEl.appendChild(testOut);
 }
 
 async function doExplore(basePlan, branches, resultsEl) {

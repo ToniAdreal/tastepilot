@@ -376,6 +376,25 @@ the reason recorded (the demo never goes down because the LLM did).
     explicit redelivery of a failed record still
     resends even when its event is filtered out — the
     filter governs automatic pushes only.
+31. Webhook test probe (a webhook is test-pushed on
+    demand): with the probe-30 webhook filtered to
+    `["multi_feed.subscribed"]`, `POST
+    /api/multi-feeds/<id>/webhooks/<webhook_id>/test`
+    (no body) → `200` with a `delivery` whose event is
+    `multi_feed.test` and status `delivered` — the
+    test is the subscriber's explicit act, so it is
+    sent regardless of the filter, and the receiver
+    sees exactly that one event; the delivery is in
+    the notifications log and the response meta's
+    failure count is current. Against a receiver
+    answering `500` the test is recorded `failed` and
+    the count increments (three failed tests in a row
+    auto-pause the webhook, like any pushes). Pause
+    the webhook → the test → `400` (`webhook_paused`)
+    with nothing attempted or recorded; resume it →
+    the test delivers again. On an owned feed, a test
+    without the owner's token → `403`; an unknown
+    webhook id → `404`; an unknown feed id → `404`.
 
 ## Notes
 

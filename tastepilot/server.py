@@ -267,6 +267,20 @@ Routes:
                                event a webhook filtered out
                                is not sent to it and leaves
                                no delivery record.
+  POST /api/multi-feeds/<id>/webhooks/<webhook_id>/test
+                               fire one on-demand test push
+                               (event multi_feed.test) to that
+                               webhook alone (owner rule as
+                               for the feed): the subscriber's
+                               explicit act, sent regardless
+                               of the webhook's event filter,
+                               carrying the feed's current
+                               version, etag, timeline names,
+                               and verdict. A paused webhook
+                               is refused (webhook_paused);
+                               the delivery is recorded like
+                               any push and counts toward the
+                               webhook's delivery health.
   GET  /api/multi-feeds/<id>/notifications
                                the feed's capped push delivery
                                log: one record per delivery
@@ -3179,7 +3193,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             self._send_json(200, result)
 
         def _notify_multi_feed(self, feed_id, kind, all_passed,
-                               only_webhook_id=None):
+                               only_webhook_id=None,
+                               bypass_filter=False):
             """Push one notification for a multi-feed change to
             its registered webhooks and record the deliveries.
             Best-effort by design: a failing endpoint is recorded
@@ -3210,9 +3225,10 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             # being paused either (a paused webhook's wanted
             # pushes are recorded as skipped, above): there is
             # simply nothing the subscriber asked to hear.
-            entries = [e for e in entries
-                       if webhook_subscribes_to(
-                           e, payload.get("event"))]
+            if not bypass_filter:
+                entries = [e for e in entries
+                           if webhook_subscribes_to(
+                               e, payload.get("event"))]
             if not entries:
                 return []
             kwargs = {}
@@ -3737,6 +3753,74 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return
             self._send_json(200, {**meta, "feed_id": feed_id})
 
+        def _handle_webhook_test(self, feed_id, webhook_id):
+            """Fire one on-demand test push to a webhook:
+            POST /api/multi-feeds/<id>/webhooks/<webhook_id>/
+            test (no body). Until now the only test delivery
+            a webhook ever received was the registration ping:
+            a subscriber who rotated an endpoint, rotated a
+            signing secret, or replaced an event filter had no
+            way to verify the endpoint worked — and that the
+            signature verifies — without forcing a feed
+            update. The test push carries the feed's current
+            version, etag, timeline names, and recomputed
+            verdict under the event multi_feed.test, is
+            recorded like any push, and counts toward the
+            webhook's delivery health like any push. It is
+            the subscriber's explicit act, so it is sent
+            regardless of the webhook's event filter (the
+            filter governs automatic pushes only, exactly as
+            for redelivery); a paused webhook is refused
+            (webhook_paused, owner rule as for the feed) —
+            resuming is how a paused endpoint comes back.
+            The response is the webhook meta (refreshed after
+            the delivery, so its failure count is current)
+            plus the delivery record."""
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            status, webhooks = multi_feed_store.webhooks(
+                feed_id, owner_token=token)
+            if status == "not_found":
+                self._send_json(404, {"error": "unknown multi-feed id"})
+                return
+            if status == "forbidden":
+                self._send_json(
+                    403, {"error": "only the owner can manage "
+                                   "webhooks for this multi-feed"})
+                return
+            meta = next((w for w in webhooks
+                         if w.get("webhook_id") == webhook_id), None)
+            if meta is None:
+                self._send_json(404, {"error": "unknown webhook id"})
+                return
+            if meta.get("paused"):
+                self._send_json(
+                    400, {"error": "webhook failed: webhook_paused"})
+                return
+            payload = multi_feed_store.get(feed_id)
+            all_passed = None
+            if payload is not None:
+                try:
+                    _content, all_passed, _summaries = \
+                        export_multi_timeline_ics(payload["timelines"])
+                except (ValueError, KeyError, TypeError,
+                        AttributeError, IndexError):
+                    all_passed = None
+            deliveries = self._notify_multi_feed(
+                feed_id, "test", all_passed,
+                only_webhook_id=webhook_id, bypass_filter=True)
+            status, webhooks = multi_feed_store.webhooks(
+                feed_id, owner_token=token)
+            if status == "ok":
+                meta = next((w for w in webhooks
+                             if w.get("webhook_id") == webhook_id),
+                            meta)
+            self._send_json(200, {
+                **meta, "feed_id": feed_id,
+                "delivery": deliveries[0] if deliveries else None})
+
         def _handle_notifications(self, feed_id):
             """The feed's push delivery log: one record per
             delivery attempt (registration pings + update pushes),
@@ -3934,6 +4018,11 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                         and parts[3] == "set-events" \
                         and parts[0] and parts[2]:
                     self._handle_webhook_set_events(
+                        parts[0], parts[2])
+                elif len(parts) == 4 and parts[1] == "webhooks" \
+                        and parts[3] == "test" \
+                        and parts[0] and parts[2]:
+                    self._handle_webhook_test(
                         parts[0], parts[2])
                 elif rest.endswith("/webhooks") and \
                         "/" not in rest[:-len("/webhooks")]:

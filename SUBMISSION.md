@@ -269,7 +269,14 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    event it filtered out is never sent to it (no attempt,
    no delivery record, no failure-count effect), while
    an explicit on-demand redelivery still resends,
-   because that is the subscriber's own act.
+   because that is the subscriber's own act. And a
+   webhook can be test-pushed on demand
+   (`POST .../webhooks/<id>/test`): one
+   `multi_feed.test` delivery to that webhook alone,
+   sent regardless of its filter and refused while it
+   is paused, so a subscriber who rotated an endpoint
+   or a secret can verify the endpoint — and the
+   signature — without forcing a feed update.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -420,7 +427,9 @@ stops being a liability and becomes pure upside.
   event filter the subscriber sets at registration or
   replaces in place, so a webhook receives only the
   events it named and a filtered-out push is never
-  sent to it at all —
+  sent to it at all, and an on-demand test push the
+  subscriber can fire at any time to verify a rotated
+  endpoint or secret without forcing a feed update —
   and a webhook auto-paused after consecutive failures until
   the subscriber resumes it or a half-open probe — the
   next update push after a one-hour cooldown — revives it)
