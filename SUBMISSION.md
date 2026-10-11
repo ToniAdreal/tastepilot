@@ -135,6 +135,18 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    with a score and rationale per suggestion. Suggestions
    propose only: the base is verified first, never mutated,
    and a tampered plan is refused rather than suggested from.
+   And the ranking learns from the user's own past swap choices:
+   swap events sealed in a plan's evidence record — plus any
+   history plans supplied with the request — are read back as
+   training signal, where a swap the user kept adds weight to
+   the tags and domain of the alternative they chose and a
+   swap they later undid subtracts it (undoing an undo restores
+   it). The resulting profile folds into each candidate's score
+   as a bounded, fully reported adjustment — every candidate
+   names the learned tags behind its adjustment, and a history
+   plan whose sealed chain does not verify is ignored and
+   counted rather than believed, so the personalisation is as
+   tamper-evident as everything else in the plan.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -261,11 +273,12 @@ stops being a liability and becomes pure upside.
   and platform maps links, with two-way calendar sync, instead
   of the one-tap template/search links and one-way share
   payload the handoff layer already produces.
-- Learned suggestion ranking — personalising the built
-  deterministic affinity-delta/coverage ranking from a user's
-  own past swap choices (which suggestions they loaded, kept,
-  or undid), instead of the fixed formula the guided-suggestion
-  engine already applies to every verified pair.
+- Persistent preference profiles — carrying the learned
+  ranking profile across plans and sessions as an account-owned
+  artefact (stored beside the built token-owned share data,
+  portable between a user's devices), instead of deriving it
+  per request from the sealed histories of the plans supplied
+  with that request, as the built learned ranking does.
 
 ## Built with
 

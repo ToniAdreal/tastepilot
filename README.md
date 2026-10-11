@@ -120,7 +120,10 @@ tastepilot/
                ranks every verified primary/alternative pair by
                affinity delta and taste coverage and proposes
                branch specs (singles plus a combined guided tour)
-               that explore_branches accepts unchanged
+               that explore_branches accepts unchanged;
+               learn_preferences derives the ranking's learned
+               adjustment from the sealed swap history (kept swaps
+               positive, undone swaps negative, capped weights)
   smoke.py     real-mode smoke check: one search + one insights call,
                payload-shape validation, both sealed + chain re-verified
   imports.py   external taste-file imports: Spotify playlist-export JSON,
@@ -419,6 +422,24 @@ baked into the image or the repo.
   directly). Suggestions propose only: nothing is applied,
   mutated, or re-sealed, and a tampered plan is refused with
   the swap path's categories instead of being suggested from.
+* The ranking also learns from the user's own past swap choices:
+  `learn_preferences` reads the sealed swap events of the base
+  plan itself plus up to four history plans the caller supplies
+  (`suggest --learn-from past.json`, `POST /api/suggest` with a
+  `history` list, each shape-gated). A swap the user kept adds
+  weight to the tags and domain of the alternative they chose;
+  a swap they later undid subtracts the same (undoing an undo
+  restores the positive signal) — tag weights step ±0.04 and
+  cap at ±0.12, domain weights ±0.02 capping at ±0.06. Each
+  candidate's score gains the bounded learned adjustment (the
+  sum of its alternative's tag weights plus its domain weight),
+  every candidate and suggestion reports its adjustment and the
+  tags that produced it, and the whole profile is returned as
+  the result's `learning` field. History is read only through
+  the sealed record: a history plan whose chain does not verify
+  is counted in `plans_ignored` and teaches nothing. With no
+  swap history anywhere, every adjustment is exactly zero and
+  the ranking is the fixed formula unchanged.
 * Anyone holding a plan JSON can re-verify it in the browser: the UI's
   "Verify a shared plan" panel posts it to `POST /api/verify`, which
   recomputes the hash chain and every per-item checker verdict from the

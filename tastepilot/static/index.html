@@ -465,6 +465,15 @@ async function doSuggest(basePlan, resultsEl) {
   head.className = 'meta';
   head.textContent = `Guided suggestions: ${data.candidates.length} verified swap pair(s) ranked by affinity delta and taste coverage — suggestions propose, they never apply.`;
   resultsEl.appendChild(head);
+  const learning = data.learning || {};
+  if (learning.kept_swaps || learning.undone_swaps) {
+    const ldiv = document.createElement('div');
+    ldiv.className = 'meta learnline';
+    const favoured = Object.entries(learning.tag_weights || {})
+      .filter(([, w]) => w > 0).map(([t]) => t).join(', ');
+    ldiv.textContent = `Learned from your past swaps: ${learning.kept_swaps} kept · ${learning.undone_swaps} undone (sealed swap history only — an unverifiable plan teaches nothing)` + (favoured ? ` · your kept choices favour: ${favoured}` : '');
+    resultsEl.appendChild(ldiv);
+  }
   for (const sug of data.suggestions) {
     const div = document.createElement('div');
     div.className = 'meta suggestline';

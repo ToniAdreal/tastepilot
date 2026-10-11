@@ -59,13 +59,18 @@ Routes:
                                plan exports with a NOT VERIFIED banner,
                                never a clean one. ics on a plan with no
                                dated leg -> 400.
-  POST /api/suggest            {"plan": {...}, "limit": 5} -> guided
+  POST /api/suggest            {"plan": {...}, "limit": 5,
+                               "history": [{...}, ...]} -> guided
                                branch suggestions: every admissible
                                primary/alternative pair ranked by
-                               affinity delta + taste coverage, as
-                               branch specs /api/branches accepts.
-                               Suggestions propose only — nothing is
-                               applied, mutated, or re-sealed.
+                               affinity delta + taste coverage + the
+                               learned adjustment from the sealed
+                               swap history (the plan's own plus any
+                               history plans; an unverifiable one is
+                               ignored and counted), as branch specs
+                               /api/branches accepts. Suggestions
+                               propose only — nothing is applied,
+                               mutated, or re-sealed.
   GET  /api/shares             the caller's own share links (dashboard):
                                requires an ``X-Owner-Token`` header and
                                returns only the shares that token owns —
@@ -989,11 +994,16 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
         def _handle_suggest(self):
             """Guided branch suggestions for one base plan.
 
-            Body: {"plan": {...}, "limit": 5 (optional)}. The plan
+            Body: {"plan": {...}, "limit": 5 (optional),
+            "history": [{...plan...}, ...] (optional)}. The plan
             is untrusted input held to the swap endpoint's gates;
             swap.suggest_branches verifies the plan first, ranks
             only admissible pairs by affinity delta + taste
-            coverage, and returns branch specs the /api/branches
+            coverage + the learned adjustment from the sealed
+            swap history (the base plan's own, plus any history
+            plans — each shape-gated here, and one whose chain
+            does not verify is ignored and counted, never
+            believed), and returns branch specs the /api/branches
             endpoint accepts unchanged. Nothing is applied or
             re-sealed. Refusals are categorised 400s."""
             raw_length = self.headers.get("Content-Length")
@@ -1023,8 +1033,24 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 self._send_json(400, {"error": error})
                 return
             limit = payload.get("limit", 5)
+            history = payload.get("history")
+            history_plans = None
+            if history is not None:
+                if not isinstance(history, list) \
+                        or any(not isinstance(p, dict) for p in history):
+                    self._send_json(
+                        400, {"error": "suggest failed: bad_history"})
+                    return
+                for past in history:
+                    error = validate_plan_payload(past)
+                    if error is not None:
+                        self._send_json(
+                            400, {"error": "suggest failed: bad_history"})
+                        return
+                history_plans = history
             try:
-                result = suggest_branches(plan, limit=limit)
+                result = suggest_branches(plan, limit=limit,
+                                          history_plans=history_plans)
             except ValueError as exc:  # categorised refusal
                 self._send_json(400, {"error": f"suggest failed: {exc}"})
                 return

@@ -62,6 +62,24 @@ primary item carries), and returns them as branch specs that
 A suggestion proposes; it never applies — no plan is mutated,
 nothing is re-sealed, and a tampered plan is refused with the
 same categories as a swap instead of being suggested from.
+
+Learned ranking lives here too. ``learn_preferences`` derives a
+deterministic preference profile from a user's own past swap
+choices — the sealed swap events of the base plan itself plus
+any history plans the caller supplies. A swap the user kept is
+a positive example (its chosen alternative's tags and domain
+gain weight); a swap the user later undid is a negative one
+(the same tags and domain lose the same weight). Activity is
+computed from the undo chain alone — an event is in effect
+unless an in-effect undo reverses it, and undoing an undo
+restores it — and history is read only through swap_history,
+so a history plan whose chain does not verify contributes
+nothing and is counted as ignored rather than believed.
+``suggest_branches`` folds the profile into its fixed formula
+as a bounded learned adjustment per candidate — the learning
+is inspectable (the profile and every candidate's adjustment
+are returned), capped, and exactly zero when there is no
+history, so unpractised plans rank exactly as before.
 """
 from __future__ import annotations
 
@@ -525,6 +543,113 @@ def explore_branches(plan: dict, branches: list) -> dict:
 MAX_SUGGESTIONS = MAX_BRANCHES  # a suggestion list is a branch spec
 COVERAGE_BONUS = 0.05           # score points per newly covered tag
 
+MAX_HISTORY_PLANS = 4           # extra plans learned from per suggest
+LEARN_TAG_STEP = 0.04           # weight per kept (or undone) swap tag
+LEARN_DOMAIN_STEP = 0.02        # weight per kept (or undone) swap domain
+LEARN_TAG_CAP = 0.12            # |tag weight| ceiling (3 net swaps)
+LEARN_DOMAIN_CAP = 0.06         # |domain weight| ceiling
+
+
+def _root_event(events: list[dict], event: dict) -> dict:
+    """The non-undo event at the root of an event's undo chain."""
+    by_id = {e.get("swap_id"): e for e in events}
+    seen = set()
+    current = event
+    while current.get("undo_of") and current["undo_of"] in by_id \
+            and current["undo_of"] not in seen:
+        seen.add(current["undo_of"])
+        current = by_id[current["undo_of"]]
+    return current
+
+
+def learn_preferences(plans: list) -> dict:
+    """Derive a preference profile from plans' sealed swap history.
+
+    Each plan is read through swap_history — a plan whose chain
+    does not verify (or that carries no evidence) is counted in
+    ``plans_ignored`` and contributes nothing. For every non-undo
+    swap event, the event is *kept* when its exchange is still in
+    effect (no in-effect undo reverses it; undoing an undo
+    restores it) and *undone* otherwise. A kept swap adds
+    LEARN_TAG_STEP to every tag of the alternative the user chose
+    (looked up in that plan's own items/alternatives — the sealed
+    description carries no tags) and LEARN_DOMAIN_STEP to its
+    domain; an undone swap subtracts the same. Weights are
+    clamped to the LEARN_*_CAP ceilings, zero weights are dropped,
+    and both weight maps are returned with sorted keys — the
+    profile is a pure, deterministic function of the supplied
+    plans' sealed records."""
+    tag_weights: dict[str, float] = {}
+    domain_weights: dict[str, float] = {}
+    kept = undone = used = ignored = 0
+    for plan in plans:
+        if not isinstance(plan, dict):
+            ignored += 1
+            continue
+        try:
+            history = swap_history(plan)
+        except ValueError:
+            ignored += 1
+            continue
+        used += 1
+        events = [h for h in history]
+        in_effect: dict = {}
+        for entry in events:
+            if entry.get("is_undo"):
+                root = _root_event(events, entry)
+                rid = root.get("swap_id")
+                in_effect[rid] = not in_effect.get(rid, True)
+            else:
+                in_effect.setdefault(entry.get("swap_id"), True)
+        pool = [i for i in (plan.get("items") or [])
+                + (plan.get("alternatives") or []) if isinstance(i, dict)]
+        for entry in events:
+            if entry.get("is_undo"):
+                continue
+            was_kept = in_effect.get(entry.get("swap_id"), True)
+            sign = 1 if was_kept else -1
+            if was_kept:
+                kept += 1
+            else:
+                undone += 1
+            chosen = entry.get("alternative") or {}
+            tags: set = set()
+            if chosen:
+                hits = [i for i in pool
+                        if _matches(i, _selector_from(chosen))]
+                if len(hits) == 1:
+                    tags = _tags_of(hits[0])
+            for tag in tags:
+                tag_weights[tag] = tag_weights.get(tag, 0.0) \
+                    + sign * LEARN_TAG_STEP
+            domain = chosen.get("domain")
+            if domain:
+                domain_weights[domain] = domain_weights.get(domain, 0.0) \
+                    + sign * LEARN_DOMAIN_STEP
+
+    def _clamp(weights: dict, cap: float) -> dict:
+        return {k: round(max(-cap, min(cap, v)), 6)
+                for k, v in sorted(weights.items())
+                if round(max(-cap, min(cap, v)), 6) != 0}
+
+    return {"plans_used": used, "plans_ignored": ignored,
+            "kept_swaps": kept, "undone_swaps": undone,
+            "tag_weights": _clamp(tag_weights, LEARN_TAG_CAP),
+            "domain_weights": _clamp(domain_weights, LEARN_DOMAIN_CAP)}
+
+
+def _learned_adjustment(alternative: dict, domain,
+                        profile: dict) -> tuple[float, list]:
+    """The learned score adjustment for one candidate: the sum of
+    the profile's weights over the alternative's tags, plus its
+    domain weight. Returns (adjustment, matched_tags sorted)."""
+    tags = _tags_of(alternative)
+    matched = sorted(t for t in tags
+                     if profile["tag_weights"].get(t))
+    adjustment = sum(profile["tag_weights"][t] for t in matched) \
+        + profile["domain_weights"].get(domain, 0.0)
+    return round(adjustment, 6), matched
+
 
 def _tags_of(item: dict) -> set:
     """Every taste tag an item carries: its entity tags plus the
@@ -555,20 +680,26 @@ def _branch_name(text: str, seen: set) -> str:
 
 
 def _candidate(primary: dict, alternative: dict,
-               plan_tags: set) -> dict:
+               plan_tags: set, profile: dict | None = None) -> dict:
     """Ranking metrics for one swappable pair.
 
     score = alternative_affinity + affinity_delta
-            + COVERAGE_BONUS * coverage_gain, where the delta is
-    alternative minus primary (negative is a loss the score
-    charges in full) and coverage_gain counts the tags the
-    alternative carries that no primary item in the plan carries
-    — the taste coverage the swap would add."""
+            + COVERAGE_BONUS * coverage_gain + learned_adjustment,
+    where the delta is alternative minus primary (negative is a
+    loss the score charges in full), coverage_gain counts the
+    tags the alternative carries that no primary item in the plan
+    carries — the taste coverage the swap would add — and the
+    learned adjustment (learn_preferences over the user's past
+    swap choices) is exactly zero when there is no history."""
+    profile = profile or {"tag_weights": {}, "domain_weights": {}}
     p_aff = float(primary.get("affinity") or 0)
     a_aff = float(alternative.get("affinity") or 0)
     delta = round(a_aff - p_aff, 6)
     new_tags = sorted(_tags_of(alternative) - plan_tags)
-    score = round(a_aff + delta + COVERAGE_BONUS * len(new_tags), 6)
+    adjustment, learned_tags = _learned_adjustment(
+        alternative, primary.get("domain"), profile)
+    score = round(a_aff + delta + COVERAGE_BONUS * len(new_tags)
+                  + adjustment, 6)
     return {
         "primary": (primary.get("entity") or {}).get("name"),
         "alternative": (alternative.get("entity") or {}).get("name"),
@@ -579,40 +710,55 @@ def _candidate(primary: dict, alternative: dict,
         "affinity_delta": delta,
         "coverage_gain": len(new_tags),
         "new_tags": new_tags,
+        "learned_adjustment": adjustment,
+        "learned_tags": learned_tags,
         "score": score,
         "primary_selector": _selector_of(primary),
         "alternative_selector": _selector_of(alternative),
     }
 
 
-def suggest_branches(plan: dict, limit: int = 5) -> dict:
+def suggest_branches(plan: dict, limit: int = 5,
+                     history_plans: list | None = None) -> dict:
     """Rank a plan's possible swaps and propose branch specs.
 
-    Returns ``{base, candidates, suggestions, branches}``:
-    ``candidates`` is every admissible primary/alternative pair
-    sharing a domain and a leg, ranked by score (ties broken by
-    affinity delta, alternative affinity, then names — fully
-    deterministic); ``suggestions`` is the top single-swap
-    branches (at most ``limit``, reserving one slot for the
-    combined branch when it exists), each with its score, delta,
-    coverage, new tags, and a plain-language rationale; the
+    Returns ``{base, candidates, suggestions, branches,
+    learning}``: ``candidates`` is every admissible
+    primary/alternative pair sharing a domain and a leg, ranked
+    by score (ties broken by affinity delta, alternative
+    affinity, then names — fully deterministic); ``suggestions``
+    is the top single-swap branches (at most ``limit``, reserving
+    one slot for the combined branch when it exists), each with
+    its score, delta, coverage, new tags, the learned adjustment
+    folded into its score, and a plain-language rationale; the
     combined "Guided tour" branch — the best-scoring swap in
     each (domain, leg) group, applied together — is appended
     when at least two groups offer a swap. ``branches`` is the
     suggestions as a plain ``[{name, swaps}]`` spec, directly
     acceptable to explore_branches / the branches CLI.
+    ``learning`` is the learn_preferences profile the ranking
+    used: the base plan's own sealed swap history plus up to
+    MAX_HISTORY_PLANS caller-supplied history plans.
 
     The plan is verified first (_verify_base: chain + whole-plan
     checker) and both items of every pair are re-checked
     individually — suggestions are derived only from verified
     recommendations. Nothing is applied and the plan is never
     mutated. Raises ValueError with a categorised message
-    (bad_limit / _verify_base's categories) on refusal; a plan
-    with no alternatives simply yields empty lists."""
+    (bad_limit / bad_history / too_many_history_plans /
+    _verify_base's categories) on refusal; a plan with no
+    alternatives simply yields empty lists."""
     if isinstance(limit, bool) or not isinstance(limit, int) \
             or not 1 <= limit <= MAX_SUGGESTIONS:
         raise ValueError("bad_limit")
+    if history_plans is not None:
+        if not isinstance(history_plans, list) \
+                or any(not isinstance(p, dict) for p in history_plans):
+            raise ValueError("bad_history")
+        if len(history_plans) > MAX_HISTORY_PLANS:
+            raise ValueError("too_many_history_plans")
     _verify_base(plan)
+    profile = learn_preferences([plan] + list(history_plans or []))
     items = plan.get("items") or []
     alternatives = plan.get("alternatives") or []
     record = plan.get("evidence") or {}
@@ -640,7 +786,8 @@ def suggest_branches(plan: dict, limit: int = 5) -> dict:
                 continue
             if not is_admissible(primary):
                 continue
-            candidates.append(_candidate(primary, alternative, plan_tags))
+            candidates.append(
+                _candidate(primary, alternative, plan_tags, profile))
     candidates.sort(key=lambda c: (-c["score"], -c["affinity_delta"],
                                    -c["alternative_affinity"],
                                    c["primary"] or "",
@@ -670,7 +817,13 @@ def suggest_branches(plan: dict, limit: int = 5) -> dict:
             f"{cand['affinity_delta']:+.2f}"
             + (f", adds taste coverage: {', '.join(cand['new_tags'])}"
                if cand["new_tags"] else
-               ", no new taste tags"))
+               ", no new taste tags")
+            + (f"; learned from your past swaps: "
+               f"{cand['learned_adjustment']:+.2f}"
+               + (f" (tags you kept choosing: "
+                  f"{', '.join(cand['learned_tags'])})"
+                  if cand["learned_tags"] else "")
+               if cand["learned_adjustment"] else ""))
         suggestions.append({
             "name": name,
             "swaps": [{"primary": cand["primary_selector"],
@@ -679,6 +832,8 @@ def suggest_branches(plan: dict, limit: int = 5) -> dict:
             "affinity_delta": cand["affinity_delta"],
             "coverage_gain": cand["coverage_gain"],
             "new_tags": cand["new_tags"],
+            "learned_adjustment": cand["learned_adjustment"],
+            "learned_tags": cand["learned_tags"],
             "domain": cand["domain"],
             "location": cand["location"],
             "rationale": rationale,
@@ -698,6 +853,10 @@ def suggest_branches(plan: dict, limit: int = 5) -> dict:
             "affinity_delta": total_delta,
             "coverage_gain": len(tour_tags),
             "new_tags": tour_tags,
+            "learned_adjustment": round(
+                sum(c["learned_adjustment"] for c in tour), 6),
+            "learned_tags": sorted(
+                {t for c in tour for t in c["learned_tags"]}),
             "domain": None,
             "location": None,
             "rationale": (
@@ -715,4 +874,5 @@ def suggest_branches(plan: dict, limit: int = 5) -> dict:
     return {"base": _branch_verdict(plan),
             "candidates": candidates,
             "suggestions": suggestions,
-            "branches": branches}
+            "branches": branches,
+            "learning": profile}

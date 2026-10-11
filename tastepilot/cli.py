@@ -17,6 +17,7 @@
   python -m tastepilot branches --plan plan.json --spec branches.json
                              [--out-dir branch-dir]
   python -m tastepilot suggest --plan plan.json [--limit 5]
+                             [--learn-from past-plan.json]
                              [--out suggestions.json]
   python -m tastepilot serve [--host 127.0.0.1] [--port 8765]
                              [--mode mock|auto] [--llm template|nebius]
@@ -138,6 +139,12 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--limit", type=int, default=5,
                    help="max suggestions (1-6, default 5); the combined "
                         "guided-tour branch counts toward the limit")
+    g.add_argument("--learn-from", action="append", default=[],
+                   metavar="PLAN_JSON",
+                   help="a saved plan whose sealed swap history the "
+                        "ranking learns from (repeatable, max 4); the "
+                        "--plan plan's own sealed swaps are always "
+                        "learned from")
     g.add_argument("--out",
                    help="write the suggestions JSON here — its "
                         "\"branches\" list is a spec the branches "
@@ -368,8 +375,24 @@ def main(argv: list[str] | None = None) -> int:
         if not isinstance(plan, dict):
             print("error: suggest failed: bad_plan", file=sys.stderr)
             return 2
+        history_plans = []
+        for history_path in args.learn_from:
+            try:
+                past = json.loads(
+                    Path(history_path).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                print(f"error: suggest failed: cannot read history "
+                      f"plan ({type(exc).__name__})", file=sys.stderr)
+                return 2
+            if not isinstance(past, dict):
+                print("error: suggest failed: bad_history",
+                      file=sys.stderr)
+                return 2
+            history_plans.append(past)
         try:
-            result = suggest_branches(plan, limit=args.limit)
+            result = suggest_branches(
+                plan, limit=args.limit,
+                history_plans=history_plans or None)
         except ValueError as exc:  # categorised refusal, no traceback
             print(f"error: suggest failed: {exc}", file=sys.stderr)
             # A plan that does not verify is a verdict (exit 1, like
@@ -385,6 +408,15 @@ def main(argv: list[str] | None = None) -> int:
               f"passed={result['base']['passed']} "
               f"chain_valid={result['base']['chain_valid']}"
               + (f" out={args.out}" if args.out else ""))
+        learning = result["learning"]
+        if learning["kept_swaps"] or learning["undone_swaps"] \
+                or learning["plans_ignored"]:
+            print(f"  learning: kept_swaps={learning['kept_swaps']} "
+                  f"undone_swaps={learning['undone_swaps']} "
+                  f"plans_used={learning['plans_used']} "
+                  f"plans_ignored={learning['plans_ignored']} "
+                  f"tag_weights={learning['tag_weights']} "
+                  f"domain_weights={learning['domain_weights']}")
         for i, sug in enumerate(result["suggestions"], 1):
             print(f"  suggestion #{i} '{sug['name']}': "
                   f"score={sug['score']:.2f} "

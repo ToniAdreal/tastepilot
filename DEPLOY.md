@@ -123,6 +123,14 @@ the reason recorded (the demo never goes down because the LLM did).
     exact branches with recomputed PASS verdicts. A tampered
     plan posted to `POST /api/suggest` → `400
     suggest failed: plan_not_verified`, never suggestions.
+15. Learned-ranking probe: swap one item in a plan and keep it,
+    then click "Suggest branches" on the swapped plan → a
+    "Learned from your past swaps: 1 kept · 0 undone" line
+    appears and the affected candidates carry a learned
+    adjustment in their rationale. Undo the swap, suggest again
+    → the same tags now adjust negatively. A chain-broken plan
+    in the request's `history` list is counted under
+    `plans_ignored` and changes no score.
 
 ## Notes
 
