@@ -1,888 +1,930 @@
 {
- "request": "a first date in New York, we both love Kind of Blue",
- "scenario": "date",
- "location": "New York",
- "locations": [
-  "New York"
- ],
- "domains": [
-  "food",
-  "place",
-  "music",
-  "film"
- ],
- "seeds": [
-  "Kind of Blue (Miles Davis)"
- ],
- "seed_lists": [],
- "imports": [],
- "schedule": [
-  {
-   "location": "New York",
-   "start": null,
-   "end": null,
-   "nights": null,
-   "dates": []
-  }
- ],
- "date_warnings": [],
- "timetable": [],
- "transfers": [],
- "travel_warnings": [],
- "mode": "mock",
- "explainer": {
-  "source": "template",
-  "model": null,
-  "items_explained": 4,
-  "llm_written": 0,
-  "template_written": 4,
-  "fallback": 0
- },
- "items": [
-  {
-   "entity": {
-    "id": "fod_jazz_bar_nyc",
-    "name": "A basement jazz bar with natural wine",
-    "domain": "food",
-    "urn_type": "urn:entity:place",
-    "tags": [
-     "nyc",
-     "jazz",
-     "intimate",
-     "wine"
-    ],
-    "location": "New York"
-   },
-   "domain": "food",
-   "location": "New York",
-   "affinity": 0.92,
-   "shared_tags": [
-    "jazz"
-   ],
-   "evidence_ref": "mock:insights:09f39fcb12ed8fac",
-   "why": "Qloo's taste graph links A basement jazz bar with natural wine to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.92).",
-   "explanation_source": "template",
-   "explanation": {
-    "source": "template"
-   },
-   "verification": {
-    "item": "A basement jazz bar with natural wine",
-    "entity_id": "fod_jazz_bar_nyc",
-    "domain": "food",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:09f39fcb12ed8fac",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.92
-    }
-   }
-  },
-  {
-   "entity": {
-    "id": "plc_west_village",
-    "name": "West Village, New York",
-    "domain": "place",
-    "urn_type": "urn:entity:place",
-    "tags": [
-     "nyc",
-     "walking",
-     "jazz",
-     "historic"
-    ],
-    "location": "New York"
-   },
-   "domain": "place",
-   "location": "New York",
-   "affinity": 0.88,
-   "shared_tags": [
-    "jazz"
-   ],
-   "evidence_ref": "mock:insights:4b3d8bcf04001e3b",
-   "why": "Qloo's taste graph links West Village, New York to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.88).",
-   "explanation_source": "template",
-   "explanation": {
-    "source": "template"
-   },
-   "verification": {
-    "item": "West Village, New York",
-    "entity_id": "plc_west_village",
-    "domain": "place",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:4b3d8bcf04001e3b",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.88
-    }
-   }
-  },
-  {
-   "entity": {
-    "id": "art_nujabes",
-    "name": "Nujabes",
-    "domain": "music",
-    "urn_type": "urn:entity:artist",
-    "tags": [
-     "jazz",
-     "hip-hop",
-     "japanese",
-     "mellow",
-     "lo-fi"
-    ],
-    "location": null
-   },
-   "domain": "music",
-   "location": "New York",
-   "affinity": 0.84,
-   "shared_tags": [
-    "jazz"
-   ],
-   "evidence_ref": "mock:insights:f4db3ca15ae4b88d",
-   "why": "Qloo's taste graph links Nujabes to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.84).",
-   "explanation_source": "template",
-   "explanation": {
-    "source": "template"
-   },
-   "verification": {
-    "item": "Nujabes",
-    "entity_id": "art_nujabes",
-    "domain": "music",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:f4db3ca15ae4b88d",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.84
-    }
-   }
-  },
-  {
-   "entity": {
-    "id": "mov_lost_translation",
-    "name": "Lost in Translation",
-    "domain": "film",
-    "urn_type": "urn:entity:movie",
-    "tags": [
-     "drama",
-     "tokyo",
-     "quiet",
-     "atmospheric"
-    ],
-    "location": null
-   },
-   "domain": "film",
-   "location": "New York",
-   "affinity": 0.77,
-   "shared_tags": [
-    "quiet"
-   ],
-   "evidence_ref": "mock:insights:e7ba7ad039f3736c",
-   "why": "Qloo's taste graph links Lost in Translation to Kind of Blue (Miles Davis) (shared signals: quiet; affinity 0.77).",
-   "explanation_source": "template",
-   "explanation": {
-    "source": "template"
-   },
-   "verification": {
-    "item": "Lost in Translation",
-    "entity_id": "mov_lost_translation",
-    "domain": "film",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:e7ba7ad039f3736c",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.77
-    }
-   }
-  }
- ],
- "alternatives": [],
- "groups": [
-  {
-   "domain": "food",
-   "items": [
+  "request": "a first date in New York, we both love Kind of Blue",
+  "scenario": "date",
+  "location": "New York",
+  "locations": [
+    "New York"
+  ],
+  "domains": [
+    "food",
+    "place",
+    "music",
+    "film"
+  ],
+  "seeds": [
+    "Kind of Blue (Miles Davis)"
+  ],
+  "seed_lists": [],
+  "imports": [],
+  "schedule": [
     {
-     "entity": {
-      "id": "fod_jazz_bar_nyc",
-      "name": "A basement jazz bar with natural wine",
-      "domain": "food",
-      "urn_type": "urn:entity:place",
-      "tags": [
-       "nyc",
-       "jazz",
-       "intimate",
-       "wine"
-      ],
-      "location": "New York"
-     },
-     "domain": "food",
-     "location": "New York",
-     "affinity": 0.92,
-     "shared_tags": [
-      "jazz"
-     ],
-     "evidence_ref": "mock:insights:09f39fcb12ed8fac",
-     "why": "Qloo's taste graph links A basement jazz bar with natural wine to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.92).",
-     "explanation_source": "template",
-     "explanation": {
-      "source": "template"
-     },
-     "verification": {
-      "item": "A basement jazz bar with natural wine",
-      "entity_id": "fod_jazz_bar_nyc",
-      "domain": "food",
-      "admissible": true,
-      "reason": "ok",
-      "evidence": {
-       "response_id": "mock:insights:09f39fcb12ed8fac",
-       "endpoint": "insights",
-       "source": "mock",
-       "affinity_in_response": 0.92
-      }
-     }
+      "location": "New York",
+      "start": null,
+      "end": null,
+      "nights": null,
+      "dates": []
     }
-   ]
+  ],
+  "date_warnings": [],
+  "timetable": [],
+  "transfers": [],
+  "travel_warnings": [],
+  "mode": "mock",
+  "explainer": {
+    "source": "template",
+    "model": null,
+    "items_explained": 4,
+    "llm_written": 0,
+    "template_written": 4,
+    "fallback": 0
   },
-  {
-   "domain": "place",
-   "items": [
+  "items": [
     {
-     "entity": {
-      "id": "plc_west_village",
-      "name": "West Village, New York",
-      "domain": "place",
-      "urn_type": "urn:entity:place",
-      "tags": [
-       "nyc",
-       "walking",
-       "jazz",
-       "historic"
-      ],
-      "location": "New York"
-     },
-     "domain": "place",
-     "location": "New York",
-     "affinity": 0.88,
-     "shared_tags": [
-      "jazz"
-     ],
-     "evidence_ref": "mock:insights:4b3d8bcf04001e3b",
-     "why": "Qloo's taste graph links West Village, New York to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.88).",
-     "explanation_source": "template",
-     "explanation": {
-      "source": "template"
-     },
-     "verification": {
-      "item": "West Village, New York",
-      "entity_id": "plc_west_village",
-      "domain": "place",
-      "admissible": true,
-      "reason": "ok",
-      "evidence": {
-       "response_id": "mock:insights:4b3d8bcf04001e3b",
-       "endpoint": "insights",
-       "source": "mock",
-       "affinity_in_response": 0.88
-      }
-     }
-    }
-   ]
-  },
-  {
-   "domain": "music",
-   "items": [
-    {
-     "entity": {
-      "id": "art_nujabes",
-      "name": "Nujabes",
-      "domain": "music",
-      "urn_type": "urn:entity:artist",
-      "tags": [
-       "jazz",
-       "hip-hop",
-       "japanese",
-       "mellow",
-       "lo-fi"
-      ],
-      "location": null
-     },
-     "domain": "music",
-     "location": "New York",
-     "affinity": 0.84,
-     "shared_tags": [
-      "jazz"
-     ],
-     "evidence_ref": "mock:insights:f4db3ca15ae4b88d",
-     "why": "Qloo's taste graph links Nujabes to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.84).",
-     "explanation_source": "template",
-     "explanation": {
-      "source": "template"
-     },
-     "verification": {
-      "item": "Nujabes",
-      "entity_id": "art_nujabes",
-      "domain": "music",
-      "admissible": true,
-      "reason": "ok",
-      "evidence": {
-       "response_id": "mock:insights:f4db3ca15ae4b88d",
-       "endpoint": "insights",
-       "source": "mock",
-       "affinity_in_response": 0.84
-      }
-     }
-    }
-   ]
-  },
-  {
-   "domain": "film",
-   "items": [
-    {
-     "entity": {
-      "id": "mov_lost_translation",
-      "name": "Lost in Translation",
-      "domain": "film",
-      "urn_type": "urn:entity:movie",
-      "tags": [
-       "drama",
-       "tokyo",
-       "quiet",
-       "atmospheric"
-      ],
-      "location": null
-     },
-     "domain": "film",
-     "location": "New York",
-     "affinity": 0.77,
-     "shared_tags": [
-      "quiet"
-     ],
-     "evidence_ref": "mock:insights:e7ba7ad039f3736c",
-     "why": "Qloo's taste graph links Lost in Translation to Kind of Blue (Miles Davis) (shared signals: quiet; affinity 0.77).",
-     "explanation_source": "template",
-     "explanation": {
-      "source": "template"
-     },
-     "verification": {
-      "item": "Lost in Translation",
-      "entity_id": "mov_lost_translation",
-      "domain": "film",
-      "admissible": true,
-      "reason": "ok",
-      "evidence": {
-       "response_id": "mock:insights:e7ba7ad039f3736c",
-       "endpoint": "insights",
-       "source": "mock",
-       "affinity_in_response": 0.77
-      }
-     }
-    }
-   ]
-  }
- ],
- "legs": [
-  {
-   "location": "New York",
-   "groups": [
-    {
-     "domain": "food",
-     "items": [
-      {
-       "entity": {
+      "entity": {
         "id": "fod_jazz_bar_nyc",
         "name": "A basement jazz bar with natural wine",
         "domain": "food",
         "urn_type": "urn:entity:place",
         "tags": [
-         "nyc",
-         "jazz",
-         "intimate",
-         "wine"
+          "nyc",
+          "jazz",
+          "intimate",
+          "wine"
         ],
         "location": "New York"
-       },
-       "domain": "food",
-       "location": "New York",
-       "affinity": 0.92,
-       "shared_tags": [
+      },
+      "domain": "food",
+      "location": "New York",
+      "affinity": 0.92,
+      "shared_tags": [
         "jazz"
-       ],
-       "evidence_ref": "mock:insights:09f39fcb12ed8fac",
-       "why": "Qloo's taste graph links A basement jazz bar with natural wine to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.92).",
-       "explanation_source": "template",
-       "explanation": {
+      ],
+      "evidence_ref": "mock:insights:09f39fcb12ed8fac",
+      "why": "Qloo's taste graph links A basement jazz bar with natural wine to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.92).",
+      "explanation_source": "template",
+      "explanation": {
         "source": "template"
-       },
-       "verification": {
+      },
+      "verification": {
         "item": "A basement jazz bar with natural wine",
         "entity_id": "fod_jazz_bar_nyc",
         "domain": "food",
         "admissible": true,
         "reason": "ok",
         "evidence": {
-         "response_id": "mock:insights:09f39fcb12ed8fac",
-         "endpoint": "insights",
-         "source": "mock",
-         "affinity_in_response": 0.92
+          "response_id": "mock:insights:09f39fcb12ed8fac",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.92
         }
-       }
       }
-     ]
     },
     {
-     "domain": "place",
-     "items": [
-      {
-       "entity": {
+      "entity": {
         "id": "plc_west_village",
         "name": "West Village, New York",
         "domain": "place",
         "urn_type": "urn:entity:place",
         "tags": [
-         "nyc",
-         "walking",
-         "jazz",
-         "historic"
+          "nyc",
+          "walking",
+          "jazz",
+          "historic"
         ],
         "location": "New York"
-       },
-       "domain": "place",
-       "location": "New York",
-       "affinity": 0.88,
-       "shared_tags": [
+      },
+      "domain": "place",
+      "location": "New York",
+      "affinity": 0.88,
+      "shared_tags": [
         "jazz"
-       ],
-       "evidence_ref": "mock:insights:4b3d8bcf04001e3b",
-       "why": "Qloo's taste graph links West Village, New York to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.88).",
-       "explanation_source": "template",
-       "explanation": {
+      ],
+      "evidence_ref": "mock:insights:4b3d8bcf04001e3b",
+      "why": "Qloo's taste graph links West Village, New York to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.88).",
+      "explanation_source": "template",
+      "explanation": {
         "source": "template"
-       },
-       "verification": {
+      },
+      "verification": {
         "item": "West Village, New York",
         "entity_id": "plc_west_village",
         "domain": "place",
         "admissible": true,
         "reason": "ok",
         "evidence": {
-         "response_id": "mock:insights:4b3d8bcf04001e3b",
-         "endpoint": "insights",
-         "source": "mock",
-         "affinity_in_response": 0.88
+          "response_id": "mock:insights:4b3d8bcf04001e3b",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.88
         }
-       }
       }
-     ]
     },
     {
-     "domain": "music",
-     "items": [
-      {
-       "entity": {
+      "entity": {
         "id": "art_nujabes",
         "name": "Nujabes",
         "domain": "music",
         "urn_type": "urn:entity:artist",
         "tags": [
-         "jazz",
-         "hip-hop",
-         "japanese",
-         "mellow",
-         "lo-fi"
+          "jazz",
+          "hip-hop",
+          "japanese",
+          "mellow",
+          "lo-fi"
         ],
         "location": null
-       },
-       "domain": "music",
-       "location": "New York",
-       "affinity": 0.84,
-       "shared_tags": [
+      },
+      "domain": "music",
+      "location": "New York",
+      "affinity": 0.84,
+      "shared_tags": [
         "jazz"
-       ],
-       "evidence_ref": "mock:insights:f4db3ca15ae4b88d",
-       "why": "Qloo's taste graph links Nujabes to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.84).",
-       "explanation_source": "template",
-       "explanation": {
+      ],
+      "evidence_ref": "mock:insights:f4db3ca15ae4b88d",
+      "why": "Qloo's taste graph links Nujabes to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.84).",
+      "explanation_source": "template",
+      "explanation": {
         "source": "template"
-       },
-       "verification": {
+      },
+      "verification": {
         "item": "Nujabes",
         "entity_id": "art_nujabes",
         "domain": "music",
         "admissible": true,
         "reason": "ok",
         "evidence": {
-         "response_id": "mock:insights:f4db3ca15ae4b88d",
-         "endpoint": "insights",
-         "source": "mock",
-         "affinity_in_response": 0.84
+          "response_id": "mock:insights:f4db3ca15ae4b88d",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.84
         }
-       }
       }
-     ]
     },
     {
-     "domain": "film",
-     "items": [
-      {
-       "entity": {
+      "entity": {
         "id": "mov_lost_translation",
         "name": "Lost in Translation",
         "domain": "film",
         "urn_type": "urn:entity:movie",
         "tags": [
-         "drama",
-         "tokyo",
-         "quiet",
-         "atmospheric"
+          "drama",
+          "tokyo",
+          "quiet",
+          "atmospheric"
         ],
         "location": null
-       },
-       "domain": "film",
-       "location": "New York",
-       "affinity": 0.77,
-       "shared_tags": [
+      },
+      "domain": "film",
+      "location": "New York",
+      "affinity": 0.77,
+      "shared_tags": [
         "quiet"
-       ],
-       "evidence_ref": "mock:insights:e7ba7ad039f3736c",
-       "why": "Qloo's taste graph links Lost in Translation to Kind of Blue (Miles Davis) (shared signals: quiet; affinity 0.77).",
-       "explanation_source": "template",
-       "explanation": {
+      ],
+      "evidence_ref": "mock:insights:e7ba7ad039f3736c",
+      "why": "Qloo's taste graph links Lost in Translation to Kind of Blue (Miles Davis) (shared signals: quiet; affinity 0.77).",
+      "explanation_source": "template",
+      "explanation": {
         "source": "template"
-       },
-       "verification": {
+      },
+      "verification": {
         "item": "Lost in Translation",
         "entity_id": "mov_lost_translation",
         "domain": "film",
         "admissible": true,
         "reason": "ok",
         "evidence": {
-         "response_id": "mock:insights:e7ba7ad039f3736c",
-         "endpoint": "insights",
-         "source": "mock",
-         "affinity_in_response": 0.77
+          "response_id": "mock:insights:e7ba7ad039f3736c",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.77
         }
-       }
       }
-     ]
     }
-   ],
-   "start": null,
-   "end": null,
-   "nights": null
-  }
- ],
- "rejected": [],
- "rejected_details": [],
- "exclusions": [],
- "excluded": [],
- "checker": {
-  "passed": true,
-  "chain_valid": true,
-  "violations": [],
-  "items": [
-   {
-    "item": "A basement jazz bar with natural wine",
-    "entity_id": "fod_jazz_bar_nyc",
-    "domain": "food",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:09f39fcb12ed8fac",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.92
-    }
-   },
-   {
-    "item": "West Village, New York",
-    "entity_id": "plc_west_village",
-    "domain": "place",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:4b3d8bcf04001e3b",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.88
-    }
-   },
-   {
-    "item": "Nujabes",
-    "entity_id": "art_nujabes",
-    "domain": "music",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:f4db3ca15ae4b88d",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.84
-    }
-   },
-   {
-    "item": "Lost in Translation",
-    "entity_id": "mov_lost_translation",
-    "domain": "film",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:e7ba7ad039f3736c",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.77
-    }
-   }
   ],
-  "alternatives": []
- },
- "evidence": {
-  "tool": "tastepilot",
-  "version": "0.1.0",
-  "created_at": "2026-10-11T04:14:16.646429+00:00",
-  "verdict": "PASS",
-  "entries": [
-   {
-    "kind": "header",
-    "hash": "ceaee52f53fcebbf1941cbd97531901371bf1262a1e2f32fdc4ed4f458ab401f",
-    "request_text": "a first date in New York, we both love Kind of Blue",
-    "mode": "mock"
-   },
-   {
-    "kind": "qloo_call",
-    "hash": "64ba40a914511ba4aae89934d597477f3579db1c3a3ae0fe2f84b3152dea050e",
-    "response": {
-     "response_id": "mock:search:6d368715e1962a1e",
-     "endpoint": "search",
-     "source": "mock",
-     "request": {
-      "query": "Kind of Blue (Miles Davis)",
-      "limit": 5
-     },
-     "results": [
-      {
-       "entity": {
-        "id": "art_kind_of_blue",
-        "name": "Kind of Blue (Miles Davis)",
-        "domain": "music",
-        "urn_type": "urn:entity:artist",
-        "tags": [
-         "jazz",
-         "modal",
-         "quiet",
-         "classic"
-        ],
-        "location": null
-       },
-       "affinity": 1.0,
-       "shared_tags": []
-      }
-     ]
+  "alternatives": [],
+  "groups": [
+    {
+      "domain": "food",
+      "items": [
+        {
+          "entity": {
+            "id": "fod_jazz_bar_nyc",
+            "name": "A basement jazz bar with natural wine",
+            "domain": "food",
+            "urn_type": "urn:entity:place",
+            "tags": [
+              "nyc",
+              "jazz",
+              "intimate",
+              "wine"
+            ],
+            "location": "New York"
+          },
+          "domain": "food",
+          "location": "New York",
+          "affinity": 0.92,
+          "shared_tags": [
+            "jazz"
+          ],
+          "evidence_ref": "mock:insights:09f39fcb12ed8fac",
+          "why": "Qloo's taste graph links A basement jazz bar with natural wine to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.92).",
+          "explanation_source": "template",
+          "explanation": {
+            "source": "template"
+          },
+          "verification": {
+            "item": "A basement jazz bar with natural wine",
+            "entity_id": "fod_jazz_bar_nyc",
+            "domain": "food",
+            "admissible": true,
+            "reason": "ok",
+            "evidence": {
+              "response_id": "mock:insights:09f39fcb12ed8fac",
+              "endpoint": "insights",
+              "source": "mock",
+              "affinity_in_response": 0.92
+            }
+          }
+        }
+      ]
+    },
+    {
+      "domain": "place",
+      "items": [
+        {
+          "entity": {
+            "id": "plc_west_village",
+            "name": "West Village, New York",
+            "domain": "place",
+            "urn_type": "urn:entity:place",
+            "tags": [
+              "nyc",
+              "walking",
+              "jazz",
+              "historic"
+            ],
+            "location": "New York"
+          },
+          "domain": "place",
+          "location": "New York",
+          "affinity": 0.88,
+          "shared_tags": [
+            "jazz"
+          ],
+          "evidence_ref": "mock:insights:4b3d8bcf04001e3b",
+          "why": "Qloo's taste graph links West Village, New York to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.88).",
+          "explanation_source": "template",
+          "explanation": {
+            "source": "template"
+          },
+          "verification": {
+            "item": "West Village, New York",
+            "entity_id": "plc_west_village",
+            "domain": "place",
+            "admissible": true,
+            "reason": "ok",
+            "evidence": {
+              "response_id": "mock:insights:4b3d8bcf04001e3b",
+              "endpoint": "insights",
+              "source": "mock",
+              "affinity_in_response": 0.88
+            }
+          }
+        }
+      ]
+    },
+    {
+      "domain": "music",
+      "items": [
+        {
+          "entity": {
+            "id": "art_nujabes",
+            "name": "Nujabes",
+            "domain": "music",
+            "urn_type": "urn:entity:artist",
+            "tags": [
+              "jazz",
+              "hip-hop",
+              "japanese",
+              "mellow",
+              "lo-fi"
+            ],
+            "location": null
+          },
+          "domain": "music",
+          "location": "New York",
+          "affinity": 0.84,
+          "shared_tags": [
+            "jazz"
+          ],
+          "evidence_ref": "mock:insights:f4db3ca15ae4b88d",
+          "why": "Qloo's taste graph links Nujabes to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.84).",
+          "explanation_source": "template",
+          "explanation": {
+            "source": "template"
+          },
+          "verification": {
+            "item": "Nujabes",
+            "entity_id": "art_nujabes",
+            "domain": "music",
+            "admissible": true,
+            "reason": "ok",
+            "evidence": {
+              "response_id": "mock:insights:f4db3ca15ae4b88d",
+              "endpoint": "insights",
+              "source": "mock",
+              "affinity_in_response": 0.84
+            }
+          }
+        }
+      ]
+    },
+    {
+      "domain": "film",
+      "items": [
+        {
+          "entity": {
+            "id": "mov_lost_translation",
+            "name": "Lost in Translation",
+            "domain": "film",
+            "urn_type": "urn:entity:movie",
+            "tags": [
+              "drama",
+              "tokyo",
+              "quiet",
+              "atmospheric"
+            ],
+            "location": null
+          },
+          "domain": "film",
+          "location": "New York",
+          "affinity": 0.77,
+          "shared_tags": [
+            "quiet"
+          ],
+          "evidence_ref": "mock:insights:e7ba7ad039f3736c",
+          "why": "Qloo's taste graph links Lost in Translation to Kind of Blue (Miles Davis) (shared signals: quiet; affinity 0.77).",
+          "explanation_source": "template",
+          "explanation": {
+            "source": "template"
+          },
+          "verification": {
+            "item": "Lost in Translation",
+            "entity_id": "mov_lost_translation",
+            "domain": "film",
+            "admissible": true,
+            "reason": "ok",
+            "evidence": {
+              "response_id": "mock:insights:e7ba7ad039f3736c",
+              "endpoint": "insights",
+              "source": "mock",
+              "affinity_in_response": 0.77
+            }
+          }
+        }
+      ]
     }
-   },
-   {
-    "kind": "qloo_call",
-    "hash": "247c700895467bb5794eaa9a183e16bc07934edb89e6b2cff6e336627ba0b91a",
-    "response": {
-     "response_id": "mock:insights:09f39fcb12ed8fac",
-     "endpoint": "insights",
-     "source": "mock",
-     "request": {
-      "filter.type": "urn:entity:place",
-      "signal.interests.entities": "art_kind_of_blue",
-      "take": 4,
-      "location": "New York"
-     },
-     "results": [
+  ],
+  "legs": [
+    {
+      "location": "New York",
+      "groups": [
+        {
+          "domain": "food",
+          "items": [
+            {
+              "entity": {
+                "id": "fod_jazz_bar_nyc",
+                "name": "A basement jazz bar with natural wine",
+                "domain": "food",
+                "urn_type": "urn:entity:place",
+                "tags": [
+                  "nyc",
+                  "jazz",
+                  "intimate",
+                  "wine"
+                ],
+                "location": "New York"
+              },
+              "domain": "food",
+              "location": "New York",
+              "affinity": 0.92,
+              "shared_tags": [
+                "jazz"
+              ],
+              "evidence_ref": "mock:insights:09f39fcb12ed8fac",
+              "why": "Qloo's taste graph links A basement jazz bar with natural wine to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.92).",
+              "explanation_source": "template",
+              "explanation": {
+                "source": "template"
+              },
+              "verification": {
+                "item": "A basement jazz bar with natural wine",
+                "entity_id": "fod_jazz_bar_nyc",
+                "domain": "food",
+                "admissible": true,
+                "reason": "ok",
+                "evidence": {
+                  "response_id": "mock:insights:09f39fcb12ed8fac",
+                  "endpoint": "insights",
+                  "source": "mock",
+                  "affinity_in_response": 0.92
+                }
+              }
+            }
+          ]
+        },
+        {
+          "domain": "place",
+          "items": [
+            {
+              "entity": {
+                "id": "plc_west_village",
+                "name": "West Village, New York",
+                "domain": "place",
+                "urn_type": "urn:entity:place",
+                "tags": [
+                  "nyc",
+                  "walking",
+                  "jazz",
+                  "historic"
+                ],
+                "location": "New York"
+              },
+              "domain": "place",
+              "location": "New York",
+              "affinity": 0.88,
+              "shared_tags": [
+                "jazz"
+              ],
+              "evidence_ref": "mock:insights:4b3d8bcf04001e3b",
+              "why": "Qloo's taste graph links West Village, New York to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.88).",
+              "explanation_source": "template",
+              "explanation": {
+                "source": "template"
+              },
+              "verification": {
+                "item": "West Village, New York",
+                "entity_id": "plc_west_village",
+                "domain": "place",
+                "admissible": true,
+                "reason": "ok",
+                "evidence": {
+                  "response_id": "mock:insights:4b3d8bcf04001e3b",
+                  "endpoint": "insights",
+                  "source": "mock",
+                  "affinity_in_response": 0.88
+                }
+              }
+            }
+          ]
+        },
+        {
+          "domain": "music",
+          "items": [
+            {
+              "entity": {
+                "id": "art_nujabes",
+                "name": "Nujabes",
+                "domain": "music",
+                "urn_type": "urn:entity:artist",
+                "tags": [
+                  "jazz",
+                  "hip-hop",
+                  "japanese",
+                  "mellow",
+                  "lo-fi"
+                ],
+                "location": null
+              },
+              "domain": "music",
+              "location": "New York",
+              "affinity": 0.84,
+              "shared_tags": [
+                "jazz"
+              ],
+              "evidence_ref": "mock:insights:f4db3ca15ae4b88d",
+              "why": "Qloo's taste graph links Nujabes to Kind of Blue (Miles Davis) (shared signals: jazz; affinity 0.84).",
+              "explanation_source": "template",
+              "explanation": {
+                "source": "template"
+              },
+              "verification": {
+                "item": "Nujabes",
+                "entity_id": "art_nujabes",
+                "domain": "music",
+                "admissible": true,
+                "reason": "ok",
+                "evidence": {
+                  "response_id": "mock:insights:f4db3ca15ae4b88d",
+                  "endpoint": "insights",
+                  "source": "mock",
+                  "affinity_in_response": 0.84
+                }
+              }
+            }
+          ]
+        },
+        {
+          "domain": "film",
+          "items": [
+            {
+              "entity": {
+                "id": "mov_lost_translation",
+                "name": "Lost in Translation",
+                "domain": "film",
+                "urn_type": "urn:entity:movie",
+                "tags": [
+                  "drama",
+                  "tokyo",
+                  "quiet",
+                  "atmospheric"
+                ],
+                "location": null
+              },
+              "domain": "film",
+              "location": "New York",
+              "affinity": 0.77,
+              "shared_tags": [
+                "quiet"
+              ],
+              "evidence_ref": "mock:insights:e7ba7ad039f3736c",
+              "why": "Qloo's taste graph links Lost in Translation to Kind of Blue (Miles Davis) (shared signals: quiet; affinity 0.77).",
+              "explanation_source": "template",
+              "explanation": {
+                "source": "template"
+              },
+              "verification": {
+                "item": "Lost in Translation",
+                "entity_id": "mov_lost_translation",
+                "domain": "film",
+                "admissible": true,
+                "reason": "ok",
+                "evidence": {
+                  "response_id": "mock:insights:e7ba7ad039f3736c",
+                  "endpoint": "insights",
+                  "source": "mock",
+                  "affinity_in_response": 0.77
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "start": null,
+      "end": null,
+      "nights": null
+    }
+  ],
+  "rejected": [],
+  "rejected_details": [],
+  "exclusions": [],
+  "excluded": [],
+  "checker": {
+    "passed": true,
+    "chain_valid": true,
+    "violations": [],
+    "items": [
       {
-       "entity": {
-        "id": "fod_jazz_bar_nyc",
+        "item": "A basement jazz bar with natural wine",
+        "entity_id": "fod_jazz_bar_nyc",
+        "domain": "food",
+        "admissible": true,
+        "reason": "ok",
+        "evidence": {
+          "response_id": "mock:insights:09f39fcb12ed8fac",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.92
+        }
+      },
+      {
+        "item": "West Village, New York",
+        "entity_id": "plc_west_village",
+        "domain": "place",
+        "admissible": true,
+        "reason": "ok",
+        "evidence": {
+          "response_id": "mock:insights:4b3d8bcf04001e3b",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.88
+        }
+      },
+      {
+        "item": "Nujabes",
+        "entity_id": "art_nujabes",
+        "domain": "music",
+        "admissible": true,
+        "reason": "ok",
+        "evidence": {
+          "response_id": "mock:insights:f4db3ca15ae4b88d",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.84
+        }
+      },
+      {
+        "item": "Lost in Translation",
+        "entity_id": "mov_lost_translation",
+        "domain": "film",
+        "admissible": true,
+        "reason": "ok",
+        "evidence": {
+          "response_id": "mock:insights:e7ba7ad039f3736c",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.77
+        }
+      }
+    ],
+    "alternatives": []
+  },
+  "evidence": {
+    "tool": "tastepilot",
+    "version": "0.1.0",
+    "created_at": "2026-10-11T17:11:02.208921+00:00",
+    "verdict": "PASS",
+    "entries": [
+      {
+        "kind": "header",
+        "hash": "ceaee52f53fcebbf1941cbd97531901371bf1262a1e2f32fdc4ed4f458ab401f",
+        "request_text": "a first date in New York, we both love Kind of Blue",
+        "mode": "mock"
+      },
+      {
+        "kind": "qloo_call",
+        "hash": "64ba40a914511ba4aae89934d597477f3579db1c3a3ae0fe2f84b3152dea050e",
+        "response": {
+          "response_id": "mock:search:6d368715e1962a1e",
+          "endpoint": "search",
+          "source": "mock",
+          "request": {
+            "query": "Kind of Blue (Miles Davis)",
+            "limit": 5
+          },
+          "results": [
+            {
+              "entity": {
+                "id": "art_kind_of_blue",
+                "name": "Kind of Blue (Miles Davis)",
+                "domain": "music",
+                "urn_type": "urn:entity:artist",
+                "tags": [
+                  "jazz",
+                  "modal",
+                  "quiet",
+                  "classic"
+                ],
+                "location": null
+              },
+              "affinity": 1.0,
+              "shared_tags": []
+            }
+          ]
+        }
+      },
+      {
+        "kind": "qloo_call",
+        "hash": "247c700895467bb5794eaa9a183e16bc07934edb89e6b2cff6e336627ba0b91a",
+        "response": {
+          "response_id": "mock:insights:09f39fcb12ed8fac",
+          "endpoint": "insights",
+          "source": "mock",
+          "request": {
+            "filter.type": "urn:entity:place",
+            "signal.interests.entities": "art_kind_of_blue",
+            "take": 4,
+            "location": "New York"
+          },
+          "results": [
+            {
+              "entity": {
+                "id": "fod_jazz_bar_nyc",
+                "name": "A basement jazz bar with natural wine",
+                "domain": "food",
+                "urn_type": "urn:entity:place",
+                "tags": [
+                  "nyc",
+                  "jazz",
+                  "intimate",
+                  "wine"
+                ],
+                "location": "New York"
+              },
+              "affinity": 0.92,
+              "shared_tags": [
+                "jazz"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "kind": "qloo_call",
+        "hash": "c3bf7cf9030c3225d4356a7b8c2a7a9ba2c8b63bf7421f3c6109b414a8ebed0e",
+        "response": {
+          "response_id": "mock:insights:4b3d8bcf04001e3b",
+          "endpoint": "insights",
+          "source": "mock",
+          "request": {
+            "filter.type": "urn:entity:place",
+            "signal.interests.entities": "art_kind_of_blue",
+            "take": 4,
+            "location": "New York"
+          },
+          "results": [
+            {
+              "entity": {
+                "id": "plc_west_village",
+                "name": "West Village, New York",
+                "domain": "place",
+                "urn_type": "urn:entity:place",
+                "tags": [
+                  "nyc",
+                  "walking",
+                  "jazz",
+                  "historic"
+                ],
+                "location": "New York"
+              },
+              "affinity": 0.88,
+              "shared_tags": [
+                "jazz"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "kind": "qloo_call",
+        "hash": "6243fa97a0cba4901ff584e9d7d9544f1669605b80d3ebc5622516eb70b9fb44",
+        "response": {
+          "response_id": "mock:insights:f4db3ca15ae4b88d",
+          "endpoint": "insights",
+          "source": "mock",
+          "request": {
+            "filter.type": "urn:entity:artist",
+            "signal.interests.entities": "art_kind_of_blue",
+            "take": 4,
+            "location": "New York"
+          },
+          "results": [
+            {
+              "entity": {
+                "id": "art_nujabes",
+                "name": "Nujabes",
+                "domain": "music",
+                "urn_type": "urn:entity:artist",
+                "tags": [
+                  "jazz",
+                  "hip-hop",
+                  "japanese",
+                  "mellow",
+                  "lo-fi"
+                ],
+                "location": null
+              },
+              "affinity": 0.84,
+              "shared_tags": [
+                "jazz"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "kind": "qloo_call",
+        "hash": "b8c438d697c398e64574d5f0eedcf7e94b3ceaf4735398b2f87b83c9baeb006b",
+        "response": {
+          "response_id": "mock:insights:e7ba7ad039f3736c",
+          "endpoint": "insights",
+          "source": "mock",
+          "request": {
+            "filter.type": "urn:entity:movie",
+            "signal.interests.entities": "art_kind_of_blue",
+            "take": 4,
+            "location": "New York"
+          },
+          "results": [
+            {
+              "entity": {
+                "id": "mov_lost_translation",
+                "name": "Lost in Translation",
+                "domain": "film",
+                "urn_type": "urn:entity:movie",
+                "tags": [
+                  "drama",
+                  "tokyo",
+                  "quiet",
+                  "atmospheric"
+                ],
+                "location": null
+              },
+              "affinity": 0.77,
+              "shared_tags": [
+                "quiet"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "record_hash": "1579e7e7da7b8ebe809779267ecf33d0ce1fe703327861ee14e6c505f98136ae",
+    "signature": "1004311a1944851f8050bb5cd82cf695acd8b9abcb9fe11f610fcd0e0e070a33",
+    "signing_key_is_default_dev_key": true
+  },
+  "handoffs": {
+    "legs": [
+      {
+        "location": "New York",
+        "start": null,
+        "end": null,
+        "calendar_url": null,
+        "maps_url": "https://www.google.com/maps/search/?api=1&query=New+York",
+        "maps_apple_url": "https://maps.apple.com/?q=New+York",
+        "maps_geo_url": "geo:0,0?q=New%20York"
+      }
+    ],
+    "items": [
+      {
         "name": "A basement jazz bar with natural wine",
         "domain": "food",
-        "urn_type": "urn:entity:place",
-        "tags": [
-         "nyc",
-         "jazz",
-         "intimate",
-         "wine"
-        ],
-        "location": "New York"
-       },
-       "affinity": 0.92,
-       "shared_tags": [
-        "jazz"
-       ]
-      }
-     ]
-    }
-   },
-   {
-    "kind": "qloo_call",
-    "hash": "c3bf7cf9030c3225d4356a7b8c2a7a9ba2c8b63bf7421f3c6109b414a8ebed0e",
-    "response": {
-     "response_id": "mock:insights:4b3d8bcf04001e3b",
-     "endpoint": "insights",
-     "source": "mock",
-     "request": {
-      "filter.type": "urn:entity:place",
-      "signal.interests.entities": "art_kind_of_blue",
-      "take": 4,
-      "location": "New York"
-     },
-     "results": [
+        "location": "New York",
+        "maps_url": "https://www.google.com/maps/search/?api=1&query=A+basement+jazz+bar+with+natural+wine%2C+New+York",
+        "maps_apple_url": "https://maps.apple.com/?q=A+basement+jazz+bar+with+natural+wine%2C+New+York",
+        "maps_geo_url": "geo:0,0?q=A%20basement%20jazz%20bar%20with%20natural%20wine%2C%20New%20York"
+      },
       {
-       "entity": {
-        "id": "plc_west_village",
         "name": "West Village, New York",
         "domain": "place",
-        "urn_type": "urn:entity:place",
-        "tags": [
-         "nyc",
-         "walking",
-         "jazz",
-         "historic"
-        ],
-        "location": "New York"
-       },
-       "affinity": 0.88,
-       "shared_tags": [
-        "jazz"
-       ]
-      }
-     ]
-    }
-   },
-   {
-    "kind": "qloo_call",
-    "hash": "6243fa97a0cba4901ff584e9d7d9544f1669605b80d3ebc5622516eb70b9fb44",
-    "response": {
-     "response_id": "mock:insights:f4db3ca15ae4b88d",
-     "endpoint": "insights",
-     "source": "mock",
-     "request": {
-      "filter.type": "urn:entity:artist",
-      "signal.interests.entities": "art_kind_of_blue",
-      "take": 4,
-      "location": "New York"
-     },
-     "results": [
+        "location": "New York",
+        "maps_url": "https://www.google.com/maps/search/?api=1&query=West+Village%2C+New+York",
+        "maps_apple_url": "https://maps.apple.com/?q=West+Village%2C+New+York",
+        "maps_geo_url": "geo:0,0?q=West%20Village%2C%20New%20York"
+      },
       {
-       "entity": {
-        "id": "art_nujabes",
         "name": "Nujabes",
         "domain": "music",
-        "urn_type": "urn:entity:artist",
-        "tags": [
-         "jazz",
-         "hip-hop",
-         "japanese",
-         "mellow",
-         "lo-fi"
-        ],
-        "location": null
-       },
-       "affinity": 0.84,
-       "shared_tags": [
-        "jazz"
-       ]
-      }
-     ]
-    }
-   },
-   {
-    "kind": "qloo_call",
-    "hash": "b8c438d697c398e64574d5f0eedcf7e94b3ceaf4735398b2f87b83c9baeb006b",
-    "response": {
-     "response_id": "mock:insights:e7ba7ad039f3736c",
-     "endpoint": "insights",
-     "source": "mock",
-     "request": {
-      "filter.type": "urn:entity:movie",
-      "signal.interests.entities": "art_kind_of_blue",
-      "take": 4,
-      "location": "New York"
-     },
-     "results": [
+        "location": "New York",
+        "maps_url": "https://www.google.com/maps/search/?api=1&query=Nujabes%2C+New+York",
+        "maps_apple_url": "https://maps.apple.com/?q=Nujabes%2C+New+York",
+        "maps_geo_url": "geo:0,0?q=Nujabes%2C%20New%20York"
+      },
       {
-       "entity": {
-        "id": "mov_lost_translation",
         "name": "Lost in Translation",
         "domain": "film",
-        "urn_type": "urn:entity:movie",
-        "tags": [
-         "drama",
-         "tokyo",
-         "quiet",
-         "atmospheric"
-        ],
-        "location": null
-       },
-       "affinity": 0.77,
-       "shared_tags": [
-        "quiet"
-       ]
+        "location": "New York",
+        "maps_url": "https://www.google.com/maps/search/?api=1&query=Lost+in+Translation%2C+New+York",
+        "maps_apple_url": "https://maps.apple.com/?q=Lost+in+Translation%2C+New+York",
+        "maps_geo_url": "geo:0,0?q=Lost%20in%20Translation%2C%20New%20York"
       }
-     ]
+    ],
+    "share": {
+      "title": "TastePilot plan: New York",
+      "text": "a first date in New York, we both love Kind of Blue\nNew York: A basement jazz bar with natural wine, West Village, New York, Nujabes, Lost in Translation\nVerification: PASS — 4 recommendation(s), every one traced to a Qloo response."
     }
-   }
-  ],
-  "record_hash": "1579e7e7da7b8ebe809779267ecf33d0ce1fe703327861ee14e6c505f98136ae",
-  "signature": "1004311a1944851f8050bb5cd82cf695acd8b9abcb9fe11f610fcd0e0e070a33",
-  "signing_key_is_default_dev_key": true
- },
- "handoffs": {
-  "legs": [
-   {
-    "location": "New York",
-    "start": null,
-    "end": null,
-    "calendar_url": null,
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=New+York",
-    "maps_apple_url": "https://maps.apple.com/?q=New+York",
-    "maps_geo_url": "geo:0,0?q=New%20York"
-   }
-  ],
-  "items": [
-   {
-    "name": "A basement jazz bar with natural wine",
-    "domain": "food",
-    "location": "New York",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=A+basement+jazz+bar+with+natural+wine%2C+New+York",
-    "maps_apple_url": "https://maps.apple.com/?q=A+basement+jazz+bar+with+natural+wine%2C+New+York",
-    "maps_geo_url": "geo:0,0?q=A%20basement%20jazz%20bar%20with%20natural%20wine%2C%20New%20York"
-   },
-   {
-    "name": "West Village, New York",
-    "domain": "place",
-    "location": "New York",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=West+Village%2C+New+York",
-    "maps_apple_url": "https://maps.apple.com/?q=West+Village%2C+New+York",
-    "maps_geo_url": "geo:0,0?q=West%20Village%2C%20New%20York"
-   },
-   {
-    "name": "Nujabes",
-    "domain": "music",
-    "location": "New York",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Nujabes%2C+New+York",
-    "maps_apple_url": "https://maps.apple.com/?q=Nujabes%2C+New+York",
-    "maps_geo_url": "geo:0,0?q=Nujabes%2C%20New%20York"
-   },
-   {
-    "name": "Lost in Translation",
-    "domain": "film",
-    "location": "New York",
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Lost+in+Translation%2C+New+York",
-    "maps_apple_url": "https://maps.apple.com/?q=Lost+in+Translation%2C+New+York",
-    "maps_geo_url": "geo:0,0?q=Lost%20in%20Translation%2C%20New%20York"
-   }
-  ],
-  "share": {
-   "title": "TastePilot plan: New York",
-   "text": "a first date in New York, we both love Kind of Blue\nNew York: A basement jazz bar with natural wine, West Village, New York, Nujabes, Lost in Translation\nVerification: PASS — 4 recommendation(s), every one traced to a Qloo response."
+  },
+  "itinerary": {
+    "legs": [
+      {
+        "location": "New York",
+        "start": null,
+        "end": null,
+        "days": [
+          {
+            "date": null,
+            "items": [
+              {
+                "name": "A basement jazz bar with natural wine",
+                "domain": "food",
+                "location": "New York",
+                "affinity": 0.92
+              },
+              {
+                "name": "West Village, New York",
+                "domain": "place",
+                "location": "New York",
+                "affinity": 0.88
+              },
+              {
+                "name": "Nujabes",
+                "domain": "music",
+                "location": "New York",
+                "affinity": 0.84
+              },
+              {
+                "name": "Lost in Translation",
+                "domain": "film",
+                "location": "New York",
+                "affinity": 0.77
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "dated_days": 0,
+    "total_items": 4
   }
- }
 }

@@ -144,6 +144,15 @@ tastepilot/
                never read back from a stored plan field; no account,
                no credential, no network — the user's own browser
                completes the action
+  pacing.py    day-by-day pacing: each leg's primary items
+               distributed deterministically (plan order, consecutive
+               chunks as even as possible) across the leg's dated
+               days; an undated (or end-before-start) leg gets one
+               unscheduled bucket — no dates are ever invented;
+               every primary item is paced exactly once and
+               alternatives are never paced; recomputed from the
+               plan's schedule + items on every surface, never
+               read back from a stored plan field
   swap.py      one-tap swapping of a primary item with a verified
                alternative (same domain, same leg): preconditions
                recomputed (chain + full-plan checker + both items),
@@ -920,6 +929,21 @@ baked into the image or the repo.
   note, and the verdict line always survives the cap. Like every
   handoff, it is recomputed on every surface — a `share` object
   stored inside a plan JSON is never read back.
+
+* Every plan also carries a day-by-day itinerary (`itinerary`,
+  built by pacing.py): each dated leg's primary recommendations
+  are paced across its days in plan order — consecutive chunks
+  as even as possible, earlier days taking the remainder — so
+  the trip reads day by day instead of only domain by domain.
+  An undated leg (or one whose end precedes its start, which the
+  schedule already warns about) is never assigned invented
+  days: its items sit in a single unscheduled bucket. Every
+  primary item is paced exactly once; alternatives (swap
+  options) are not paced. The demo UI renders a "Day-by-day
+  itinerary" section, the CLI prints one `itinerary:` line per
+  day, and Markdown/text exports carry a Day-by-day itinerary
+  section — all recomputed from the plan's schedule + items,
+  never read back from a stored `itinerary` field.
 
 ## Hackathon submission
 

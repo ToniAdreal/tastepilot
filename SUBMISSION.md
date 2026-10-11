@@ -353,7 +353,14 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    short text naming the legs and their recommendations, whose
    verification line is recomputed from the sealed evidence, so
    a plan shared to the user's own messaging or notes apps
-   carries its PASS — or its NOT VERIFIED — with it.
+   carries its PASS — or its NOT VERIFIED — with it. And every
+   plan is paced day-by-day: each dated leg's recommendations
+   are distributed deterministically across its days (plan
+   order, as evenly as possible), rendered as a day-by-day
+   itinerary in the demo UI, the CLI, and the Markdown/text
+   exports — recomputed from the plan on every surface, with
+   undated legs left unscheduled rather than assigned invented
+   days, and every primary recommendation paced exactly once.
 
 **[FINALIZE: one real-mode example — a plan produced against the live
 Qloo API, with its item count and checker verdict.]**

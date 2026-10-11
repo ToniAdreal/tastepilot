@@ -1,874 +1,916 @@
 {
- "request": "I need a birthday gift shortlist for someone who loves Amelie",
- "scenario": "gift",
- "location": null,
- "locations": [],
- "domains": [
-  "brand",
-  "book",
-  "music",
-  "film"
- ],
- "seeds": [
-  "Amelie"
- ],
- "seed_lists": [],
- "imports": [],
- "schedule": [
-  {
-   "location": null,
-   "start": null,
-   "end": null,
-   "nights": null,
-   "dates": []
-  }
- ],
- "date_warnings": [],
- "timetable": [],
- "transfers": [],
- "travel_warnings": [],
- "mode": "mock",
- "explainer": {
-  "source": "template",
-  "model": null,
-  "items_explained": 4,
-  "llm_written": 0,
-  "template_written": 4,
-  "fallback": 0
- },
- "items": [
-  {
-   "entity": {
-    "id": "brd_aesop",
-    "name": "Aesop",
-    "domain": "brand",
-    "urn_type": "urn:entity:brand",
-    "tags": [
-     "minimal",
-     "botanical",
-     "design",
-     "quiet"
-    ],
-    "location": null
-   },
-   "domain": "brand",
-   "location": null,
-   "affinity": 0.7,
-   "shared_tags": [],
-   "evidence_ref": "mock:insights:55bedde15b70952a",
-   "why": "Qloo's taste graph links Aesop to Amelie with affinity 0.70.",
-   "explanation_source": "template",
-   "explanation": {
-    "source": "template"
-   },
-   "verification": {
-    "item": "Aesop",
-    "entity_id": "brd_aesop",
-    "domain": "brand",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:55bedde15b70952a",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.7
-    }
-   }
-  },
-  {
-   "entity": {
-    "id": "bok_little_prince",
-    "name": "The Little Prince",
-    "domain": "book",
-    "urn_type": "urn:entity:book",
-    "tags": [
-     "french",
-     "whimsical",
-     "philosophical",
-     "short"
-    ],
-    "location": null
-   },
-   "domain": "book",
-   "location": null,
-   "affinity": 0.87,
-   "shared_tags": [
-    "french",
-    "whimsical"
-   ],
-   "evidence_ref": "mock:insights:54f8542c0ade0880",
-   "why": "Qloo's taste graph links The Little Prince to Amelie (shared signals: french, whimsical; affinity 0.87).",
-   "explanation_source": "template",
-   "explanation": {
-    "source": "template"
-   },
-   "verification": {
-    "item": "The Little Prince",
-    "entity_id": "bok_little_prince",
-    "domain": "book",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:54f8542c0ade0880",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.87
-    }
-   }
-  },
-  {
-   "entity": {
-    "id": "art_fleetwood",
-    "name": "Fleetwood Mac",
-    "domain": "music",
-    "urn_type": "urn:entity:artist",
-    "tags": [
-     "classic-rock",
-     "warm",
-     "nostalgic"
-    ],
-    "location": null
-   },
-   "domain": "music",
-   "location": null,
-   "affinity": 0.55,
-   "shared_tags": [
-    "warm"
-   ],
-   "evidence_ref": "mock:insights:c5adb07f69c3083a",
-   "why": "Qloo's taste graph links Fleetwood Mac to Amelie (shared signals: warm; affinity 0.55).",
-   "explanation_source": "template",
-   "explanation": {
-    "source": "template"
-   },
-   "verification": {
-    "item": "Fleetwood Mac",
-    "entity_id": "art_fleetwood",
-    "domain": "music",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:c5adb07f69c3083a",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.55
-    }
-   }
-  },
-  {
-   "entity": {
-    "id": "mov_midnight_paris",
-    "name": "Midnight in Paris",
-    "domain": "film",
-    "urn_type": "urn:entity:movie",
-    "tags": [
-     "romance",
-     "paris",
-     "nostalgic",
-     "literary"
-    ],
-    "location": null
-   },
-   "domain": "film",
-   "location": null,
-   "affinity": 0.85,
-   "shared_tags": [
-    "romance"
-   ],
-   "evidence_ref": "mock:insights:c82f762365a87587",
-   "why": "Qloo's taste graph links Midnight in Paris to Amelie (shared signals: romance; affinity 0.85).",
-   "explanation_source": "template",
-   "explanation": {
-    "source": "template"
-   },
-   "verification": {
-    "item": "Midnight in Paris",
-    "entity_id": "mov_midnight_paris",
-    "domain": "film",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:c82f762365a87587",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.85
-    }
-   }
-  }
- ],
- "alternatives": [],
- "groups": [
-  {
-   "domain": "brand",
-   "items": [
+  "request": "I need a birthday gift shortlist for someone who loves Amelie",
+  "scenario": "gift",
+  "location": null,
+  "locations": [],
+  "domains": [
+    "brand",
+    "book",
+    "music",
+    "film"
+  ],
+  "seeds": [
+    "Amelie"
+  ],
+  "seed_lists": [],
+  "imports": [],
+  "schedule": [
     {
-     "entity": {
-      "id": "brd_aesop",
-      "name": "Aesop",
-      "domain": "brand",
-      "urn_type": "urn:entity:brand",
-      "tags": [
-       "minimal",
-       "botanical",
-       "design",
-       "quiet"
-      ],
-      "location": null
-     },
-     "domain": "brand",
-     "location": null,
-     "affinity": 0.7,
-     "shared_tags": [],
-     "evidence_ref": "mock:insights:55bedde15b70952a",
-     "why": "Qloo's taste graph links Aesop to Amelie with affinity 0.70.",
-     "explanation_source": "template",
-     "explanation": {
-      "source": "template"
-     },
-     "verification": {
-      "item": "Aesop",
-      "entity_id": "brd_aesop",
-      "domain": "brand",
-      "admissible": true,
-      "reason": "ok",
-      "evidence": {
-       "response_id": "mock:insights:55bedde15b70952a",
-       "endpoint": "insights",
-       "source": "mock",
-       "affinity_in_response": 0.7
-      }
-     }
+      "location": null,
+      "start": null,
+      "end": null,
+      "nights": null,
+      "dates": []
     }
-   ]
+  ],
+  "date_warnings": [],
+  "timetable": [],
+  "transfers": [],
+  "travel_warnings": [],
+  "mode": "mock",
+  "explainer": {
+    "source": "template",
+    "model": null,
+    "items_explained": 4,
+    "llm_written": 0,
+    "template_written": 4,
+    "fallback": 0
   },
-  {
-   "domain": "book",
-   "items": [
+  "items": [
     {
-     "entity": {
-      "id": "bok_little_prince",
-      "name": "The Little Prince",
-      "domain": "book",
-      "urn_type": "urn:entity:book",
-      "tags": [
-       "french",
-       "whimsical",
-       "philosophical",
-       "short"
-      ],
-      "location": null
-     },
-     "domain": "book",
-     "location": null,
-     "affinity": 0.87,
-     "shared_tags": [
-      "french",
-      "whimsical"
-     ],
-     "evidence_ref": "mock:insights:54f8542c0ade0880",
-     "why": "Qloo's taste graph links The Little Prince to Amelie (shared signals: french, whimsical; affinity 0.87).",
-     "explanation_source": "template",
-     "explanation": {
-      "source": "template"
-     },
-     "verification": {
-      "item": "The Little Prince",
-      "entity_id": "bok_little_prince",
-      "domain": "book",
-      "admissible": true,
-      "reason": "ok",
-      "evidence": {
-       "response_id": "mock:insights:54f8542c0ade0880",
-       "endpoint": "insights",
-       "source": "mock",
-       "affinity_in_response": 0.87
-      }
-     }
-    }
-   ]
-  },
-  {
-   "domain": "music",
-   "items": [
-    {
-     "entity": {
-      "id": "art_fleetwood",
-      "name": "Fleetwood Mac",
-      "domain": "music",
-      "urn_type": "urn:entity:artist",
-      "tags": [
-       "classic-rock",
-       "warm",
-       "nostalgic"
-      ],
-      "location": null
-     },
-     "domain": "music",
-     "location": null,
-     "affinity": 0.55,
-     "shared_tags": [
-      "warm"
-     ],
-     "evidence_ref": "mock:insights:c5adb07f69c3083a",
-     "why": "Qloo's taste graph links Fleetwood Mac to Amelie (shared signals: warm; affinity 0.55).",
-     "explanation_source": "template",
-     "explanation": {
-      "source": "template"
-     },
-     "verification": {
-      "item": "Fleetwood Mac",
-      "entity_id": "art_fleetwood",
-      "domain": "music",
-      "admissible": true,
-      "reason": "ok",
-      "evidence": {
-       "response_id": "mock:insights:c5adb07f69c3083a",
-       "endpoint": "insights",
-       "source": "mock",
-       "affinity_in_response": 0.55
-      }
-     }
-    }
-   ]
-  },
-  {
-   "domain": "film",
-   "items": [
-    {
-     "entity": {
-      "id": "mov_midnight_paris",
-      "name": "Midnight in Paris",
-      "domain": "film",
-      "urn_type": "urn:entity:movie",
-      "tags": [
-       "romance",
-       "paris",
-       "nostalgic",
-       "literary"
-      ],
-      "location": null
-     },
-     "domain": "film",
-     "location": null,
-     "affinity": 0.85,
-     "shared_tags": [
-      "romance"
-     ],
-     "evidence_ref": "mock:insights:c82f762365a87587",
-     "why": "Qloo's taste graph links Midnight in Paris to Amelie (shared signals: romance; affinity 0.85).",
-     "explanation_source": "template",
-     "explanation": {
-      "source": "template"
-     },
-     "verification": {
-      "item": "Midnight in Paris",
-      "entity_id": "mov_midnight_paris",
-      "domain": "film",
-      "admissible": true,
-      "reason": "ok",
-      "evidence": {
-       "response_id": "mock:insights:c82f762365a87587",
-       "endpoint": "insights",
-       "source": "mock",
-       "affinity_in_response": 0.85
-      }
-     }
-    }
-   ]
-  }
- ],
- "legs": [
-  {
-   "location": null,
-   "groups": [
-    {
-     "domain": "brand",
-     "items": [
-      {
-       "entity": {
+      "entity": {
         "id": "brd_aesop",
         "name": "Aesop",
         "domain": "brand",
         "urn_type": "urn:entity:brand",
         "tags": [
-         "minimal",
-         "botanical",
-         "design",
-         "quiet"
+          "minimal",
+          "botanical",
+          "design",
+          "quiet"
         ],
         "location": null
-       },
-       "domain": "brand",
-       "location": null,
-       "affinity": 0.7,
-       "shared_tags": [],
-       "evidence_ref": "mock:insights:55bedde15b70952a",
-       "why": "Qloo's taste graph links Aesop to Amelie with affinity 0.70.",
-       "explanation_source": "template",
-       "explanation": {
+      },
+      "domain": "brand",
+      "location": null,
+      "affinity": 0.7,
+      "shared_tags": [],
+      "evidence_ref": "mock:insights:55bedde15b70952a",
+      "why": "Qloo's taste graph links Aesop to Amelie with affinity 0.70.",
+      "explanation_source": "template",
+      "explanation": {
         "source": "template"
-       },
-       "verification": {
+      },
+      "verification": {
         "item": "Aesop",
         "entity_id": "brd_aesop",
         "domain": "brand",
         "admissible": true,
         "reason": "ok",
         "evidence": {
-         "response_id": "mock:insights:55bedde15b70952a",
-         "endpoint": "insights",
-         "source": "mock",
-         "affinity_in_response": 0.7
+          "response_id": "mock:insights:55bedde15b70952a",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.7
         }
-       }
       }
-     ]
     },
     {
-     "domain": "book",
-     "items": [
-      {
-       "entity": {
+      "entity": {
         "id": "bok_little_prince",
         "name": "The Little Prince",
         "domain": "book",
         "urn_type": "urn:entity:book",
         "tags": [
-         "french",
-         "whimsical",
-         "philosophical",
-         "short"
+          "french",
+          "whimsical",
+          "philosophical",
+          "short"
         ],
         "location": null
-       },
-       "domain": "book",
-       "location": null,
-       "affinity": 0.87,
-       "shared_tags": [
+      },
+      "domain": "book",
+      "location": null,
+      "affinity": 0.87,
+      "shared_tags": [
         "french",
         "whimsical"
-       ],
-       "evidence_ref": "mock:insights:54f8542c0ade0880",
-       "why": "Qloo's taste graph links The Little Prince to Amelie (shared signals: french, whimsical; affinity 0.87).",
-       "explanation_source": "template",
-       "explanation": {
+      ],
+      "evidence_ref": "mock:insights:54f8542c0ade0880",
+      "why": "Qloo's taste graph links The Little Prince to Amelie (shared signals: french, whimsical; affinity 0.87).",
+      "explanation_source": "template",
+      "explanation": {
         "source": "template"
-       },
-       "verification": {
+      },
+      "verification": {
         "item": "The Little Prince",
         "entity_id": "bok_little_prince",
         "domain": "book",
         "admissible": true,
         "reason": "ok",
         "evidence": {
-         "response_id": "mock:insights:54f8542c0ade0880",
-         "endpoint": "insights",
-         "source": "mock",
-         "affinity_in_response": 0.87
+          "response_id": "mock:insights:54f8542c0ade0880",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.87
         }
-       }
       }
-     ]
     },
     {
-     "domain": "music",
-     "items": [
-      {
-       "entity": {
+      "entity": {
         "id": "art_fleetwood",
         "name": "Fleetwood Mac",
         "domain": "music",
         "urn_type": "urn:entity:artist",
         "tags": [
-         "classic-rock",
-         "warm",
-         "nostalgic"
+          "classic-rock",
+          "warm",
+          "nostalgic"
         ],
         "location": null
-       },
-       "domain": "music",
-       "location": null,
-       "affinity": 0.55,
-       "shared_tags": [
+      },
+      "domain": "music",
+      "location": null,
+      "affinity": 0.55,
+      "shared_tags": [
         "warm"
-       ],
-       "evidence_ref": "mock:insights:c5adb07f69c3083a",
-       "why": "Qloo's taste graph links Fleetwood Mac to Amelie (shared signals: warm; affinity 0.55).",
-       "explanation_source": "template",
-       "explanation": {
+      ],
+      "evidence_ref": "mock:insights:c5adb07f69c3083a",
+      "why": "Qloo's taste graph links Fleetwood Mac to Amelie (shared signals: warm; affinity 0.55).",
+      "explanation_source": "template",
+      "explanation": {
         "source": "template"
-       },
-       "verification": {
+      },
+      "verification": {
         "item": "Fleetwood Mac",
         "entity_id": "art_fleetwood",
         "domain": "music",
         "admissible": true,
         "reason": "ok",
         "evidence": {
-         "response_id": "mock:insights:c5adb07f69c3083a",
-         "endpoint": "insights",
-         "source": "mock",
-         "affinity_in_response": 0.55
+          "response_id": "mock:insights:c5adb07f69c3083a",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.55
         }
-       }
       }
-     ]
     },
     {
-     "domain": "film",
-     "items": [
-      {
-       "entity": {
+      "entity": {
         "id": "mov_midnight_paris",
         "name": "Midnight in Paris",
         "domain": "film",
         "urn_type": "urn:entity:movie",
         "tags": [
-         "romance",
-         "paris",
-         "nostalgic",
-         "literary"
+          "romance",
+          "paris",
+          "nostalgic",
+          "literary"
         ],
         "location": null
-       },
-       "domain": "film",
-       "location": null,
-       "affinity": 0.85,
-       "shared_tags": [
+      },
+      "domain": "film",
+      "location": null,
+      "affinity": 0.85,
+      "shared_tags": [
         "romance"
-       ],
-       "evidence_ref": "mock:insights:c82f762365a87587",
-       "why": "Qloo's taste graph links Midnight in Paris to Amelie (shared signals: romance; affinity 0.85).",
-       "explanation_source": "template",
-       "explanation": {
+      ],
+      "evidence_ref": "mock:insights:c82f762365a87587",
+      "why": "Qloo's taste graph links Midnight in Paris to Amelie (shared signals: romance; affinity 0.85).",
+      "explanation_source": "template",
+      "explanation": {
         "source": "template"
-       },
-       "verification": {
+      },
+      "verification": {
         "item": "Midnight in Paris",
         "entity_id": "mov_midnight_paris",
         "domain": "film",
         "admissible": true,
         "reason": "ok",
         "evidence": {
-         "response_id": "mock:insights:c82f762365a87587",
-         "endpoint": "insights",
-         "source": "mock",
-         "affinity_in_response": 0.85
+          "response_id": "mock:insights:c82f762365a87587",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.85
         }
-       }
       }
-     ]
     }
-   ],
-   "start": null,
-   "end": null,
-   "nights": null
-  }
- ],
- "rejected": [],
- "rejected_details": [],
- "exclusions": [],
- "excluded": [],
- "checker": {
-  "passed": true,
-  "chain_valid": true,
-  "violations": [],
-  "items": [
-   {
-    "item": "Aesop",
-    "entity_id": "brd_aesop",
-    "domain": "brand",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:55bedde15b70952a",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.7
-    }
-   },
-   {
-    "item": "The Little Prince",
-    "entity_id": "bok_little_prince",
-    "domain": "book",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:54f8542c0ade0880",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.87
-    }
-   },
-   {
-    "item": "Fleetwood Mac",
-    "entity_id": "art_fleetwood",
-    "domain": "music",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:c5adb07f69c3083a",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.55
-    }
-   },
-   {
-    "item": "Midnight in Paris",
-    "entity_id": "mov_midnight_paris",
-    "domain": "film",
-    "admissible": true,
-    "reason": "ok",
-    "evidence": {
-     "response_id": "mock:insights:c82f762365a87587",
-     "endpoint": "insights",
-     "source": "mock",
-     "affinity_in_response": 0.85
-    }
-   }
   ],
-  "alternatives": []
- },
- "evidence": {
-  "tool": "tastepilot",
-  "version": "0.1.0",
-  "created_at": "2026-10-11T04:14:15.958105+00:00",
-  "verdict": "PASS",
-  "entries": [
-   {
-    "kind": "header",
-    "hash": "788f1e1a4c39e97a1008e2238f9f89fa3fab9f0c35a4db2bf9a810ec900a4e29",
-    "request_text": "I need a birthday gift shortlist for someone who loves Amelie",
-    "mode": "mock"
-   },
-   {
-    "kind": "qloo_call",
-    "hash": "a4230a8214d8cbf229025ff4bb02c9f1eb96c0a4d8a6bbe5d39e4eff7bb91629",
-    "response": {
-     "response_id": "mock:search:f098dbb26dac13fd",
-     "endpoint": "search",
-     "source": "mock",
-     "request": {
-      "query": "Amelie",
-      "limit": 5
-     },
-     "results": [
-      {
-       "entity": {
-        "id": "mov_amelie",
-        "name": "Amelie",
-        "domain": "film",
-        "urn_type": "urn:entity:movie",
-        "tags": [
-         "romance",
-         "french",
-         "whimsical",
-         "warm"
-        ],
-        "location": null
-       },
-       "affinity": 1.0,
-       "shared_tags": []
-      }
-     ]
+  "alternatives": [],
+  "groups": [
+    {
+      "domain": "brand",
+      "items": [
+        {
+          "entity": {
+            "id": "brd_aesop",
+            "name": "Aesop",
+            "domain": "brand",
+            "urn_type": "urn:entity:brand",
+            "tags": [
+              "minimal",
+              "botanical",
+              "design",
+              "quiet"
+            ],
+            "location": null
+          },
+          "domain": "brand",
+          "location": null,
+          "affinity": 0.7,
+          "shared_tags": [],
+          "evidence_ref": "mock:insights:55bedde15b70952a",
+          "why": "Qloo's taste graph links Aesop to Amelie with affinity 0.70.",
+          "explanation_source": "template",
+          "explanation": {
+            "source": "template"
+          },
+          "verification": {
+            "item": "Aesop",
+            "entity_id": "brd_aesop",
+            "domain": "brand",
+            "admissible": true,
+            "reason": "ok",
+            "evidence": {
+              "response_id": "mock:insights:55bedde15b70952a",
+              "endpoint": "insights",
+              "source": "mock",
+              "affinity_in_response": 0.7
+            }
+          }
+        }
+      ]
+    },
+    {
+      "domain": "book",
+      "items": [
+        {
+          "entity": {
+            "id": "bok_little_prince",
+            "name": "The Little Prince",
+            "domain": "book",
+            "urn_type": "urn:entity:book",
+            "tags": [
+              "french",
+              "whimsical",
+              "philosophical",
+              "short"
+            ],
+            "location": null
+          },
+          "domain": "book",
+          "location": null,
+          "affinity": 0.87,
+          "shared_tags": [
+            "french",
+            "whimsical"
+          ],
+          "evidence_ref": "mock:insights:54f8542c0ade0880",
+          "why": "Qloo's taste graph links The Little Prince to Amelie (shared signals: french, whimsical; affinity 0.87).",
+          "explanation_source": "template",
+          "explanation": {
+            "source": "template"
+          },
+          "verification": {
+            "item": "The Little Prince",
+            "entity_id": "bok_little_prince",
+            "domain": "book",
+            "admissible": true,
+            "reason": "ok",
+            "evidence": {
+              "response_id": "mock:insights:54f8542c0ade0880",
+              "endpoint": "insights",
+              "source": "mock",
+              "affinity_in_response": 0.87
+            }
+          }
+        }
+      ]
+    },
+    {
+      "domain": "music",
+      "items": [
+        {
+          "entity": {
+            "id": "art_fleetwood",
+            "name": "Fleetwood Mac",
+            "domain": "music",
+            "urn_type": "urn:entity:artist",
+            "tags": [
+              "classic-rock",
+              "warm",
+              "nostalgic"
+            ],
+            "location": null
+          },
+          "domain": "music",
+          "location": null,
+          "affinity": 0.55,
+          "shared_tags": [
+            "warm"
+          ],
+          "evidence_ref": "mock:insights:c5adb07f69c3083a",
+          "why": "Qloo's taste graph links Fleetwood Mac to Amelie (shared signals: warm; affinity 0.55).",
+          "explanation_source": "template",
+          "explanation": {
+            "source": "template"
+          },
+          "verification": {
+            "item": "Fleetwood Mac",
+            "entity_id": "art_fleetwood",
+            "domain": "music",
+            "admissible": true,
+            "reason": "ok",
+            "evidence": {
+              "response_id": "mock:insights:c5adb07f69c3083a",
+              "endpoint": "insights",
+              "source": "mock",
+              "affinity_in_response": 0.55
+            }
+          }
+        }
+      ]
+    },
+    {
+      "domain": "film",
+      "items": [
+        {
+          "entity": {
+            "id": "mov_midnight_paris",
+            "name": "Midnight in Paris",
+            "domain": "film",
+            "urn_type": "urn:entity:movie",
+            "tags": [
+              "romance",
+              "paris",
+              "nostalgic",
+              "literary"
+            ],
+            "location": null
+          },
+          "domain": "film",
+          "location": null,
+          "affinity": 0.85,
+          "shared_tags": [
+            "romance"
+          ],
+          "evidence_ref": "mock:insights:c82f762365a87587",
+          "why": "Qloo's taste graph links Midnight in Paris to Amelie (shared signals: romance; affinity 0.85).",
+          "explanation_source": "template",
+          "explanation": {
+            "source": "template"
+          },
+          "verification": {
+            "item": "Midnight in Paris",
+            "entity_id": "mov_midnight_paris",
+            "domain": "film",
+            "admissible": true,
+            "reason": "ok",
+            "evidence": {
+              "response_id": "mock:insights:c82f762365a87587",
+              "endpoint": "insights",
+              "source": "mock",
+              "affinity_in_response": 0.85
+            }
+          }
+        }
+      ]
     }
-   },
-   {
-    "kind": "qloo_call",
-    "hash": "99e53ea0d84a2e21b94bd609a118146558939cc52992f151fc7dc496ae2ac54f",
-    "response": {
-     "response_id": "mock:insights:55bedde15b70952a",
-     "endpoint": "insights",
-     "source": "mock",
-     "request": {
-      "filter.type": "urn:entity:brand",
-      "signal.interests.entities": "mov_amelie",
-      "take": 4,
-      "location": null
-     },
-     "results": [
+  ],
+  "legs": [
+    {
+      "location": null,
+      "groups": [
+        {
+          "domain": "brand",
+          "items": [
+            {
+              "entity": {
+                "id": "brd_aesop",
+                "name": "Aesop",
+                "domain": "brand",
+                "urn_type": "urn:entity:brand",
+                "tags": [
+                  "minimal",
+                  "botanical",
+                  "design",
+                  "quiet"
+                ],
+                "location": null
+              },
+              "domain": "brand",
+              "location": null,
+              "affinity": 0.7,
+              "shared_tags": [],
+              "evidence_ref": "mock:insights:55bedde15b70952a",
+              "why": "Qloo's taste graph links Aesop to Amelie with affinity 0.70.",
+              "explanation_source": "template",
+              "explanation": {
+                "source": "template"
+              },
+              "verification": {
+                "item": "Aesop",
+                "entity_id": "brd_aesop",
+                "domain": "brand",
+                "admissible": true,
+                "reason": "ok",
+                "evidence": {
+                  "response_id": "mock:insights:55bedde15b70952a",
+                  "endpoint": "insights",
+                  "source": "mock",
+                  "affinity_in_response": 0.7
+                }
+              }
+            }
+          ]
+        },
+        {
+          "domain": "book",
+          "items": [
+            {
+              "entity": {
+                "id": "bok_little_prince",
+                "name": "The Little Prince",
+                "domain": "book",
+                "urn_type": "urn:entity:book",
+                "tags": [
+                  "french",
+                  "whimsical",
+                  "philosophical",
+                  "short"
+                ],
+                "location": null
+              },
+              "domain": "book",
+              "location": null,
+              "affinity": 0.87,
+              "shared_tags": [
+                "french",
+                "whimsical"
+              ],
+              "evidence_ref": "mock:insights:54f8542c0ade0880",
+              "why": "Qloo's taste graph links The Little Prince to Amelie (shared signals: french, whimsical; affinity 0.87).",
+              "explanation_source": "template",
+              "explanation": {
+                "source": "template"
+              },
+              "verification": {
+                "item": "The Little Prince",
+                "entity_id": "bok_little_prince",
+                "domain": "book",
+                "admissible": true,
+                "reason": "ok",
+                "evidence": {
+                  "response_id": "mock:insights:54f8542c0ade0880",
+                  "endpoint": "insights",
+                  "source": "mock",
+                  "affinity_in_response": 0.87
+                }
+              }
+            }
+          ]
+        },
+        {
+          "domain": "music",
+          "items": [
+            {
+              "entity": {
+                "id": "art_fleetwood",
+                "name": "Fleetwood Mac",
+                "domain": "music",
+                "urn_type": "urn:entity:artist",
+                "tags": [
+                  "classic-rock",
+                  "warm",
+                  "nostalgic"
+                ],
+                "location": null
+              },
+              "domain": "music",
+              "location": null,
+              "affinity": 0.55,
+              "shared_tags": [
+                "warm"
+              ],
+              "evidence_ref": "mock:insights:c5adb07f69c3083a",
+              "why": "Qloo's taste graph links Fleetwood Mac to Amelie (shared signals: warm; affinity 0.55).",
+              "explanation_source": "template",
+              "explanation": {
+                "source": "template"
+              },
+              "verification": {
+                "item": "Fleetwood Mac",
+                "entity_id": "art_fleetwood",
+                "domain": "music",
+                "admissible": true,
+                "reason": "ok",
+                "evidence": {
+                  "response_id": "mock:insights:c5adb07f69c3083a",
+                  "endpoint": "insights",
+                  "source": "mock",
+                  "affinity_in_response": 0.55
+                }
+              }
+            }
+          ]
+        },
+        {
+          "domain": "film",
+          "items": [
+            {
+              "entity": {
+                "id": "mov_midnight_paris",
+                "name": "Midnight in Paris",
+                "domain": "film",
+                "urn_type": "urn:entity:movie",
+                "tags": [
+                  "romance",
+                  "paris",
+                  "nostalgic",
+                  "literary"
+                ],
+                "location": null
+              },
+              "domain": "film",
+              "location": null,
+              "affinity": 0.85,
+              "shared_tags": [
+                "romance"
+              ],
+              "evidence_ref": "mock:insights:c82f762365a87587",
+              "why": "Qloo's taste graph links Midnight in Paris to Amelie (shared signals: romance; affinity 0.85).",
+              "explanation_source": "template",
+              "explanation": {
+                "source": "template"
+              },
+              "verification": {
+                "item": "Midnight in Paris",
+                "entity_id": "mov_midnight_paris",
+                "domain": "film",
+                "admissible": true,
+                "reason": "ok",
+                "evidence": {
+                  "response_id": "mock:insights:c82f762365a87587",
+                  "endpoint": "insights",
+                  "source": "mock",
+                  "affinity_in_response": 0.85
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "start": null,
+      "end": null,
+      "nights": null
+    }
+  ],
+  "rejected": [],
+  "rejected_details": [],
+  "exclusions": [],
+  "excluded": [],
+  "checker": {
+    "passed": true,
+    "chain_valid": true,
+    "violations": [],
+    "items": [
       {
-       "entity": {
-        "id": "brd_aesop",
+        "item": "Aesop",
+        "entity_id": "brd_aesop",
+        "domain": "brand",
+        "admissible": true,
+        "reason": "ok",
+        "evidence": {
+          "response_id": "mock:insights:55bedde15b70952a",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.7
+        }
+      },
+      {
+        "item": "The Little Prince",
+        "entity_id": "bok_little_prince",
+        "domain": "book",
+        "admissible": true,
+        "reason": "ok",
+        "evidence": {
+          "response_id": "mock:insights:54f8542c0ade0880",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.87
+        }
+      },
+      {
+        "item": "Fleetwood Mac",
+        "entity_id": "art_fleetwood",
+        "domain": "music",
+        "admissible": true,
+        "reason": "ok",
+        "evidence": {
+          "response_id": "mock:insights:c5adb07f69c3083a",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.55
+        }
+      },
+      {
+        "item": "Midnight in Paris",
+        "entity_id": "mov_midnight_paris",
+        "domain": "film",
+        "admissible": true,
+        "reason": "ok",
+        "evidence": {
+          "response_id": "mock:insights:c82f762365a87587",
+          "endpoint": "insights",
+          "source": "mock",
+          "affinity_in_response": 0.85
+        }
+      }
+    ],
+    "alternatives": []
+  },
+  "evidence": {
+    "tool": "tastepilot",
+    "version": "0.1.0",
+    "created_at": "2026-10-11T17:11:02.204490+00:00",
+    "verdict": "PASS",
+    "entries": [
+      {
+        "kind": "header",
+        "hash": "788f1e1a4c39e97a1008e2238f9f89fa3fab9f0c35a4db2bf9a810ec900a4e29",
+        "request_text": "I need a birthday gift shortlist for someone who loves Amelie",
+        "mode": "mock"
+      },
+      {
+        "kind": "qloo_call",
+        "hash": "a4230a8214d8cbf229025ff4bb02c9f1eb96c0a4d8a6bbe5d39e4eff7bb91629",
+        "response": {
+          "response_id": "mock:search:f098dbb26dac13fd",
+          "endpoint": "search",
+          "source": "mock",
+          "request": {
+            "query": "Amelie",
+            "limit": 5
+          },
+          "results": [
+            {
+              "entity": {
+                "id": "mov_amelie",
+                "name": "Amelie",
+                "domain": "film",
+                "urn_type": "urn:entity:movie",
+                "tags": [
+                  "romance",
+                  "french",
+                  "whimsical",
+                  "warm"
+                ],
+                "location": null
+              },
+              "affinity": 1.0,
+              "shared_tags": []
+            }
+          ]
+        }
+      },
+      {
+        "kind": "qloo_call",
+        "hash": "99e53ea0d84a2e21b94bd609a118146558939cc52992f151fc7dc496ae2ac54f",
+        "response": {
+          "response_id": "mock:insights:55bedde15b70952a",
+          "endpoint": "insights",
+          "source": "mock",
+          "request": {
+            "filter.type": "urn:entity:brand",
+            "signal.interests.entities": "mov_amelie",
+            "take": 4,
+            "location": null
+          },
+          "results": [
+            {
+              "entity": {
+                "id": "brd_aesop",
+                "name": "Aesop",
+                "domain": "brand",
+                "urn_type": "urn:entity:brand",
+                "tags": [
+                  "minimal",
+                  "botanical",
+                  "design",
+                  "quiet"
+                ],
+                "location": null
+              },
+              "affinity": 0.7,
+              "shared_tags": []
+            }
+          ]
+        }
+      },
+      {
+        "kind": "qloo_call",
+        "hash": "cac662d1348b7b6f79bcb0fe4d0466e39e07efe469e650ac9424c929547c302a",
+        "response": {
+          "response_id": "mock:insights:54f8542c0ade0880",
+          "endpoint": "insights",
+          "source": "mock",
+          "request": {
+            "filter.type": "urn:entity:book",
+            "signal.interests.entities": "mov_amelie",
+            "take": 4,
+            "location": null
+          },
+          "results": [
+            {
+              "entity": {
+                "id": "bok_little_prince",
+                "name": "The Little Prince",
+                "domain": "book",
+                "urn_type": "urn:entity:book",
+                "tags": [
+                  "french",
+                  "whimsical",
+                  "philosophical",
+                  "short"
+                ],
+                "location": null
+              },
+              "affinity": 0.87,
+              "shared_tags": [
+                "french",
+                "whimsical"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "kind": "qloo_call",
+        "hash": "b513d63500fd4125421735681be38a4e8a06574e9bd94c0c7da4155b41f77ff5",
+        "response": {
+          "response_id": "mock:insights:c5adb07f69c3083a",
+          "endpoint": "insights",
+          "source": "mock",
+          "request": {
+            "filter.type": "urn:entity:artist",
+            "signal.interests.entities": "mov_amelie",
+            "take": 4,
+            "location": null
+          },
+          "results": [
+            {
+              "entity": {
+                "id": "art_fleetwood",
+                "name": "Fleetwood Mac",
+                "domain": "music",
+                "urn_type": "urn:entity:artist",
+                "tags": [
+                  "classic-rock",
+                  "warm",
+                  "nostalgic"
+                ],
+                "location": null
+              },
+              "affinity": 0.55,
+              "shared_tags": [
+                "warm"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "kind": "qloo_call",
+        "hash": "aa3b24df05ac5e0bb19f3198b199a899509a9278f813160a67278b7421082594",
+        "response": {
+          "response_id": "mock:insights:c82f762365a87587",
+          "endpoint": "insights",
+          "source": "mock",
+          "request": {
+            "filter.type": "urn:entity:movie",
+            "signal.interests.entities": "mov_amelie",
+            "take": 4,
+            "location": null
+          },
+          "results": [
+            {
+              "entity": {
+                "id": "mov_midnight_paris",
+                "name": "Midnight in Paris",
+                "domain": "film",
+                "urn_type": "urn:entity:movie",
+                "tags": [
+                  "romance",
+                  "paris",
+                  "nostalgic",
+                  "literary"
+                ],
+                "location": null
+              },
+              "affinity": 0.85,
+              "shared_tags": [
+                "romance"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "record_hash": "86cd4177c47309f488a51afcd4e9d16551460cad8d89b4b64d6d9dffe70a863a",
+    "signature": "3b8940e2e0da46c53b41bdd3cde52d2e4cdfa4ce180d69076c341525744fbc56",
+    "signing_key_is_default_dev_key": true
+  },
+  "handoffs": {
+    "legs": [
+      {
+        "location": null,
+        "start": null,
+        "end": null,
+        "calendar_url": null,
+        "maps_url": null,
+        "maps_apple_url": null,
+        "maps_geo_url": null
+      }
+    ],
+    "items": [
+      {
         "name": "Aesop",
         "domain": "brand",
-        "urn_type": "urn:entity:brand",
-        "tags": [
-         "minimal",
-         "botanical",
-         "design",
-         "quiet"
-        ],
-        "location": null
-       },
-       "affinity": 0.7,
-       "shared_tags": []
-      }
-     ]
-    }
-   },
-   {
-    "kind": "qloo_call",
-    "hash": "cac662d1348b7b6f79bcb0fe4d0466e39e07efe469e650ac9424c929547c302a",
-    "response": {
-     "response_id": "mock:insights:54f8542c0ade0880",
-     "endpoint": "insights",
-     "source": "mock",
-     "request": {
-      "filter.type": "urn:entity:book",
-      "signal.interests.entities": "mov_amelie",
-      "take": 4,
-      "location": null
-     },
-     "results": [
+        "location": null,
+        "maps_url": "https://www.google.com/maps/search/?api=1&query=Aesop",
+        "maps_apple_url": "https://maps.apple.com/?q=Aesop",
+        "maps_geo_url": "geo:0,0?q=Aesop"
+      },
       {
-       "entity": {
-        "id": "bok_little_prince",
         "name": "The Little Prince",
         "domain": "book",
-        "urn_type": "urn:entity:book",
-        "tags": [
-         "french",
-         "whimsical",
-         "philosophical",
-         "short"
-        ],
-        "location": null
-       },
-       "affinity": 0.87,
-       "shared_tags": [
-        "french",
-        "whimsical"
-       ]
-      }
-     ]
-    }
-   },
-   {
-    "kind": "qloo_call",
-    "hash": "b513d63500fd4125421735681be38a4e8a06574e9bd94c0c7da4155b41f77ff5",
-    "response": {
-     "response_id": "mock:insights:c5adb07f69c3083a",
-     "endpoint": "insights",
-     "source": "mock",
-     "request": {
-      "filter.type": "urn:entity:artist",
-      "signal.interests.entities": "mov_amelie",
-      "take": 4,
-      "location": null
-     },
-     "results": [
+        "location": null,
+        "maps_url": "https://www.google.com/maps/search/?api=1&query=The+Little+Prince",
+        "maps_apple_url": "https://maps.apple.com/?q=The+Little+Prince",
+        "maps_geo_url": "geo:0,0?q=The%20Little%20Prince"
+      },
       {
-       "entity": {
-        "id": "art_fleetwood",
         "name": "Fleetwood Mac",
         "domain": "music",
-        "urn_type": "urn:entity:artist",
-        "tags": [
-         "classic-rock",
-         "warm",
-         "nostalgic"
-        ],
-        "location": null
-       },
-       "affinity": 0.55,
-       "shared_tags": [
-        "warm"
-       ]
-      }
-     ]
-    }
-   },
-   {
-    "kind": "qloo_call",
-    "hash": "aa3b24df05ac5e0bb19f3198b199a899509a9278f813160a67278b7421082594",
-    "response": {
-     "response_id": "mock:insights:c82f762365a87587",
-     "endpoint": "insights",
-     "source": "mock",
-     "request": {
-      "filter.type": "urn:entity:movie",
-      "signal.interests.entities": "mov_amelie",
-      "take": 4,
-      "location": null
-     },
-     "results": [
+        "location": null,
+        "maps_url": "https://www.google.com/maps/search/?api=1&query=Fleetwood+Mac",
+        "maps_apple_url": "https://maps.apple.com/?q=Fleetwood+Mac",
+        "maps_geo_url": "geo:0,0?q=Fleetwood%20Mac"
+      },
       {
-       "entity": {
-        "id": "mov_midnight_paris",
         "name": "Midnight in Paris",
         "domain": "film",
-        "urn_type": "urn:entity:movie",
-        "tags": [
-         "romance",
-         "paris",
-         "nostalgic",
-         "literary"
-        ],
-        "location": null
-       },
-       "affinity": 0.85,
-       "shared_tags": [
-        "romance"
-       ]
+        "location": null,
+        "maps_url": "https://www.google.com/maps/search/?api=1&query=Midnight+in+Paris",
+        "maps_apple_url": "https://maps.apple.com/?q=Midnight+in+Paris",
+        "maps_geo_url": "geo:0,0?q=Midnight%20in%20Paris"
       }
-     ]
+    ],
+    "share": {
+      "title": "TastePilot itinerary",
+      "text": "I need a birthday gift shortlist for someone who loves Amelie\nAnywhere: Aesop, The Little Prince, Fleetwood Mac, Midnight in Paris\nVerification: PASS — 4 recommendation(s), every one traced to a Qloo response."
     }
-   }
-  ],
-  "record_hash": "86cd4177c47309f488a51afcd4e9d16551460cad8d89b4b64d6d9dffe70a863a",
-  "signature": "3b8940e2e0da46c53b41bdd3cde52d2e4cdfa4ce180d69076c341525744fbc56",
-  "signing_key_is_default_dev_key": true
- },
- "handoffs": {
-  "legs": [
-   {
-    "location": null,
-    "start": null,
-    "end": null,
-    "calendar_url": null,
-    "maps_url": null,
-    "maps_apple_url": null,
-    "maps_geo_url": null
-   }
-  ],
-  "items": [
-   {
-    "name": "Aesop",
-    "domain": "brand",
-    "location": null,
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Aesop",
-    "maps_apple_url": "https://maps.apple.com/?q=Aesop",
-    "maps_geo_url": "geo:0,0?q=Aesop"
-   },
-   {
-    "name": "The Little Prince",
-    "domain": "book",
-    "location": null,
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=The+Little+Prince",
-    "maps_apple_url": "https://maps.apple.com/?q=The+Little+Prince",
-    "maps_geo_url": "geo:0,0?q=The%20Little%20Prince"
-   },
-   {
-    "name": "Fleetwood Mac",
-    "domain": "music",
-    "location": null,
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Fleetwood+Mac",
-    "maps_apple_url": "https://maps.apple.com/?q=Fleetwood+Mac",
-    "maps_geo_url": "geo:0,0?q=Fleetwood%20Mac"
-   },
-   {
-    "name": "Midnight in Paris",
-    "domain": "film",
-    "location": null,
-    "maps_url": "https://www.google.com/maps/search/?api=1&query=Midnight+in+Paris",
-    "maps_apple_url": "https://maps.apple.com/?q=Midnight+in+Paris",
-    "maps_geo_url": "geo:0,0?q=Midnight%20in%20Paris"
-   }
-  ],
-  "share": {
-   "title": "TastePilot itinerary",
-   "text": "I need a birthday gift shortlist for someone who loves Amelie\nAnywhere: Aesop, The Little Prince, Fleetwood Mac, Midnight in Paris\nVerification: PASS — 4 recommendation(s), every one traced to a Qloo response."
+  },
+  "itinerary": {
+    "legs": [
+      {
+        "location": null,
+        "start": null,
+        "end": null,
+        "days": [
+          {
+            "date": null,
+            "items": [
+              {
+                "name": "Aesop",
+                "domain": "brand",
+                "location": null,
+                "affinity": 0.7
+              },
+              {
+                "name": "The Little Prince",
+                "domain": "book",
+                "location": null,
+                "affinity": 0.87
+              },
+              {
+                "name": "Fleetwood Mac",
+                "domain": "music",
+                "location": null,
+                "affinity": 0.55
+              },
+              {
+                "name": "Midnight in Paris",
+                "domain": "film",
+                "location": null,
+                "affinity": 0.85
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "dated_days": 0,
+    "total_items": 4
   }
- }
 }

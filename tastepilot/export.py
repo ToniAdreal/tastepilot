@@ -220,6 +220,27 @@ def _handoff_lines(plan) -> list[tuple[str, str]]:
     return lines
 
 
+def _itinerary_lines(plan) -> list[str]:
+    """Day-by-day pacing lines, recomputed from the plan itself
+    (pacing.plan_itinerary) — an ``itinerary`` field stored in
+    the plan JSON is never trusted or read back. One line per
+    day bucket: dated days name their date; an undated leg reads
+    as a single unscheduled bucket. Empty when the plan has no
+    items to pace."""
+    from .pacing import plan_itinerary
+    itinerary = plan_itinerary(plan)
+    lines: list[str] = []
+    for leg in itinerary["legs"]:
+        where = leg.get("location") or "Anywhere"
+        for day in leg["days"]:
+            if not day["items"]:
+                continue
+            label = day["date"] or "unscheduled"
+            names = ", ".join(i["name"] for i in day["items"])
+            lines.append(f"{where} · {label}: {names}")
+    return lines
+
+
 def _leg_sections(plan) -> list[tuple[str, list[tuple[str, list[dict]]]]]:
     """[(leg heading, [(domain, items), ...]), ...] in plan order.
 
@@ -313,6 +334,10 @@ def render_markdown(plan: dict) -> str:
     if swap_history:
         out += ["## Swap history (sealed audit trail)", ""]
         out += [f"- {line}" for line in swap_history] + [""]
+    itinerary = _itinerary_lines(plan)
+    if itinerary:
+        out += ["## Day-by-day itinerary", ""]
+        out += [f"- {line}" for line in itinerary] + [""]
     handoffs = _handoff_lines(plan)
     if handoffs:
         out += ["## Handoffs (your own calendar / maps)", ""]
@@ -379,6 +404,10 @@ def render_text(plan: dict) -> str:
     if swap_history:
         out += ["Swap history (sealed audit trail):"]
         out += [f"  * {line}" for line in swap_history] + [""]
+    itinerary = _itinerary_lines(plan)
+    if itinerary:
+        out += ["Day-by-day itinerary:"]
+        out += [f"  * {line}" for line in itinerary] + [""]
     handoffs = _handoff_lines(plan)
     if handoffs:
         out += ["Handoffs (your own calendar / maps):"]

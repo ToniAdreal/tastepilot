@@ -439,6 +439,14 @@ the reason recorded (the demo never goes down because the LLM did).
     directory. A webhook registered on an unowned feed
     appears in no token's directory. No stored webhook
     URL or signing secret appears in the response.
+35. Day-by-day pacing probe: generate a dated multi-city plan
+    (e.g. Kyoto Nov 3-5, then Paris Nov 6-8) → the plan JSON's
+    `itinerary` paces every primary item exactly once across
+    the legs' days (dated_days = 6), the demo page renders a
+    "Day-by-day itinerary" section, and a Markdown export
+    carries the same section. A dateless plan's items appear
+    under a single "unscheduled" bucket per leg — no dates
+    are invented.
 
 ## Notes
 

@@ -327,4 +327,10 @@ class TastePilotAgent:
         # presentation only: never sealed, never checker inputs.
         from .handoff import plan_handoffs
         plan["handoffs"] = plan_handoffs(plan)
+        # Day-by-day pacing (see pacing.py): the plan's items laid
+        # over each dated leg's days. Presentation only, exactly
+        # like handoffs: recomputed from schedule + items, never
+        # sealed, never a checker input.
+        from .pacing import plan_itinerary
+        plan["itinerary"] = plan_itinerary(plan)
         return plan

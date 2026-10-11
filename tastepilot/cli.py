@@ -852,6 +852,14 @@ def main(argv: list[str] | None = None) -> int:
     for item in result["items"]:
         print(f"  [{item['domain']}] {item['entity']['name']} "
               f"(affinity {item['affinity']:.2f}) — {item['why']}")
+    for leg in (result.get("itinerary") or {}).get("legs", []):
+        where = leg.get("location") or "anywhere"
+        for day in leg.get("days", []):
+            if not day.get("items"):
+                continue
+            label = day.get("date") or "unscheduled"
+            names = ", ".join(i["name"] for i in day["items"])
+            print(f"  itinerary: {where} · {label}: {names}")
     for leg in (result.get("handoffs") or {}).get("legs", []):
         where = leg.get("location") or "anywhere"
         if leg.get("calendar_url"):
