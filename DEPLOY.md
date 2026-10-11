@@ -317,6 +317,24 @@ the reason recorded (the demo never goes down because the LLM did).
     `probe_eligible_at: null`) → updates stay `skipped`
     no matter how long has passed; only `.../resume`
     restarts it.
+28. Webhook secret rotation probe (a signing secret is
+    replaced in place): register a signed webhook and
+    save the generated secret `S1`; an update push's
+    `X-TastePilot-Signature` verifies under `S1`.
+    `POST .../webhooks/<webhook_id>/rotate-secret` with
+    no body → `200` with a new `signing_secret` `S2`
+    (shown only here) and `signed: true`; the webhook's
+    id, `paused`, and `consecutive_failures` are
+    unchanged. The next update push verifies under
+    `S2` and NOT under `S1`, and `GET .../webhooks`
+    contains neither secret. Rotate again with
+    `{"secret": <your own>}` → `200` with no
+    `signing_secret` field in the response, and pushes
+    verify under your secret; rotate with
+    `{"secret": null}` → `signed: false` and pushes
+    carry no signature header. On an owned feed,
+    rotation without the owner's token → `403`; an
+    unknown webhook id → `404`.
 
 ## Notes
 

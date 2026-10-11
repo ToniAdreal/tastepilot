@@ -245,7 +245,14 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    its count cleared, a failed probe restarts the
    cooldown — while a webhook the subscriber paused by
    hand is never probed, because a deliberate pause is
-   an instruction, not a symptom.
+   an instruction, not a symptom. Secrets are
+   maintainable, too: a webhook's signing secret
+   rotates in place — a fresh secret generated and
+   shown once, the subscriber's own installed, or an
+   explicit null un-signing the webhook — and the old
+   secret stops verifying the moment the new one is
+   stored, without the webhook losing its id, pause
+   state, or failure count to a remove-and-re-register.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -387,8 +394,10 @@ stops being a liability and becomes pure upside.
   delivery recorded in the feed's log, a failed
   delivery redeliverable on demand from its stored payload,
   deliveries HMAC-signed with a per-webhook secret the
-  subscriber supplies or has generated and shown once, and
-  a webhook auto-paused after consecutive failures until
+  subscriber supplies or has generated and shown once —
+  a secret that also rotates in place, the old one
+  stopping verifying the moment the new one is stored —
+  and a webhook auto-paused after consecutive failures until
   the subscriber resumes it or a half-open probe — the
   next update push after a one-hour cooldown — revives it)
   graduating to a hosted notification service with

@@ -208,6 +208,18 @@ Routes:
                                resume a paused webhook (owner
                                rule as for the feed), clearing
                                its consecutive-failure count.
+  POST /api/multi-feeds/<id>/webhooks/<webhook_id>/rotate-secret
+                               replace a webhook's signing
+                               secret in place (owner rule as
+                               for the feed): no body generates
+                               a fresh secret, returned in
+                               this response only; {"secret":
+                               ...} installs the subscriber's
+                               own; an explicit null un-signs
+                               the webhook. The old secret
+                               stops verifying immediately;
+                               pause state and failure count
+                               are untouched.
   GET  /api/multi-feeds/<id>/notifications
                                the feed's capped push delivery
                                log: one record per delivery
@@ -1520,6 +1532,49 @@ class MultiTimelineFeedStore:
             entry["webhooks"] = kept
             self._save()
             return "removed"
+
+    def rotate_webhook_secret(self, feed_id: str, webhook_id: str,
+                              owner_token=None, signing_secret="generate",
+                              secret_out=None):
+        """(status, meta): replace one webhook's signing secret
+        in place, under the feed's owner rule (via the webhook
+        gate). Status is ok / not_found (feed) / forbidden /
+        webhook_not_found. ``signing_secret`` follows the
+        registration contract exactly: ``"generate"`` (the
+        default) mints a fresh secret and, when ``secret_out``
+        (a dict) is given, places it there — that dict is the
+        secret's only exit; a string is the subscriber's own
+        secret (validated here, never reported back); None
+        un-signs the webhook. The old secret stops verifying
+        the moment the new one is stored — there is no grace
+        window, because a rotation usually means the old secret
+        leaked. Rotation is a management act, not a delivery:
+        the webhook's pause state, failure count, and
+        created_at are untouched, and a paused webhook can be
+        rotated (it stays paused). Meta and listings report
+        only the ``signed`` flag, as everywhere else."""
+        with self._lock:
+            entry, status = self._webhook_gate(feed_id, owner_token)
+            if entry is None:
+                return status, None
+            webhook = next(
+                (w for w in entry.get("webhooks", [])
+                 if w.get("webhook_id") == webhook_id), None)
+            if webhook is None:
+                return "webhook_not_found", None
+            generated = signing_secret == "generate"
+            secret = generate_signing_secret() if generated \
+                else signing_secret
+            if secret is None:
+                webhook.pop("signing_secret", None)
+            else:
+                webhook["signing_secret"] = \
+                    validate_signing_secret(secret)
+                if generated and secret_out is not None:
+                    secret_out["signing_secret"] = \
+                        webhook["signing_secret"]
+            self._save()
+            return "ok", self._webhook_meta(webhook)
 
     def _note_delivery_outcomes(self, entry: dict, records) -> None:
         """Fold recorded delivery outcomes into each webhook's
@@ -3240,6 +3295,84 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return
             self._send_json(200, {**meta, "feed_id": feed_id})
 
+        def _handle_webhook_rotate_secret(self, feed_id, webhook_id):
+            """Rotate one webhook's signing secret in place:
+            POST /api/multi-feeds/<id>/webhooks/<webhook_id>/
+            rotate-secret. The body is optional: no body, an
+            empty object, or no "secret" key generates a fresh
+            secret, returned in this response as
+            "signing_secret" — the ONLY surface that ever shows
+            it, exactly as at registration; {"secret": "..."}
+            installs the subscriber's own secret (validated,
+            never echoed — they already know it); an explicit
+            {"secret": null} un-signs the webhook. The old
+            secret stops verifying immediately. Rotation never
+            delivers anything and leaves the webhook's pause
+            state and failure count untouched (owner rule as
+            for the feed)."""
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_WEBHOOK_BODY_BYTES:
+                self._send_json(413, {"error": "request body too large"})
+                return
+            raw = self.rfile.read(length) if length else b""
+            if raw.strip():
+                try:
+                    payload = json.loads(raw)
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    self._send_json(400, {"error": "invalid JSON body"})
+                    return
+                if not isinstance(payload, dict):
+                    self._send_json(400, {"error": "invalid JSON body"})
+                    return
+            else:
+                payload = {}
+            if "secret" in payload:
+                if payload["secret"] is None:
+                    signing_secret = None
+                else:
+                    try:
+                        signing_secret = validate_signing_secret(
+                            payload["secret"])
+                    except ValueError as exc:  # never echoes it
+                        self._send_json(
+                            400, {"error": f"webhook failed: {exc}"})
+                        return
+            else:
+                signing_secret = "generate"
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            secret_out = {}
+            status, meta = multi_feed_store.rotate_webhook_secret(
+                feed_id, webhook_id, owner_token=token,
+                signing_secret=signing_secret, secret_out=secret_out)
+            if status == "not_found":
+                self._send_json(404, {"error": "unknown multi-feed id"})
+                return
+            if status == "forbidden":
+                self._send_json(
+                    403, {"error": "only the owner can manage "
+                                   "webhooks for this multi-feed"})
+                return
+            if status == "webhook_not_found":
+                self._send_json(404, {"error": "unknown webhook id"})
+                return
+            response = {**meta, "feed_id": feed_id}
+            if "signing_secret" in secret_out:
+                # Shown exactly once, here: the subscriber saves
+                # it now to verify later pushes.
+                response["signing_secret"] = secret_out["signing_secret"]
+            self._send_json(200, response)
+
         def _handle_notifications(self, feed_id):
             """The feed's push delivery log: one record per
             delivery attempt (registration pings + update pushes),
@@ -3423,6 +3556,11 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                         and parts[0] and parts[2]:
                     self._handle_webhook_pause(
                         parts[0], parts[2], parts[3] == "pause")
+                elif len(parts) == 4 and parts[1] == "webhooks" \
+                        and parts[3] == "rotate-secret" \
+                        and parts[0] and parts[2]:
+                    self._handle_webhook_rotate_secret(
+                        parts[0], parts[2])
                 elif rest.endswith("/webhooks") and \
                         "/" not in rest[:-len("/webhooks")]:
                     self._handle_webhook_create(

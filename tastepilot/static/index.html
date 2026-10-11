@@ -881,6 +881,52 @@ async function doTimeline(basePlan, okBranches, outEl) {
   });
   outEl.appendChild(resumeBtn);
   outEl.appendChild(resumeOut);
+  // Signing secrets rotate in place: a leaked (or simply
+  // old) secret is replaced without removing and
+  // re-registering the webhook — its id, pause state, and
+  // failure count survive, and the old secret stops
+  // verifying the moment the new one is stored. A generated
+  // secret is shown exactly once, in this output, for the
+  // subscriber to save; listings never show any secret.
+  const rotateBtn = document.createElement('button');
+  rotateBtn.type = 'button'; rotateBtn.className = 'webhookrotatebtn';
+  rotateBtn.textContent = 'Rotate webhook signing secrets';
+  const rotateOut = document.createElement('div');
+  rotateOut.className = 'meta webhookrotateout';
+  rotateBtn.addEventListener('click', async () => {
+    if (!multiFeedId) {
+      rotateOut.textContent =
+        'Create the multi-timeline subscription first.';
+      return;
+    }
+    const r = await fetch('/api/multi-feeds/' + multiFeedId + '/webhooks',
+      {headers: {...ownerHeaders()}});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      rotateOut.textContent = 'Webhook error: ' + (d.error || r.status);
+      return;
+    }
+    const signed = (d.webhooks || []).filter(w => w.signed);
+    if (!signed.length) {
+      rotateOut.textContent = 'No signed webhooks on this feed.';
+      return;
+    }
+    const lines = [];
+    for (const w of signed) {
+      const rr = await fetch('/api/multi-feeds/' + multiFeedId +
+        '/webhooks/' + w.webhook_id + '/rotate-secret',
+        {method: 'POST', headers: {...ownerHeaders()}});
+      const dd = await rr.json().catch(() => ({}));
+      lines.push(w.host + (rr.ok
+        ? ' rotated — new signing secret (save it now, it is ' +
+          'shown only here): ' + dd.signing_secret
+        : ' rotation failed: ' + (dd.error || rr.status)));
+    }
+    rotateOut.textContent = 'Webhooks: ' + lines.join('; ') +
+      '. The old secrets stop verifying immediately.';
+  });
+  outEl.appendChild(rotateBtn);
+  outEl.appendChild(rotateOut);
 }
 
 async function doExplore(basePlan, branches, resultsEl) {

@@ -742,6 +742,23 @@ baked into the image or the repo.
   A webhook paused by hand (reason `manual`) is never
   probed: a deliberate pause is an instruction, not a
   symptom, and only the subscriber's resume restarts it.
+  A signing secret rotates in place:
+  `POST .../webhooks/<id>/rotate-secret` (owner rule as
+  for the feed) replaces the secret without removing and
+  re-registering the webhook — no body generates a fresh
+  secret, returned in that response only and shown once,
+  exactly as at registration; a supplied `"secret"`
+  installs the subscriber's own (validated, never
+  echoed); an explicit null un-signs the webhook. The
+  old secret stops verifying immediately (no grace
+  window — a rotation usually means a leak), and
+  rotation is a management act, not a delivery: the
+  webhook's id, pause state, failure count, and
+  registration moment all survive, and a paused webhook
+  can be rotated (it stays paused). The timeline view's
+  "Rotate webhook signing secrets" button rotates every
+  signed webhook on the feed and shows each new secret
+  once, in its output, for the subscriber to save.
   Webhooks are
   listed (`GET .../webhooks`, host labels only) and removed
   (`DELETE .../webhooks/<id>`) under the same owner rule, and
