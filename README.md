@@ -52,10 +52,13 @@ tastepilot/
   timetable.py timetable providers behind the feasibility check:
                scheduled services from a timetable file the user
                supplies (JSON/CSV: from, to, duration, mode, service —
-               parsed offline, no API, no account) replace the offline
-               estimate for the pairs they cover; uncovered pairs fall
-               back to the estimate, and every transfer records its
-               source (timetable_file / offline_estimate)
+               parsed offline, no API, no account), or from a
+               timetable API endpoint the user names (same schema
+               over HTTP, fetched once with bounded retries, only
+               its host recorded), replace the offline estimate for
+               the pairs they cover; uncovered pairs fall back to
+               the estimate, and every transfer records its source
+               (timetable_file / timetable_api / offline_estimate)
   qloo.py      Qloo adapter: real client (hackathon API, X-Api-Key; bounded
                retries on 429/5xx + network errors, every failure surfaces
                as QlooError; tolerant payload-envelope parsing) + mock client
@@ -219,6 +222,20 @@ baked into the image or the repo.
   are capped at 1 MiB and 500 entries. Scheduled durations are
   composition constraints only, exactly like estimates: never sent
   to Qloo, never in the evidence log.
+* The same scheduled services can come from a live endpoint
+  instead of a file: `plan --timetable-url <url>` fetches a
+  timetable API endpoint serving the identical JSON/CSV schema
+  over HTTP — one GET, no account, no key, bounded retries on
+  transient failures (429/5xx and network errors, mirroring the
+  real Qloo client), then served from memory exactly like a file.
+  Transfers it covers record `source=timetable_api`. Only the
+  endpoint's host is ever recorded as provenance (`timetable`:
+  host, `timetable_api_json`/`timetable_api_csv` format, entry
+  count): the full URL — whose query string could carry a token —
+  appears in no plan, summary line, or error message, and fetch
+  failures are categorised (`http_error`, `network_error`,
+  `unsupported`, plus the file parse categories) with exit code 2,
+  never a traceback.
 * Seeds can also arrive as an exported taste file: `plan --import-file
   <file>` parses a file the user downloaded from their own accounts —
   a Spotify playlist export (JSON), a Letterboxd watchlist or a

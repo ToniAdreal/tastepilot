@@ -17,12 +17,22 @@ it covers, behind exactly the same feasibility interface:
   timetable *file* the user hands over (a JSON or CSV export of the
   services they are actually considering — parsed entirely offline,
   no timetable API, no account, no network, no keys);
+- ``ApiTimetableProvider`` serves the same scheduled-service schema
+  fetched over HTTP from a timetable API endpoint the user names
+  (``fetch_timetable``: one GET, bounded retries on transient
+  failures like the real Qloo client, injectable transport for
+  tests). No specific provider account or key is involved — the
+  endpoint is user-supplied, is fetched once and then served from
+  memory exactly like a file, and only its host is ever recorded as
+  provenance: the full URL (whose query string could carry a token)
+  never enters a plan, a log line, or an error message;
 - ``ChainedTimetableProvider`` tries providers in order and falls
   back to the next one, so the normal composition is
-  file-then-offline: scheduled where the file covers the pair,
-  estimated where it does not. A transfer records which source
-  produced it (``source``: ``timetable_file`` / ``offline_estimate``)
-  so a plan never presents an estimate as a schedule or vice versa.
+  scheduled-then-offline: scheduled where a file or API covers the
+  pair, estimated where it does not. A transfer records which source
+  produced it (``source``: ``timetable_file`` / ``timetable_api`` /
+  ``offline_estimate``) so a plan never presents an estimate as a
+  schedule or vice versa.
 
 Timetable files mirror the taste-import rails in ``imports``: capped
 at 1 MiB and 500 entries, durations must be positive and at most
@@ -46,6 +56,10 @@ import csv
 import io
 import json
 import re
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 from .travel import estimate_transfer, haversine_km
@@ -261,12 +275,13 @@ class OfflineEstimateProvider:
         return {**est, "source": self.name, "service": None}
 
 
-class FileTimetableProvider:
-    """Scheduled durations from one or more parsed timetable files.
+class _ScheduledTimetableProvider:
+    """Scheduled durations from parsed timetables (file or API).
 
     A hit is exact on the (from, to) pair, compared case-insensitively;
     when only the reverse direction is listed it is used and flagged
-    ``reversed`` — the service runs both ways, the file just named one.
+    ``reversed`` — the service runs both ways, the source just named
+    one. Subclasses differ only in the ``source`` label they stamp.
     """
     name = "timetable_file"
 
@@ -296,6 +311,101 @@ class FileTimetableProvider:
         return result
 
 
+class FileTimetableProvider(_ScheduledTimetableProvider):
+    """Scheduled durations from one or more parsed timetable files."""
+    name = "timetable_file"
+
+
+class ApiTimetableProvider(_ScheduledTimetableProvider):
+    """Scheduled durations fetched from a timetable API endpoint
+    (see ``fetch_timetable``); served from memory after the fetch,
+    exactly like a file, but stamped ``timetable_api``."""
+    name = "timetable_api"
+
+
+#: HTTP statuses worth retrying for a timetable fetch: rate limiting
+#: and transient server-side failures, mirroring the real Qloo client.
+#: Other statuses (400/401/403/404) fail immediately.
+TRANSIENT_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
+def _api_origin(url: str) -> tuple[urllib.parse.ParseResult, str]:
+    """Validate a timetable API URL and derive its provenance label:
+    the host (with port when present) and nothing else — no scheme,
+    path, userinfo, or query string ever reaches a plan or a log."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError("unsupported: timetable URL must be an "
+                         "http(s) URL with a host")
+    label = parsed.hostname
+    if parsed.port:
+        label = f"{label}:{parsed.port}"
+    return parsed, label
+
+
+def fetch_timetable(url: str, transport=None, timeout: float = 10.0,
+                    max_attempts: int = 3, sleeper=None) -> dict:
+    """Fetch one timetable API endpoint and parse it like a file.
+
+    ``transport`` is injectable for tests: a callable
+    ``(url, timeout) -> (status, body_bytes)``. The default transport
+    is a plain urllib GET with no headers beyond ``accept`` — no key
+    or credential is ever sent. Transient failures (HTTP 429/5xx and
+    transport-level network errors) are retried up to
+    ``max_attempts`` total attempts with exponential backoff through
+    the injectable ``sleeper``. Every failure raises ``ValueError``
+    with a category (``unsupported`` / ``http_error`` /
+    ``network_error``, plus the parse categories of
+    ``parse_timetable_bytes``) — never a traceback, and never an echo
+    of the URL, its query string, or the response body.
+
+    Returns the ``parse_timetable_bytes`` shape with provenance
+    rewritten for an API source: ``source_file`` is the endpoint's
+    host label only, ``format`` is ``timetable_api_json`` /
+    ``timetable_api_csv``, and ``source_kind`` is ``"api"``.
+    """
+    parsed_url, origin = _api_origin(url)
+    sleep = sleeper or time.sleep
+    attempts = max(1, max_attempts)
+    filename = Path(urllib.parse.unquote(parsed_url.path)).name \
+        or "timetable-api"
+    for attempt in range(attempts):
+        try:
+            if transport is not None:
+                status, body = transport(url, timeout)
+            else:
+                req = urllib.request.Request(
+                    url, headers={"accept": "application/json, text/csv"},
+                    method="GET")
+                try:
+                    with urllib.request.urlopen(req, timeout=timeout) as resp:
+                        status, body = resp.status, resp.read()
+                except urllib.error.HTTPError as exc:  # live path
+                    status, body = exc.code, b""
+        except (urllib.error.URLError, OSError) as exc:
+            # The message names only the exception type — a URLError's
+            # own text can embed the full URL, query string included.
+            if attempt + 1 < attempts:
+                sleep(min(0.5 * (2 ** attempt), 4.0))
+                continue
+            raise ValueError(
+                f"network_error: timetable API unreachable "
+                f"({type(exc).__name__})") from exc
+        if status == 200:
+            result = parse_timetable_bytes(body, filename=filename)
+            result["source_file"] = origin
+            result["format"] = result["format"].replace(
+                "timetable_", "timetable_api_", 1)
+            result["source_kind"] = "api"
+            return result
+        if status in TRANSIENT_STATUSES and attempt + 1 < attempts:
+            sleep(min(0.5 * (2 ** attempt), 4.0))
+            continue
+        raise ValueError(f"http_error: timetable API returned "
+                         f"HTTP {status}")
+    raise ValueError("network_error: timetable API request failed")
+
+
 class ChainedTimetableProvider:
     """Try providers in order; the first hit for a pair wins."""
 
@@ -312,10 +422,19 @@ class ChainedTimetableProvider:
 
 
 def provider_for(timetables: list[dict] | None):
-    """The provider a plan should use: file-then-offline when
-    timetable files were supplied, plain offline otherwise (which
-    keeps the default plan byte-identical in behaviour)."""
+    """The provider a plan should use: scheduled-then-offline when
+    timetables were supplied (each parsed timetable gets its own
+    scheduled provider, in supply order — file entries stamped
+    ``timetable_file``, API entries ``timetable_api``), plain offline
+    otherwise (which keeps the default plan byte-identical in
+    behaviour)."""
     if timetables:
+        scheduled = [
+            ApiTimetableProvider([tt])
+            if tt.get("source_kind") == "api"
+            or str(tt.get("format", "")).startswith("timetable_api")
+            else FileTimetableProvider([tt])
+            for tt in timetables]
         return ChainedTimetableProvider(
-            [FileTimetableProvider(timetables), OfflineEstimateProvider()])
+            [*scheduled, OfflineEstimateProvider()])
     return OfflineEstimateProvider()

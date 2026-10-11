@@ -130,9 +130,10 @@ def assess_transfers(leg_dates: list[dict],
 
     ``provider`` is a timetable provider (see ``timetable``): when
     it has a scheduled service for a pair, that duration is judged
-    instead of the offline estimate, and the transfer records
-    ``source="timetable_file"`` (plus the service name when the file
-    names one); pairs the provider does not cover fall back to the
+    instead of the offline estimate, and the transfer records its
+    scheduled source (``timetable_file`` or ``timetable_api``, plus
+    the service name when the source names one); pairs the provider
+    does not cover fall back to the
     offline estimate with ``source="offline_estimate"``. With no
     provider, every transfer is the offline estimate — the original
     behaviour. The provider is imported lazily here so ``travel``
@@ -172,7 +173,7 @@ def assess_transfers(leg_dates: list[dict],
                 status = "tight"
             else:
                 status = "ok"
-            if est.get("source") == "timetable_file":
+            if est.get("source") not in (None, "offline_estimate"):
                 service = f", {est['service']}" if est.get("service") else ""
                 rev = ", listed in reverse" if est.get("reversed") else ""
                 detail = (f"{from_city} -> {to_city}: ~{hours} h "

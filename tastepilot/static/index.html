@@ -319,9 +319,9 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   if (data.transfers && data.transfers.length) {
     const div = document.createElement('div');
     div.className = 'meta';
-    const anyScheduled = data.transfers.some(t => t.source === 'timetable_file');
+    const anyScheduled = data.transfers.some(t => ['timetable_file', 'timetable_api'].includes(t.source));
     div.textContent = (anyScheduled
-      ? 'Inter-leg transfers (scheduled services where a timetable file covers the pair, offline door-to-door estimates otherwise): '
+      ? 'Inter-leg transfers (scheduled services where a timetable file or API covers the pair, offline door-to-door estimates otherwise): '
       : 'Inter-leg transfers (offline door-to-door estimates): ') +
       data.transfers.map(t => `${t.detail} — ${t.status} [${t.source || 'offline_estimate'}]`).join('; ');
     out.appendChild(div);

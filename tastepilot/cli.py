@@ -3,6 +3,7 @@
   python -m tastepilot plan "<request>" [--mode mock|real|auto] [--out plan.json]
                              [--import-file taste-export.csv|json|txt ...]
                              [--timetable-file services.json|csv ...]
+                             [--timetable-url https://host/services.json ...]
   python -m tastepilot smoke [--mode real|auto|mock] [--query Q] [--domain D]
                              [--out smoke.json]
   python -m tastepilot verify --record plan.json
@@ -34,7 +35,7 @@ from .llm import NebiusExplainer, TemplateExplainer
 from .models import DOMAIN_URNS
 from .qloo import QlooError, make_client
 from .smoke import DEFAULT_DOMAIN, DEFAULT_QUERY, run_smoke
-from .timetable import load_timetable
+from .timetable import fetch_timetable, load_timetable
 
 
 def _agent_for(mode: str, llm: str) -> TastePilotAgent:
@@ -61,6 +62,12 @@ def main(argv: list[str] | None = None) -> int:
                         "file (JSON or CSV: from, to, duration); pairs "
                         "it covers are judged on the scheduled duration "
                         "instead of the offline estimate; repeatable")
+    p.add_argument("--timetable-url", action="append", default=[],
+                   dest="timetable_urls", metavar="URL",
+                   help="scheduled inter-leg services from a timetable "
+                        "API endpoint serving the same JSON/CSV schema "
+                        "over HTTP; fetched once (bounded retries), "
+                        "only its host is recorded; repeatable")
     p.add_argument("--out")
     k = sub.add_parser("smoke")
     k.add_argument("--mode", default="real", choices=["mock", "real", "auto"])
@@ -146,6 +153,12 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             print(f"error: timetable failed: {exc}", file=sys.stderr)
             return 2
+    for timetable_url in getattr(args, "timetable_urls", []) or []:
+        try:
+            timetables.append(fetch_timetable(timetable_url))
+        except ValueError as exc:
+            print(f"error: timetable failed: {exc}", file=sys.stderr)
+            return 2
     try:
         result = agent.run(args.text, imported=imported,
                            timetables=timetables)
@@ -166,8 +179,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  import: {imp['source_file']} ({imp['format']}) "
               f"— {len(imp['items'])} seed(s)")
     for tt in result.get("timetable", []):
+        tt_source = "timetable_api" \
+            if str(tt.get("format", "")).startswith("timetable_api") \
+            else "timetable_file"
         matched = sum(1 for t in result.get("transfers", [])
-                      if t.get("source") == "timetable_file")
+                      if t.get("source") == tt_source)
         print(f"  timetable: {tt['source_file']} ({tt['format']}) "
               f"— {tt['entries']} service(s), {matched} matched")
     for entry in result.get("schedule", []):
