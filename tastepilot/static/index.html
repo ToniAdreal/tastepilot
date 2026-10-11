@@ -55,7 +55,8 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
 <div style="margin:.5rem 0"><button type="button" id="sharebtn" style="display:none">Create shareable verification link</button> <button type="button" id="ossharebtn" style="display:none">Share via OS share sheet ↗</button> <span id="shareout" class="meta"></span></div>
 <div style="margin:.5rem 0" id="exportrow" hidden><label class="meta" for="exportfmt">Export itinerary as</label>
 <select id="exportfmt"><option value="markdown">Markdown</option><option value="text">Plain text</option><option value="ics">iCalendar (.ics, dated legs)</option><option value="ics-days">iCalendar by day (.ics, one event per paced day)</option></select>
-<button type="button" id="exportbtn">Download export</button> <span id="exportout" class="meta"></span></div>
+<button type="button" id="exportbtn">Download export</button>
+<button type="button" id="bundlebtn">Download audit bundle (.zip)</button> <span id="exportout" class="meta"></span></div>
 <div id="out"></div>
 <section id="viewer" aria-label="Evidence record viewer">
   <h2 style="margin-top:0">Evidence record</h2>
@@ -520,6 +521,28 @@ document.getElementById('exportbtn').addEventListener('click', async () => {
   try {
     await downloadExport(lastPlan, document.getElementById('exportfmt').value);
     note.textContent = 'Export downloaded — its banner carries the recomputed verification.';
+  } catch (err) { note.textContent = 'Error: ' + err.message; }
+});
+
+document.getElementById('bundlebtn').addEventListener('click', async () => {
+  if (!lastPlan) return;
+  const note = document.getElementById('exportout');
+  note.textContent = 'Packing audit bundle…';
+  try {
+    const res = await fetch('/api/bundle',
+      {method: 'POST', headers: {'Content-Type': 'application/json'},
+       body: JSON.stringify(lastPlan)});
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || ('HTTP ' + res.status));
+    }
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'tastepilot-audit-bundle.zip';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    note.textContent = 'Audit bundle downloaded — plan, sealed evidence, recomputed verification report, itineraries, and a hashed manifest in one ZIP.';
   } catch (err) { note.textContent = 'Error: ' + err.message; }
 });
 

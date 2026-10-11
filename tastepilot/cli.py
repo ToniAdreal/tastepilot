@@ -165,6 +165,26 @@ def main(argv: list[str] | None = None) -> int:
                         "event per dated day per branch and needs a "
                         "dated day); every column's verdict is "
                         "recomputed")
+    bd = sub.add_parser("bundle")
+    bd.add_argument("--plan", required=True,
+                    help="a saved plan JSON (e.g. from plan --out) to "
+                         "pack into an audit bundle: a deterministic "
+                         "ZIP carrying the plan, its sealed evidence "
+                         "record, a verification report recomputed at "
+                         "packing time, the take-away itineraries, "
+                         "and a hashed manifest")
+    bd.add_argument("--out", required=True,
+                    help="write the audit bundle (.zip) here; a plan "
+                         "that fails recomputation still packs (its "
+                         "report reads NOT VERIFIED) but exits 1")
+    vb = sub.add_parser("verify-bundle")
+    vb.add_argument("--bundle", required=True, metavar="ZIP",
+                    help="an audit bundle to re-audit offline: every "
+                         "file is checked against the manifest's "
+                         "hashes and the packed plan's verdict is "
+                         "recomputed from its sealed record (the "
+                         "packed verification report is never "
+                         "trusted); exit 0 only when both pass")
     w = sub.add_parser("swap")
     w.add_argument("--plan", required=True,
                    help="a saved plan JSON (e.g. from plan --out)")
@@ -543,6 +563,51 @@ def main(argv: list[str] | None = None) -> int:
         # Mirror the plan/verify contract: an unverified plan still
         # exports (with its NOT VERIFIED banner) but exits 1.
         return 0 if verified else 1
+    if args.cmd == "bundle":
+        from .bundle import build_bundle
+        try:
+            plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: bundle failed: cannot read plan "
+                  f"({type(exc).__name__})", file=sys.stderr)
+            return 2
+        if not isinstance(plan, dict):
+            print("error: bundle failed: bad_plan", file=sys.stderr)
+            return 2
+        try:
+            data, verified = build_bundle(plan)
+        except ValueError as exc:  # categorised refusal, no traceback
+            print(f"error: bundle failed: {exc}", file=sys.stderr)
+            return 2
+        Path(args.out).write_bytes(data)
+        print(f"bundle: verified={verified} bytes={len(data)} "
+              f"out={args.out}")
+        # Mirror the export contract: an unverified plan still packs
+        # (with its NOT VERIFIED report) but exits 1.
+        return 0 if verified else 1
+    if args.cmd == "verify-bundle":
+        from .bundle import verify_bundle
+        try:
+            data = Path(args.bundle).read_bytes()
+        except OSError as exc:
+            print(f"error: bundle verify failed: cannot read bundle "
+                  f"({type(exc).__name__})", file=sys.stderr)
+            return 2
+        try:
+            report = verify_bundle(data)
+        except ValueError as exc:  # categorised refusal, no traceback
+            print(f"error: bundle verify failed: {exc}",
+                  file=sys.stderr)
+            return 2
+        for violation in report["violations"]:
+            print(f"  violation: item={violation['item']} "
+                  f"reason={violation['reason']}")
+        print(f"bundle verify: ok={report['ok']} "
+              f"manifest_valid={report['manifest_valid']} "
+              f"passed={report['passed']} "
+              f"chain_valid={report['chain_valid']} "
+              f"files={len(report['files'])}")
+        return 0 if report["ok"] else 1
     if args.cmd == "swap":
         from .swap import swap_plan
         try:

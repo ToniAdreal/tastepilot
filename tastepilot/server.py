@@ -59,6 +59,16 @@ Routes:
                                plan exports with a NOT VERIFIED banner,
                                never a clean one. ics on a plan with no
                                dated leg -> 400.
+  POST /api/bundle             a plan JSON (same shape/gates as
+                               /api/verify) -> an audit bundle
+                               download (tastepilot.bundle): a
+                               deterministic ZIP carrying the plan,
+                               its sealed evidence record, a
+                               verification report recomputed at
+                               packing time, the take-away
+                               itineraries, and a hashed manifest —
+                               a tampered plan packs with a NOT
+                               VERIFIED report, never a clean one.
   POST /api/suggest            {"plan": {...}, "limit": 5,
                                "history": [{...}, ...]} -> guided
                                branch suggestions: every admissible
@@ -534,6 +544,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from .bundle import build_bundle
 from .checker import check_plan, item_reports
 from .diff import diff_plans
 from .evidence import qloo_responses, verify_chain
@@ -2950,6 +2961,45 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 "Content-Disposition":
                     f'attachment; filename="tastepilot-itinerary.{ext}"'})
 
+        def _handle_bundle(self):
+            """Pack a submitted plan into an audit bundle download.
+
+            Same untrusted-input gates as /api/verify (size cap +
+            shape validation). The bundle's verification report is
+            recomputed at packing time — a tampered plan packs as
+            NOT VERIFIED, never clean — and the response is a ZIP
+            download with no-store, like every API body."""
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_VERIFY_BODY_BYTES:
+                self._send_json(413, {"error": "plan too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            error = validate_plan_payload(payload)
+            if error is not None:
+                self._send_json(400, {"error": error})
+                return
+            try:
+                data, _verified = build_bundle(payload)
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            self._send(200, data, "application/zip", extra={
+                "Cache-Control": "no-store",
+                "Content-Disposition":
+                    'attachment; filename="tastepilot-audit-bundle.zip"'})
+
         def _handle_swap(self):
             """Exchange a primary item with a verified alternative.
 
@@ -4596,6 +4646,9 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 fmt = parse_qs(urlparse(self.path).query).get(
                     "format", ["markdown"])[0]
                 self._handle_export(fmt)
+                return
+            if path == "/api/bundle":
+                self._handle_bundle()
                 return
             if path == "/api/export-timeline":
                 fmt = parse_qs(urlparse(self.path).query).get(

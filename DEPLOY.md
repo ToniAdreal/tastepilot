@@ -561,6 +561,21 @@ the reason recorded (the demo never goes down because the LLM did).
     under a different token → `403` (`owner_mismatch`).
     The document carries the fingerprint and the profile
     only — never the token.
+44. Audit bundle probe:
+    `POST /api/bundle` (the audit bundle probe; the demo
+    page's "Download audit bundle (.zip)" button) with a
+    generated plan → `200`, `application/zip`, attachment
+    `tastepilot-audit-bundle.zip`; the archive contains
+    `plan.json`, `evidence.json`, `verification.json`
+    (verdict PASS, recomputed at packing time),
+    `itinerary.md`, `itinerary.txt`, and `manifest.json`
+    (the calendar appears only for a dated plan).
+    `tastepilot verify-bundle --bundle <file>` → exit `0`;
+    editing one affinity inside the packed `plan.json`
+    and re-zipping → verify-bundle exits `1` with
+    `manifest_valid: False`; a tampered plan posted to
+    `/api/bundle` still packs, its packed
+    `verification.json` reading NOT VERIFIED.
 
 ## Notes
 

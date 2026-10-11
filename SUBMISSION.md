@@ -436,6 +436,15 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    block per leg — empty days and undated legs get no event, and
    paced event UIDs are namespaced apart from the leg calendar's,
    so both files can be imported side by side.
+   And a plan's whole proof travels as one file — an
+   audit bundle: a deterministic ZIP (CLI `bundle`, the
+   demo's audit bundle button, `POST /api/bundle`) carrying the plan exactly
+   as supplied, its sealed evidence record on its own, a
+   verification report recomputed at packing time, the take-away
+   itineraries, and a manifest hashing every other file — and
+   `verify-bundle` re-audits an archive offline, checking the
+   manifest hashes and recomputing the packed plan's verdict
+   rather than trusting the report packed inside it.
 
 **[FINALIZE: one real-mode example — a plan produced against the live
 Qloo API, with its item count and checker verdict.]**

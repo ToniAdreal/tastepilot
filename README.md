@@ -129,6 +129,16 @@ tastepilot/
                calendars), and export_multi_timeline dispatches
                all four bundle formats — while subscription feeds
                stay calendar-only (MULTI_FEED_FORMATS)
+  bundle.py    audit bundles: one deterministic ZIP carrying a
+               plan exactly as supplied, its sealed evidence record
+               on its own, a verification report recomputed at
+               packing time (per-item checker reports, primary
+               items + alternatives), the take-away itineraries
+               (the calendar included only when the plan has a
+               dated leg), and a manifest hashing every other
+               file; verify_bundle re-audits an archive offline —
+               manifest hashes checked, the packed plan's verdict
+               recomputed, the packed report never trusted
   notify.py    push change notifications for calendar
                subscriptions: subscriber-registered webhooks on
                multi-feeds — a URL is validated (http(s), no
@@ -644,6 +654,24 @@ baked into the image or the repo.
   --plan plan.json [--format markdown|text|ics] [--out file]`, the
   demo UI's export row and verify-panel button, and
   `POST /api/export?format=...` all render the same exporter.
+  And a plan leaves as one self-contained proof — an audit bundle:
+  `tastepilot bundle --plan plan.json --out bundle.zip`, the demo
+  UI's "Download audit bundle (.zip)" button, and
+  `POST /api/bundle` pack the plan exactly as supplied, its sealed
+  evidence record on its own, a verification report recomputed at packing time,
+  the Markdown/text itineraries (plus the calendar when the plan
+  has a dated leg), and a manifest carrying the SHA-256 and byte
+  size of every other file. Packing is deterministic (fixed ZIP
+  timestamps, no wall-clock anywhere), so two bundles of the same
+  plan are byte-identical. A tampered plan still packs — its
+  report reads NOT VERIFIED — and exits 1 on the CLI.
+  `tastepilot verify-bundle --bundle bundle.zip` re-audits an
+  archive offline: every file is checked against the manifest's
+  hashes (a `plan.json` edited after packing fails the manifest
+  check even if the edited plan would verify on its own) and the
+  packed plan's verdict is recomputed from its sealed record —
+  the packed `verification.json` is never trusted, because once
+  the archive leaves TastePilot's hands it is only a claim.
   A branch timeline leaves the same way — a branch-timeline export:
   `tastepilot export --plan base.json --branch NAME=branch.json
   [--format markdown|text|ics|ics-days]`, `POST /api/export-timeline?format=...`,
