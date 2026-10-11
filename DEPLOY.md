@@ -35,6 +35,7 @@ No build/install step is required — there are no dependencies.
 | `QLOO_API_KEY` | no | When set (platform secret store only), `--mode auto` serves **real** Qloo responses; when unset it serves mock Judge Mode. Never bake the key into an image or commit it — `.env` is gitignored and dockerignored. |
 | `TASTEPILOT_SIGNING_KEY` | no | Overrides the development HMAC key for evidence records. |
 | `TASTEPILOT_SHARE_FILE` | no | Path of a JSON file the share-link store persists to (atomic writes), so verification links survive restarts. Needs a writable, persistent volume; unset = in-memory links. The CLI equivalent is `serve --share-file <path>`, and `--share-ttl-days` tunes the 7-day default link lifetime. The file holds only shared plan payloads (fictional demo data) and, for owner-managed links, SHA-256 hashes of owner tokens — never the tokens themselves, and never the Qloo key. |
+| `TASTEPILOT_PROFILE_FILE` | no | Path of a JSON file the persistent preference-profile store persists to (atomic writes), so learned suggestion profiles survive restarts. Needs a writable, persistent volume; unset = in-memory profiles. The CLI equivalent is `serve --profile-file <path>`. The file holds only owner-token SHA-256 hashes and profiles derived from sealed swap histories — never the tokens themselves, never caller-supplied weights, and never the Qloo key. |
 
 For live Nemotron explanations instead of the deterministic template,
 append `--llm nebius` to the start command; every explanation records
@@ -131,6 +132,18 @@ the reason recorded (the demo never goes down because the LLM did).
     → the same tags now adjust negatively. A chain-broken plan
     in the request's `history` list is counted under
     `plans_ignored` and changes no score.
+16. Profile probe (persistent preference profiles): with a
+    swapped plan on screen, click "Save this plan's swap
+    learning to my profile" under "Your preference profile" →
+    the line reports the derived kept count and the profile's
+    tag weights. Generate a fresh plan, click "Suggest
+    branches" → the learned line adds "stored profile applied"
+    and the same tags adjust the new plan's candidates. "Show
+    my profile" reports the same weights; with
+    `TASTEPILOT_PROFILE_FILE` set the profile survives a
+    restart; "Clear my profile" removes it and suggestions
+    return to the per-request ranking. `GET /api/profile`
+    without the browser's owner token → `401`.
 
 ## Notes
 

@@ -9,3 +9,8 @@ build/
 # Share-link persistence files (TASTEPILOT_SHARE_FILE) hold shared plans
 *.shares.json
 tastepilot-shares.json
+
+# Preference-profile persistence files (TASTEPILOT_PROFILE_FILE) hold
+# owner-token hashes and derived profiles — never commit them either
+*.profiles.json
+tastepilot-profiles.json

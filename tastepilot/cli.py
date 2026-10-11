@@ -18,18 +18,31 @@
                              [--out-dir branch-dir]
   python -m tastepilot suggest --plan plan.json [--limit 5]
                              [--learn-from past-plan.json]
+                             [--profile-store profiles.json]
                              [--out suggestions.json]
+  python -m tastepilot profile --store profiles.json
+                             (--learn-from past-plan.json [...] |
+                              --show | --clear)
+                             [--owner-token TOKEN]
   python -m tastepilot serve [--host 127.0.0.1] [--port 8765]
                              [--mode mock|auto] [--llm template|nebius]
                              [--share-file shares.json]
                              [--share-ttl-days 7]
+                             [--profile-file profiles.json]
 
 For hosted deployments the port defaults to the platform's ``PORT``
 environment variable when ``--port`` is not given (see DEPLOY.md).
 Share links are in-memory unless ``--share-file`` (or the
 ``TASTEPILOT_SHARE_FILE`` env var) names a JSON file they persist to;
 every link expires after ``--share-ttl-days`` and can be revoked with
-``DELETE /api/share/<id>``.
+``DELETE /api/share/<id>``. Persistent preference profiles live in a
+ProfileStore file (``--profile-file`` / ``TASTEPILOT_PROFILE_FILE``,
+else in-memory): an owner's profile is keyed by the hash of their
+owner token (``--owner-token`` or ``TASTEPILOT_OWNER_TOKEN``; the
+token itself is never stored) and is written only from plans'
+sealed swap histories — the ``profile`` command saves the lesson
+of one or more saved plans into the store, and ``suggest
+--profile-store`` folds the stored profile into the ranking.
 """
 from __future__ import annotations
 
@@ -145,10 +158,36 @@ def main(argv: list[str] | None = None) -> int:
                         "ranking learns from (repeatable, max 4); the "
                         "--plan plan's own sealed swaps are always "
                         "learned from")
+    g.add_argument("--profile-store", default=None, metavar="FILE",
+                   help="a persistent preference-profile store file "
+                        "(see the profile command): the stored "
+                        "profile for --owner-token is merged into "
+                        "the ranking under the same caps")
+    g.add_argument("--owner-token", default=None,
+                   help="owner token naming whose stored profile "
+                        "applies (default: $TASTEPILOT_OWNER_TOKEN); "
+                        "only its hash is used to key the store")
     g.add_argument("--out",
                    help="write the suggestions JSON here — its "
                         "\"branches\" list is a spec the branches "
                         "command accepts unchanged")
+    pf = sub.add_parser("profile")
+    pf.add_argument("--store", required=True, metavar="FILE",
+                    help="the persistent preference-profile store "
+                         "file (created on first save)")
+    pf.add_argument("--learn-from", action="append", default=[],
+                    metavar="PLAN_JSON",
+                    help="derive the lesson from this saved plan's "
+                         "sealed swap history and merge it into "
+                         "the stored profile (repeatable, max 8)")
+    pf.add_argument("--show", action="store_true",
+                    help="print the stored profile as JSON")
+    pf.add_argument("--clear", action="store_true",
+                    help="delete the stored profile")
+    pf.add_argument("--owner-token", default=None,
+                    help="owner token the profile belongs to "
+                         "(default: $TASTEPILOT_OWNER_TOKEN); only "
+                         "its hash keys the store")
     s = sub.add_parser("serve")
     s.add_argument("--host", default="127.0.0.1",
                    help="bind host (hosted deployments: 0.0.0.0)")
@@ -161,6 +200,10 @@ def main(argv: list[str] | None = None) -> int:
                         "(default: $TASTEPILOT_SHARE_FILE, else in-memory)")
     s.add_argument("--share-ttl-days", type=float, default=7.0,
                    help="share-link lifetime in days (default 7)")
+    s.add_argument("--profile-file", default=None,
+                   help="persist preference profiles to this JSON "
+                        "file (default: $TASTEPILOT_PROFILE_FILE, "
+                        "else in-memory)")
     args = ap.parse_args(argv)
 
     if args.cmd == "serve":
@@ -176,7 +219,69 @@ def main(argv: list[str] | None = None) -> int:
         port = args.port if args.port is not None \
             else int(os.environ.get("PORT", "8765"))
         serve(agent, port=port, host=args.host, share_file=args.share_file,
-              share_ttl_seconds=args.share_ttl_days * 24 * 3600)
+              share_ttl_seconds=args.share_ttl_days * 24 * 3600,
+              profile_file=args.profile_file)
+        return 0
+    if args.cmd == "profile":
+        from .profiles import ProfileStore, owner_token_hash
+        token = args.owner_token or os.environ.get(
+            "TASTEPILOT_OWNER_TOKEN")
+        if not token or owner_token_hash(token) is None:
+            print("error: profile failed: invalid_owner_token "
+                  "(pass --owner-token or set TASTEPILOT_OWNER_TOKEN)",
+                  file=sys.stderr)
+            return 2
+        store = ProfileStore(path=args.store)
+        fingerprint = owner_token_hash(token)[:12]
+        actions = bool(args.learn_from) + args.show + args.clear
+        if actions != 1:
+            print("error: profile failed: choose exactly one of "
+                  "--learn-from, --show, or --clear", file=sys.stderr)
+            return 2
+        if args.clear:
+            cleared = store.clear(token)
+            print(f"profile: owner={fingerprint} cleared={cleared} "
+                  f"store={args.store}")
+            return 0 if cleared else 1
+        if args.show:
+            profile = store.get(token)
+            if profile is None:
+                print("error: profile failed: no_profile",
+                      file=sys.stderr)
+                return 1
+            print(json.dumps(profile, indent=1, ensure_ascii=False))
+            return 0
+        plans = []
+        for history_path in args.learn_from:
+            try:
+                past = json.loads(
+                    Path(history_path).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                print(f"error: profile failed: cannot read plan "
+                      f"({type(exc).__name__})", file=sys.stderr)
+                return 2
+            if not isinstance(past, dict):
+                print("error: profile failed: bad_history",
+                      file=sys.stderr)
+                return 2
+            plans.append(past)
+        try:
+            result = store.update_from_plans(token, plans)
+        except ValueError as exc:  # categorised refusal, no traceback
+            print(f"error: profile failed: {exc}", file=sys.stderr)
+            return 2
+        profile = result["profile"]
+        derived = result["derived"]
+        print(f"profile: owner={fingerprint} "
+              f"kept_swaps={profile['kept_swaps']} "
+              f"undone_swaps={profile['undone_swaps']} "
+              f"plans_used={profile['plans_used']} "
+              f"plans_ignored={profile['plans_ignored']} "
+              f"derived_kept={derived['kept_swaps']} "
+              f"derived_ignored={derived['plans_ignored']} "
+              f"tag_weights={profile['tag_weights']} "
+              f"domain_weights={profile['domain_weights']} "
+              f"store={args.store}")
         return 0
     if args.cmd == "smoke":
         try:
@@ -389,16 +494,36 @@ def main(argv: list[str] | None = None) -> int:
                       file=sys.stderr)
                 return 2
             history_plans.append(past)
+        stored_profile = None
+        if args.profile_store:
+            from .profiles import ProfileStore, owner_token_hash
+            token = args.owner_token or os.environ.get(
+                "TASTEPILOT_OWNER_TOKEN")
+            if not token or owner_token_hash(token) is None:
+                print("error: suggest failed: invalid_owner_token "
+                      "(pass --owner-token or set "
+                      "TASTEPILOT_OWNER_TOKEN)", file=sys.stderr)
+                return 2
+            stored_profile = ProfileStore(
+                path=args.profile_store).get(token)
+            if stored_profile is None:
+                print("error: suggest failed: no_profile",
+                      file=sys.stderr)
+                return 2
         try:
             result = suggest_branches(
                 plan, limit=args.limit,
-                history_plans=history_plans or None)
+                history_plans=history_plans or None,
+                stored_profile=stored_profile)
         except ValueError as exc:  # categorised refusal, no traceback
             print(f"error: suggest failed: {exc}", file=sys.stderr)
             # A plan that does not verify is a verdict (exit 1, like
             # verify/history); every other refusal is a caller error.
             return 1 if str(exc) in ("evidence_chain_invalid",
-                                     "plan_not_verified") else 2
+                                     "plan_not_verified",
+                                     "bad_profile",
+                                     "bad_profile_weights",
+                                     "bad_profile_counts") else 2
         if args.out:
             Path(args.out).write_text(
                 json.dumps(result, indent=1, ensure_ascii=False),
@@ -410,11 +535,13 @@ def main(argv: list[str] | None = None) -> int:
               + (f" out={args.out}" if args.out else ""))
         learning = result["learning"]
         if learning["kept_swaps"] or learning["undone_swaps"] \
-                or learning["plans_ignored"]:
+                or learning["plans_ignored"] \
+                or learning.get("stored_applied"):
             print(f"  learning: kept_swaps={learning['kept_swaps']} "
                   f"undone_swaps={learning['undone_swaps']} "
                   f"plans_used={learning['plans_used']} "
                   f"plans_ignored={learning['plans_ignored']} "
+                  f"stored_applied={learning.get('stored_applied', False)} "
                   f"tag_weights={learning['tag_weights']} "
                   f"domain_weights={learning['domain_weights']}")
         for i, sug in enumerate(result["suggestions"], 1):

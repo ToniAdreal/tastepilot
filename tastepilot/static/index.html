@@ -21,6 +21,7 @@
   #viewer pre { background: #f7f7f7; padding: .6rem; overflow-x: auto; font-size: .8rem; }
   #verifybox { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin-top: 1.5rem; }
   #mybox { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin-top: 1.5rem; }
+  #profilebox { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin-top: 1.5rem; }
   #sharesout .shareline { margin: .4rem 0; font-size: .9rem; }
   #verifybox textarea { width: 100%; box-sizing: border-box; font-family: monospace; font-size: .8rem; }
   #vout { margin-top: .6rem; white-space: pre-wrap; font-size: .9rem; }
@@ -105,6 +106,21 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
   </div>
   <div id="tokenout" class="meta" style="margin-top:.4rem"></div>
   <div id="sharesout" style="margin-top:.6rem"></div>
+</section>
+<section id="profilebox" aria-label="Your preference profile">
+  <h2 style="margin-top:0">Your preference profile</h2>
+  <p class="meta">Your swap choices teach the suggestion ranking —
+  and that learning can persist. A persistent preference profile is
+  stored on this server under this browser's owner token (only its
+  hash is kept, exactly like your share links): save the lesson of
+  the plan above — derived only from its sealed swap history, never
+  from weights anyone types in — and later suggestions in any
+  session apply it, reporting a stored profile was applied. A plan
+  whose evidence chain does not verify teaches nothing.</p>
+  <div style="margin-top:.5rem"><button type="button" id="profilesavebtn">Save this plan's swap learning to my profile</button>
+  <button type="button" id="profileshowbtn">Show my profile</button>
+  <button type="button" id="profileclearbtn">Clear my profile</button></div>
+  <div id="profileout" class="meta" style="margin-top:.4rem"></div>
 </section>
 <script>
 const statusEl = document.getElementById('status');
@@ -245,6 +261,51 @@ async function listMyShares() {
 }
 
 document.getElementById('sharesbtn').addEventListener('click', listMyShares);
+
+function profileLine(data) {
+  const p = data.profile || {};
+  const tags = Object.entries(p.tag_weights || {})
+    .map(([t, w]) => `${t} ${w >= 0 ? '+' : ''}${Number(w).toFixed(2)}`).join(', ');
+  const domains = Object.entries(p.domain_weights || {})
+    .map(([d, w]) => `${d} ${w >= 0 ? '+' : ''}${Number(w).toFixed(2)}`).join(', ');
+  return `Persistent preference profile (token fingerprint ${data.owner_fingerprint}): ` +
+    `${p.kept_swaps || 0} kept · ${p.undone_swaps || 0} undone` +
+    (tags ? ` · tags: ${tags}` : ' · no tag weights yet') +
+    (domains ? ` · domains: ${domains}` : '') +
+    (data.updated_at ? ` · updated ${new Date(data.updated_at).toLocaleString()}` : '');
+}
+
+document.getElementById('profilesavebtn').addEventListener('click', async () => {
+  const out = document.getElementById('profileout');
+  if (!lastPlan) { out.textContent = 'Generate a plan (and keep a swap in it) first.'; return; }
+  out.textContent = 'Saving…';
+  const res = await fetch('/api/profile', {method: 'POST',
+    headers: {'Content-Type': 'application/json', ...ownerHeaders()},
+    body: JSON.stringify({history: [lastPlan]})});
+  const data = await res.json();
+  if (!res.ok) { out.textContent = 'Error: ' + (data.error || res.status); return; }
+  out.textContent = profileLine(data) +
+    ` — this save derived ${data.derived.kept_swaps} kept · ${data.derived.undone_swaps} undone` +
+    (data.derived.plans_ignored ? ` · ${data.derived.plans_ignored} unverifiable plan(s) ignored` : '') + '.';
+});
+
+document.getElementById('profileshowbtn').addEventListener('click', async () => {
+  const out = document.getElementById('profileout');
+  out.textContent = 'Loading…';
+  const res = await fetch('/api/profile', {headers: ownerHeaders()});
+  const data = await res.json();
+  if (!res.ok) { out.textContent = 'Error: ' + (data.error || res.status); return; }
+  out.textContent = data.exists ? profileLine(data)
+    : 'No persistent preference profile stored for this browser yet — save a plan\u2019s swap learning first.';
+});
+
+document.getElementById('profileclearbtn').addEventListener('click', async () => {
+  const out = document.getElementById('profileout');
+  const res = await fetch('/api/profile', {method: 'DELETE', headers: ownerHeaders()});
+  const data = await res.json();
+  out.textContent = res.ok ? 'Persistent preference profile cleared.'
+    : 'Error: ' + (data.error || res.status);
+});
 
 sharebtn.addEventListener('click', async () => {
   if (!lastPlan) return;
@@ -456,7 +517,7 @@ async function doSwap(primary, alternative) {
 async function doSuggest(basePlan, resultsEl) {
   resultsEl.textContent = 'Ranking suggested branches…';
   const res = await fetch('/api/suggest', {method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: {'Content-Type': 'application/json', ...ownerHeaders()},
     body: JSON.stringify({plan: basePlan})});
   const data = await res.json();
   if (!res.ok) { resultsEl.textContent = 'Error: ' + (data.error || res.status); return; }
@@ -466,12 +527,12 @@ async function doSuggest(basePlan, resultsEl) {
   head.textContent = `Guided suggestions: ${data.candidates.length} verified swap pair(s) ranked by affinity delta and taste coverage — suggestions propose, they never apply.`;
   resultsEl.appendChild(head);
   const learning = data.learning || {};
-  if (learning.kept_swaps || learning.undone_swaps) {
+  if (learning.kept_swaps || learning.undone_swaps || learning.stored_applied) {
     const ldiv = document.createElement('div');
     ldiv.className = 'meta learnline';
     const favoured = Object.entries(learning.tag_weights || {})
       .filter(([, w]) => w > 0).map(([t]) => t).join(', ');
-    ldiv.textContent = `Learned from your past swaps: ${learning.kept_swaps} kept · ${learning.undone_swaps} undone (sealed swap history only — an unverifiable plan teaches nothing)` + (favoured ? ` · your kept choices favour: ${favoured}` : '');
+    ldiv.textContent = `Learned from your past swaps: ${learning.kept_swaps} kept · ${learning.undone_swaps} undone (sealed swap history only — an unverifiable plan teaches nothing)` + (favoured ? ` · your kept choices favour: ${favoured}` : '') + (learning.stored_applied ? ' · stored profile applied (your persistent preference profile)' : '');
     resultsEl.appendChild(ldiv);
   }
   for (const sug of data.suggestions) {

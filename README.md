@@ -82,7 +82,10 @@ tastepilot/
                persistence across restarts, owner-managed links:
                an X-Owner-Token bearer credential — only its SHA-256
                hash is stored — lists and revokes just its owner's
-               links via GET /api/shares);
+               links via GET /api/shares; persistent preference
+               profiles under the same token via GET/POST/DELETE
+               /api/profile, folded into /api/suggest rankings for
+               the token's owner);
                hardened: input caps, security headers, bounded caches,
                leak-free 500s)
   export.py    take-away itinerary exports (Markdown / plain text /
@@ -123,7 +126,18 @@ tastepilot/
                that explore_branches accepts unchanged;
                learn_preferences derives the ranking's learned
                adjustment from the sealed swap history (kept swaps
-               positive, undone swaps negative, capped weights)
+               positive, undone swaps negative, capped weights);
+               validate_preference_profile + merge_profiles gate
+               and combine profiles under the same caps
+  profiles.py  Persistent preference profiles: an owner-token-keyed
+               store (only the token's SHA-256 hash is kept) holding
+               the learned profile across plans and sessions —
+               writable ONLY by deriving from sealed swap histories
+               (update_from_plans; caller-supplied weights are never
+               stored), additive merges under the learner's caps,
+               bounded, clearable by its owner, and file-persistent
+               across restarts when a path is given
+               (TASTEPILOT_PROFILE_FILE), exactly like the share store
   smoke.py     real-mode smoke check: one search + one insights call,
                payload-shape validation, both sealed + chain re-verified
   imports.py   external taste-file imports: Spotify playlist-export JSON,
@@ -440,6 +454,28 @@ baked into the image or the repo.
   is counted in `plans_ignored` and teaches nothing. With no
   swap history anywhere, every adjustment is exactly zero and
   the ranking is the fixed formula unchanged.
+* That learning can persist across plans and sessions:
+  Persistent preference profiles (`profiles.py`, the demo UI's
+  "Your preference profile" panel, `GET/POST/DELETE
+  /api/profile`, `tastepilot profile --store profiles.json
+  --learn-from past.json`, `suggest --profile-store`) store the
+  learned profile under the hash of the owner's token — the
+  same per-browser credential that owns share links, so the
+  profile follows the token between devices exactly as the
+  share dashboard does. A profile is written only by deriving
+  it from sealed swap histories (`learn_preferences` over the
+  supplied plans) and merging additively under the learner's
+  own caps — no surface accepts caller-supplied weights, and
+  re-saving the same lesson can never push a weight past the
+  cap. With `serve --profile-file <path>` (or the
+  `TASTEPILOT_PROFILE_FILE` env var) profiles survive a server
+  restart in an atomically-written JSON file holding only
+  token hashes and derived weights; a corrupt file starts an
+  empty store. When a suggestion request presents the owner's
+  token, the stored profile merges into the ranking and the
+  result's `learning` field reports `stored_applied`; the
+  owner can read or clear their profile at any time, and one
+  owner's profile never affects another's ranking.
 * Anyone holding a plan JSON can re-verify it in the browser: the UI's
   "Verify a shared plan" panel posts it to `POST /api/verify`, which
   recomputes the hash chain and every per-item checker verdict from the

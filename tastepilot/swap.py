@@ -80,6 +80,16 @@ as a bounded learned adjustment per candidate — the learning
 is inspectable (the profile and every candidate's adjustment
 are returned), capped, and exactly zero when there is no
 history, so unpractised plans rank exactly as before.
+
+Persistent profiles live here too, as pure functions:
+``validate_preference_profile`` shape-gates a stored profile
+(the learn_preferences output shape, weights within the caps)
+and ``merge_profiles`` combines two profiles additively under
+the same caps — the arithmetic the persistent store
+(profiles.ProfileStore) uses to carry a profile across plans
+and sessions without ever trusting caller-supplied weights:
+a stored profile is only ever the merge of profiles derived
+from sealed swap histories.
 """
 from __future__ import annotations
 
@@ -638,6 +648,82 @@ def learn_preferences(plans: list) -> dict:
             "domain_weights": _clamp(domain_weights, LEARN_DOMAIN_CAP)}
 
 
+def empty_profile() -> dict:
+    """A zero preference profile, in the learn_preferences shape."""
+    return {"plans_used": 0, "plans_ignored": 0, "kept_swaps": 0,
+            "undone_swaps": 0, "tag_weights": {}, "domain_weights": {}}
+
+
+def validate_preference_profile(profile) -> dict:
+    """Shape-gate a stored preference profile and return a
+    normalised copy (weights clamped to the LEARN_* caps, zero
+    weights dropped, keys sorted, counts coerced to non-negative
+    ints). Raises ValueError with a categorised message —
+    bad_profile / bad_profile_weights / bad_profile_counts —
+    on any malformed shape. This is the only way a stored
+    profile may enter a ranking: arbitrary caller weights are
+    never believed beyond the caps the learner itself obeys."""
+    if not isinstance(profile, dict):
+        raise ValueError("bad_profile")
+    normalised = empty_profile()
+    for key in ("tag_weights", "domain_weights"):
+        weights = profile.get(key, {})
+        if not isinstance(weights, dict) or any(
+                not isinstance(k, str) or not k
+                or isinstance(v, bool)
+                or not isinstance(v, (int, float))
+                for k, v in weights.items()):
+            raise ValueError("bad_profile_weights")
+        cap = LEARN_TAG_CAP if key == "tag_weights" else LEARN_DOMAIN_CAP
+        cleaned = {}
+        for name, value in weights.items():
+            weight = round(max(-cap, min(cap, float(value))), 6)
+            if weight != 0:
+                cleaned[name] = weight
+        normalised[key] = dict(sorted(cleaned.items()))
+    for key in ("plans_used", "plans_ignored", "kept_swaps",
+                "undone_swaps"):
+        value = profile.get(key, 0)
+        if isinstance(value, bool) or not isinstance(value, int) \
+                or value < 0:
+            raise ValueError("bad_profile_counts")
+        normalised[key] = value
+    return normalised
+
+
+def merge_profiles(*profiles: dict) -> dict:
+    """Combine preference profiles additively under the caps.
+
+    Tag and domain weights sum and re-clamp to the LEARN_* caps
+    (so accumulating the same lesson across many sessions can
+    never outgrow what one session's learner could produce at
+    the cap), zero weights drop, keys return sorted, and the
+    kept/undone/used/ignored counts sum. Every input is run
+    through validate_preference_profile first — a malformed
+    profile raises instead of merging."""
+    tag_weights: dict[str, float] = {}
+    domain_weights: dict[str, float] = {}
+    merged = empty_profile()
+    for profile in profiles:
+        clean = validate_preference_profile(profile)
+        for key in ("plans_used", "plans_ignored", "kept_swaps",
+                    "undone_swaps"):
+            merged[key] += clean[key]
+        for name, weight in clean["tag_weights"].items():
+            tag_weights[name] = tag_weights.get(name, 0.0) + weight
+        for name, weight in clean["domain_weights"].items():
+            domain_weights[name] = domain_weights.get(name, 0.0) + weight
+
+    def _clamp(weights: dict, cap: float) -> dict:
+        return {k: round(max(-cap, min(cap, v)), 6)
+                for k, v in sorted(weights.items())
+                if round(max(-cap, min(cap, v)), 6) != 0}
+
+    merged["tag_weights"] = _clamp(tag_weights, LEARN_TAG_CAP)
+    merged["domain_weights"] = _clamp(domain_weights, LEARN_DOMAIN_CAP)
+    return merged
+
+
 def _learned_adjustment(alternative: dict, domain,
                         profile: dict) -> tuple[float, list]:
     """The learned score adjustment for one candidate: the sum of
@@ -719,7 +805,8 @@ def _candidate(primary: dict, alternative: dict,
 
 
 def suggest_branches(plan: dict, limit: int = 5,
-                     history_plans: list | None = None) -> dict:
+                     history_plans: list | None = None,
+                     stored_profile: dict | None = None) -> dict:
     """Rank a plan's possible swaps and propose branch specs.
 
     Returns ``{base, candidates, suggestions, branches,
@@ -738,7 +825,13 @@ def suggest_branches(plan: dict, limit: int = 5,
     acceptable to explore_branches / the branches CLI.
     ``learning`` is the learn_preferences profile the ranking
     used: the base plan's own sealed swap history plus up to
-    MAX_HISTORY_PLANS caller-supplied history plans.
+    MAX_HISTORY_PLANS caller-supplied history plans, merged
+    (merge_profiles, same caps) with ``stored_profile`` when
+    one is supplied — a persistent profile carried across
+    sessions by profiles.ProfileStore, itself only ever
+    derived from sealed histories. The returned profile names
+    the fact via ``stored_applied``; with no stored profile
+    every score is byte-identical to the per-request ranking.
 
     The plan is verified first (_verify_base: chain + whole-plan
     checker) and both items of every pair are re-checked
@@ -746,8 +839,8 @@ def suggest_branches(plan: dict, limit: int = 5,
     recommendations. Nothing is applied and the plan is never
     mutated. Raises ValueError with a categorised message
     (bad_limit / bad_history / too_many_history_plans /
-    _verify_base's categories) on refusal; a plan with no
-    alternatives simply yields empty lists."""
+    bad_profile* / _verify_base's categories) on refusal; a plan
+    with no alternatives simply yields empty lists."""
     if isinstance(limit, bool) or not isinstance(limit, int) \
             or not 1 <= limit <= MAX_SUGGESTIONS:
         raise ValueError("bad_limit")
@@ -757,8 +850,13 @@ def suggest_branches(plan: dict, limit: int = 5,
             raise ValueError("bad_history")
         if len(history_plans) > MAX_HISTORY_PLANS:
             raise ValueError("too_many_history_plans")
+    if stored_profile is not None:
+        stored_profile = validate_preference_profile(stored_profile)
     _verify_base(plan)
     profile = learn_preferences([plan] + list(history_plans or []))
+    if stored_profile is not None:
+        profile = merge_profiles(profile, stored_profile)
+    profile["stored_applied"] = stored_profile is not None
     items = plan.get("items") or []
     alternatives = plan.get("alternatives") or []
     record = plan.get("evidence") or {}

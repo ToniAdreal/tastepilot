@@ -68,7 +68,13 @@ Routes:
                                swap history (the plan's own plus any
                                history plans; an unverifiable one is
                                ignored and counted), as branch specs
-                               /api/branches accepts. Suggestions
+                               /api/branches accepts. When the caller
+                               also presents an ``X-Owner-Token`` with
+                               a stored preference profile (see
+                               /api/profile), that profile is merged
+                               into the ranking under the same caps
+                               and the result's learning field reports
+                               ``stored_applied``. Suggestions
                                propose only — nothing is applied,
                                mutated, or re-sealed.
   GET  /api/shares             the caller's own share links (dashboard):
@@ -76,6 +82,23 @@ Routes:
                                returns only the shares that token owns —
                                id, url, expiry, item count, and the
                                recomputed checker verdict per link.
+  GET  /api/profile            the caller's persistent preference
+                               profile: requires an ``X-Owner-Token``
+                               header; returns the stored profile (the
+                               learned ranking's tag/domain weights,
+                               derived only from sealed swap histories)
+                               or ``exists: false`` with a zero profile.
+  POST /api/profile            {"history": [{...plan...}, ...]} ->
+                               derive the lesson from those plans'
+                               sealed swap histories and merge it into
+                               the caller's stored profile (additive,
+                               under the learner's caps; a chain-broken
+                               plan is ignored and counted). There is
+                               no way to store caller-supplied weights.
+  DELETE /api/profile          clear the caller's stored profile
+                               (200 when one existed, 404 otherwise).
+                               DELETE anywhere else outside /api/share
+                               stays 405 like the other methods.
   DELETE /api/share/<id>       revoke a share link: the stored plan is
                                dropped and the id 404s from then on
                                ({"revoked": true}). For an owner-managed
@@ -85,8 +108,10 @@ Routes:
                                id remains the capability — whoever holds
                                the link can revoke it; that is the
                                documented demo trade-off for unowned
-                               links. DELETE anywhere else stays 405
-                               like the other unsupported methods.
+                               links. DELETE is otherwise supported
+                               only for /api/profile (below); every
+                               other DELETE target stays 405 like the
+                               other unsupported methods.
 
 Owner-managed shares (no account system):
   * A client may send an ``X-Owner-Token`` header when creating a
@@ -161,6 +186,7 @@ from .checker import check_plan, item_reports
 from .evidence import qloo_responses, verify_chain
 from .export import export_plan, media_for
 from .imports import parse_import_bytes
+from .profiles import ProfileStore
 from .swap import (explore_branches, suggest_branches, swap_history,
                    swap_plan, undo_last_swap)
 from .timetable import parse_timetable_bytes
@@ -184,6 +210,8 @@ MAX_SHARED_PLANS = 128           # shared plans kept for link verification
 MAX_SHARE_BODY_BYTES = MAX_VERIFY_BODY_BYTES  # a shared plan is a plan
 DEFAULT_SHARE_TTL_SECONDS = 7 * 24 * 3600  # share links live for 7 days
 SHARE_FILE_ENV_VAR = "TASTEPILOT_SHARE_FILE"  # opt-in persistence path
+PROFILE_FILE_ENV_VAR = "TASTEPILOT_PROFILE_FILE"  # opt-in profile store
+MAX_PROFILES = 256               # owners with a persistent profile
 OWNER_TOKEN_HEADER = "X-Owner-Token"  # per-browser owner credential
 MIN_OWNER_TOKEN_CHARS = 16   # shorter than this is not a credential
 MAX_OWNER_TOKEN_CHARS = 200
@@ -595,7 +623,10 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                  max_shared_plans: int = MAX_SHARED_PLANS,
                  share_ttl_seconds: float = DEFAULT_SHARE_TTL_SECONDS,
                  share_file: str | Path | None = None,
-                 share_clock=None):
+                 share_clock=None,
+                 max_profiles: int = MAX_PROFILES,
+                 profile_file: str | Path | None = None,
+                 profile_clock=None):
     # response_id -> (record, response) for plans produced by this server,
     # bounded FIFO: the oldest sealed responses are evicted first.
     evidence_cache: OrderedDict[str, tuple[dict, dict]] = OrderedDict()
@@ -608,6 +639,14 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
     if share_clock is not None:
         share_kwargs["clock"] = share_clock
     share_store = ShareStore(**share_kwargs)
+    # Persistent preference profiles live in a ProfileStore: keyed by
+    # owner-token hash, writable only from sealed swap histories, and
+    # — when profile_file is given — file-persistent across restarts
+    # exactly like the share store.
+    profile_kwargs = {"max_profiles": max_profiles, "path": profile_file}
+    if profile_clock is not None:
+        profile_kwargs["clock"] = profile_clock
+    profile_store = ProfileStore(**profile_kwargs)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):  # keep demo logs clean
@@ -679,6 +718,93 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                                   "owner_fingerprint":
                                       owner_fingerprint(token)})
 
+        def _profile_token(self):
+            """Owner-token gate for the profile routes, mirroring
+            the shares dashboard: no token → 401, malformed → 400.
+            Returns the token, or None after sending the error."""
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return None
+            if token is None:
+                self._send_json(401, {"error": "owner token required"})
+                return None
+            return token
+
+        def _handle_profile_get(self):
+            """The caller's persistent preference profile: the
+            stored weights (derived only from sealed swap
+            histories), or exists=false with a zero profile when
+            this token has never saved one."""
+            from .swap import empty_profile
+            token = self._profile_token()
+            if token is None:
+                return
+            profile = profile_store.get(token)
+            meta = profile_store.meta(token)
+            self._send_json(200, {
+                "exists": profile is not None,
+                "profile": profile if profile is not None
+                else empty_profile(),
+                "owner_fingerprint": meta["owner_fingerprint"],
+                "updated_at": meta["updated_at"]})
+
+        def _handle_profile_update(self):
+            """Merge a lesson into the caller's stored profile.
+
+            Body: {"history": [{...plan...}, ...]} — each plan is
+            shape-gated here, then profiles derives the lesson
+            from the plans' sealed swap histories alone (a
+            chain-broken plan is ignored and counted, never
+            believed) and merges it additively under the caps.
+            Caller-supplied weights are never accepted: there is
+            no field for them."""
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_VERIFY_BODY_BYTES:
+                self._send_json(413, {"error": "plan too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            token = self._profile_token()
+            if token is None:
+                return
+            if not isinstance(payload, dict) \
+                    or not isinstance(payload.get("history"), list) \
+                    or not payload["history"] \
+                    or any(not isinstance(p, dict)
+                           for p in payload["history"]):
+                self._send_json(
+                    400, {"error": "profile failed: bad_history"})
+                return
+            for past in payload["history"]:
+                if validate_plan_payload(past) is not None:
+                    self._send_json(
+                        400, {"error": "profile failed: bad_history"})
+                    return
+            try:
+                result = profile_store.update_from_plans(
+                    token, payload["history"])
+            except ValueError as exc:  # categorised refusal
+                self._send_json(
+                    400, {"error": f"profile failed: {exc}"})
+                return
+            self._send_json(200, {
+                "profile": result["profile"],
+                "derived": result["derived"],
+                "owner_fingerprint": result["meta"]["owner_fingerprint"],
+                "updated_at": result["meta"]["updated_at"]})
+
         def do_GET(self):
             path = urlparse(self.path).path
             if path in ("/", "/index.html"):
@@ -687,7 +813,10 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             elif path == "/api/health":
                 self._send_json(200, {"ok": True, "mode": agent.mode,
                                       "explainer": agent.explainer_info,
-                                      "shares": share_store.info()})
+                                      "shares": share_store.info(),
+                                      "profiles": profile_store.info()})
+            elif path == "/api/profile":
+                self._handle_profile_get()
             elif path == "/api/shares":
                 self._handle_shares()
             elif path.startswith("/api/share/"):
@@ -1048,9 +1177,20 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                             400, {"error": "suggest failed: bad_history"})
                         return
                 history_plans = history
+            # A presented owner token with a stored profile folds
+            # that persistent profile into the ranking (reported as
+            # learning.stored_applied); no token keeps the exact
+            # per-request behaviour, a malformed one is a 400.
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            stored_profile = profile_store.get(token) \
+                if token is not None else None
             try:
-                result = suggest_branches(plan, limit=limit,
-                                          history_plans=history_plans)
+                result = suggest_branches(
+                    plan, limit=limit, history_plans=history_plans,
+                    stored_profile=stored_profile)
             except ValueError as exc:  # categorised refusal
                 self._send_json(400, {"error": f"suggest failed: {exc}"})
                 return
@@ -1127,6 +1267,9 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             if path == "/api/suggest":
                 self._handle_suggest()
                 return
+            if path == "/api/profile":
+                self._handle_profile_update()
+                return
             if path != "/api/plan":
                 self._send(404, b"not found", "text/plain")
                 return
@@ -1196,10 +1339,20 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
         do_PATCH = _method_not_allowed
 
         def do_DELETE(self):
-            """DELETE is supported for exactly one route: revoking a
-            share link. Every other DELETE target stays 405, matching
+            """DELETE is supported for exactly two routes: revoking
+            a share link and clearing the caller's own preference
+            profile. Every other DELETE target stays 405, matching
             the hardening contract for unsupported methods."""
             path = urlparse(self.path).path
+            if path == "/api/profile":
+                token = self._profile_token()
+                if token is None:
+                    return
+                if profile_store.clear(token):
+                    self._send_json(200, {"cleared": True})
+                else:
+                    self._send_json(404, {"error": "no profile stored"})
+                return
             if path.startswith("/api/share/"):
                 share_id = unquote(path[len("/api/share/"):])
                 if not share_id or "/" in share_id:
@@ -1229,15 +1382,20 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
 
 def serve(agent, port: int = 8765, host: str = "127.0.0.1",
           share_file: str | Path | None = None,
-          share_ttl_seconds: float = DEFAULT_SHARE_TTL_SECONDS) -> None:
+          share_ttl_seconds: float = DEFAULT_SHARE_TTL_SECONDS,
+          profile_file: str | Path | None = None) -> None:
     if share_file is None:
         share_file = os.environ.get(SHARE_FILE_ENV_VAR) or None
+    if profile_file is None:
+        profile_file = os.environ.get(PROFILE_FILE_ENV_VAR) or None
     handler = make_handler(agent, share_file=share_file,
-                           share_ttl_seconds=share_ttl_seconds)
+                           share_ttl_seconds=share_ttl_seconds,
+                           profile_file=profile_file)
     server = ThreadingHTTPServer((host, port), handler)
     shares = "persistent" if share_file else "in-memory"
+    profiles = "persistent" if profile_file else "in-memory"
     print(f"TastePilot listening on http://{host}:{port} "
           f"(mode={agent.mode}, explainer={agent.explainer_info['source']}, "
-          f"shares={shares})",
+          f"shares={shares}, profiles={profiles})",
           flush=True)  # hosted log streams must see startup immediately
     server.serve_forever()

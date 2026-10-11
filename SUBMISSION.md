@@ -147,6 +147,17 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    plan whose sealed chain does not verify is ignored and
    counted rather than believed, so the personalisation is as
    tamper-evident as everything else in the plan.
+   Persistent preference profiles carry that learning across
+   plans and sessions: the profile is stored under the hash of
+   the owner's token (the same per-browser credential that owns
+   share links — no account, no sign-up), written only by
+   deriving it from sealed swap histories and merging it
+   additively under the learner's own caps (no surface accepts
+   caller-supplied weights), optionally persisted to a file so
+   it survives restarts, clearable by its owner at any time,
+   and folded into later suggestion rankings for that token —
+   reported as a stored profile applied — while other owners'
+   rankings are never touched.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -273,12 +284,13 @@ stops being a liability and becomes pure upside.
   and platform maps links, with two-way calendar sync, instead
   of the one-tap template/search links and one-way share
   payload the handoff layer already produces.
-- Persistent preference profiles — carrying the learned
-  ranking profile across plans and sessions as an account-owned
-  artefact (stored beside the built token-owned share data,
-  portable between a user's devices), instead of deriving it
-  per request from the sealed histories of the plans supplied
-  with that request, as the built learned ranking does.
+- Cloud-synced, account-backed preference profiles — the
+  built token-owned persistent profile (derived only from
+  sealed swap histories, stored beside the token-owned share
+  data) graduating to a synced account artefact that follows
+  the user across devices without them carrying a token, with
+  conflict resolution when two devices save lessons offline,
+  instead of the single-server store the built profile uses.
 
 ## Built with
 
