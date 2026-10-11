@@ -49,6 +49,19 @@ never mutated. A branch plan is an ordinary swapped plan (its
 mirror — verification never trusts it), so every existing
 surface — verify, export, share, further swaps, undo — works
 on it unchanged.
+
+Guided suggestions live here too. ``suggest_branches`` ranks
+the swaps a plan actually offers — every primary/alternative
+pair sharing a domain and a leg, both checker-verified against
+the sealed record first — by a deterministic, documented
+formula (affinity delta, the alternative's own affinity, and
+taste coverage: tags the alternative would introduce that no
+primary item carries), and returns them as branch specs that
+``explore_branches`` accepts unchanged, plus a combined
+"guided tour" branch picking the best swap in each domain.
+A suggestion proposes; it never applies — no plan is mutated,
+nothing is re-sealed, and a tampered plan is refused with the
+same categories as a swap instead of being suggested from.
 """
 from __future__ import annotations
 
@@ -507,3 +520,199 @@ def explore_branches(plan: dict, branches: list) -> dict:
                         "swaps_applied": len(swaps),
                         **_branch_verdict(forked), "plan": forked})
     return {"base": base, "branches": results}
+
+
+MAX_SUGGESTIONS = MAX_BRANCHES  # a suggestion list is a branch spec
+COVERAGE_BONUS = 0.05           # score points per newly covered tag
+
+
+def _tags_of(item: dict) -> set:
+    """Every taste tag an item carries: its entity tags plus the
+    tags it shares with the seeds that produced it."""
+    entity = item.get("entity") or {}
+    tags = set(entity.get("tags") or [])
+    tags.update(item.get("shared_tags") or [])
+    return tags
+
+
+def _selector_of(item: dict) -> dict:
+    return _selector_from(_describe(item))
+
+
+def _branch_name(text: str, seen: set) -> str:
+    """A unique branch name of at most MAX_BRANCH_NAME chars."""
+    name = text.strip()[:MAX_BRANCH_NAME].strip() or "Suggested swap"
+    if name not in seen:
+        seen.add(name)
+        return name
+    for n in range(2, 100):
+        suffix = f" ({n})"
+        candidate = name[:MAX_BRANCH_NAME - len(suffix)] + suffix
+        if candidate not in seen:
+            seen.add(candidate)
+            return candidate
+    raise ValueError("bad_branch_name")  # pragma: no cover
+
+
+def _candidate(primary: dict, alternative: dict,
+               plan_tags: set) -> dict:
+    """Ranking metrics for one swappable pair.
+
+    score = alternative_affinity + affinity_delta
+            + COVERAGE_BONUS * coverage_gain, where the delta is
+    alternative minus primary (negative is a loss the score
+    charges in full) and coverage_gain counts the tags the
+    alternative carries that no primary item in the plan carries
+    — the taste coverage the swap would add."""
+    p_aff = float(primary.get("affinity") or 0)
+    a_aff = float(alternative.get("affinity") or 0)
+    delta = round(a_aff - p_aff, 6)
+    new_tags = sorted(_tags_of(alternative) - plan_tags)
+    score = round(a_aff + delta + COVERAGE_BONUS * len(new_tags), 6)
+    return {
+        "primary": (primary.get("entity") or {}).get("name"),
+        "alternative": (alternative.get("entity") or {}).get("name"),
+        "domain": primary.get("domain"),
+        "location": primary.get("location"),
+        "primary_affinity": p_aff,
+        "alternative_affinity": a_aff,
+        "affinity_delta": delta,
+        "coverage_gain": len(new_tags),
+        "new_tags": new_tags,
+        "score": score,
+        "primary_selector": _selector_of(primary),
+        "alternative_selector": _selector_of(alternative),
+    }
+
+
+def suggest_branches(plan: dict, limit: int = 5) -> dict:
+    """Rank a plan's possible swaps and propose branch specs.
+
+    Returns ``{base, candidates, suggestions, branches}``:
+    ``candidates`` is every admissible primary/alternative pair
+    sharing a domain and a leg, ranked by score (ties broken by
+    affinity delta, alternative affinity, then names — fully
+    deterministic); ``suggestions`` is the top single-swap
+    branches (at most ``limit``, reserving one slot for the
+    combined branch when it exists), each with its score, delta,
+    coverage, new tags, and a plain-language rationale; the
+    combined "Guided tour" branch — the best-scoring swap in
+    each (domain, leg) group, applied together — is appended
+    when at least two groups offer a swap. ``branches`` is the
+    suggestions as a plain ``[{name, swaps}]`` spec, directly
+    acceptable to explore_branches / the branches CLI.
+
+    The plan is verified first (_verify_base: chain + whole-plan
+    checker) and both items of every pair are re-checked
+    individually — suggestions are derived only from verified
+    recommendations. Nothing is applied and the plan is never
+    mutated. Raises ValueError with a categorised message
+    (bad_limit / _verify_base's categories) on refusal; a plan
+    with no alternatives simply yields empty lists."""
+    if isinstance(limit, bool) or not isinstance(limit, int) \
+            or not 1 <= limit <= MAX_SUGGESTIONS:
+        raise ValueError("bad_limit")
+    _verify_base(plan)
+    items = plan.get("items") or []
+    alternatives = plan.get("alternatives") or []
+    record = plan.get("evidence") or {}
+    admissible = {(r["entity_id"], r["item"],
+                   (r["evidence"] or {}).get("response_id"))
+                  for r in checker.item_reports(
+                      checker.plan_recommendations(plan), record)
+                  if r["admissible"]}
+
+    def is_admissible(item) -> bool:
+        return ((item.get("entity") or {}).get("id"),
+                (item.get("entity") or {}).get("name"),
+                item.get("evidence_ref")) in admissible
+
+    plan_tags: set = set()
+    for item in items:
+        plan_tags.update(_tags_of(item))
+    candidates = []
+    for alternative in alternatives:
+        if not is_admissible(alternative):
+            continue
+        for primary in items:
+            if primary.get("domain") != alternative.get("domain") \
+                    or primary.get("location") != alternative.get("location"):
+                continue
+            if not is_admissible(primary):
+                continue
+            candidates.append(_candidate(primary, alternative, plan_tags))
+    candidates.sort(key=lambda c: (-c["score"], -c["affinity_delta"],
+                                   -c["alternative_affinity"],
+                                   c["primary"] or "",
+                                   c["alternative"] or ""))
+    # The combined branch: best candidate per (domain, leg).
+    best_by_group: dict = {}
+    for cand in candidates:  # already ranked: first per group wins
+        best_by_group.setdefault((cand["domain"], cand["location"]), cand)
+    tour = sorted(best_by_group.values(),
+                  key=lambda c: (-c["score"], c["primary"] or ""))
+    has_tour = len(tour) >= 2
+    single_budget = limit - 1 if has_tour else limit
+    seen_names: set = set()
+    suggestions = []
+    for cand in candidates[:single_budget]:
+        full = f"{cand['alternative']} instead of {cand['primary']}"
+        # Branch names cap at 60 chars: a long pair falls back to
+        # naming the swap-in alone rather than truncating mid-word.
+        preferred = full if len(full) <= MAX_BRANCH_NAME \
+            else f"Swap in {cand['alternative']}"
+        name = _branch_name(preferred, seen_names)
+        rationale = (
+            f"Swap {cand['primary']} ({cand['primary_affinity']:.2f}) "
+            f"for {cand['alternative']} "
+            f"({cand['alternative_affinity']:.2f}) in "
+            f"{cand['domain']}: affinity delta "
+            f"{cand['affinity_delta']:+.2f}"
+            + (f", adds taste coverage: {', '.join(cand['new_tags'])}"
+               if cand["new_tags"] else
+               ", no new taste tags"))
+        suggestions.append({
+            "name": name,
+            "swaps": [{"primary": cand["primary_selector"],
+                       "alternative": cand["alternative_selector"]}],
+            "score": cand["score"],
+            "affinity_delta": cand["affinity_delta"],
+            "coverage_gain": cand["coverage_gain"],
+            "new_tags": cand["new_tags"],
+            "domain": cand["domain"],
+            "location": cand["location"],
+            "rationale": rationale,
+        })
+    if has_tour and len(suggestions) < limit:
+        total_delta = round(sum(c["affinity_delta"] for c in tour), 6)
+        tour_tags = sorted({t for c in tour for t in c["new_tags"]})
+        total_score = round(sum(c["score"] for c in tour), 6)
+        name = _branch_name(
+            "Guided tour: best swap in each domain", seen_names)
+        suggestions.append({
+            "name": name,
+            "swaps": [{"primary": c["primary_selector"],
+                       "alternative": c["alternative_selector"]}
+                      for c in tour],
+            "score": total_score,
+            "affinity_delta": total_delta,
+            "coverage_gain": len(tour_tags),
+            "new_tags": tour_tags,
+            "domain": None,
+            "location": None,
+            "rationale": (
+                f"Apply the best-scoring swap in each of "
+                f"{len(tour)} domain(s) together "
+                f"({', '.join(c['domain'] for c in tour)}): total "
+                f"affinity delta {total_delta:+.2f}"
+                + (f", adds taste coverage: {', '.join(tour_tags)}"
+                   if tour_tags else ", no new taste tags")),
+        })
+    branches = [{"name": s["name"], "swaps": s["swaps"]}
+                for s in suggestions]
+    if branches:
+        validate_branches(branches)
+    return {"base": _branch_verdict(plan),
+            "candidates": candidates,
+            "suggestions": suggestions,
+            "branches": branches}

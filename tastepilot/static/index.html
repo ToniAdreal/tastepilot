@@ -453,8 +453,37 @@ async function doSwap(primary, alternative) {
   renderPlan(data);
 }
 
+async function doSuggest(basePlan, resultsEl) {
+  resultsEl.textContent = 'Ranking suggested branches…';
+  const res = await fetch('/api/suggest', {method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({plan: basePlan})});
+  const data = await res.json();
+  if (!res.ok) { resultsEl.textContent = 'Error: ' + (data.error || res.status); return; }
+  resultsEl.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'meta';
+  head.textContent = `Guided suggestions: ${data.candidates.length} verified swap pair(s) ranked by affinity delta and taste coverage — suggestions propose, they never apply.`;
+  resultsEl.appendChild(head);
+  for (const sug of data.suggestions) {
+    const div = document.createElement('div');
+    div.className = 'meta suggestline';
+    div.textContent = `${sug.name}: score ${Number(sug.score).toFixed(2)} · delta ${sug.affinity_delta >= 0 ? '+' : ''}${Number(sug.affinity_delta).toFixed(2)} · coverage +${sug.coverage_gain} (${sug.new_tags.join(', ') || 'no new tags'}) — ${sug.rationale}`;
+    resultsEl.appendChild(div);
+  }
+  if (data.branches && data.branches.length) {
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'exploreguidedbtn';
+    btn.textContent = 'Explore suggested branches';
+    const exploreOut = document.createElement('div');
+    exploreOut.className = 'branchresults';
+    btn.addEventListener('click', () => doExplore(basePlan, data.branches, exploreOut));
+    resultsEl.appendChild(btn);
+    resultsEl.appendChild(exploreOut);
+  }
+}
+
 async function doBranches(basePlan, resultsEl) {
-  resultsEl.textContent = 'Exploring branches…';
   const sel = (i) => ({name: i.entity.name, domain: i.domain,
                        location: i.location || null});
   const branches = [{name: 'As planned', swaps: []}];
@@ -464,6 +493,11 @@ async function doBranches(basePlan, resultsEl) {
     if (primary) branches.push({name: `Swap in ${alt.entity.name}`,
       swaps: [{primary: sel(primary), alternative: sel(alt)}]});
   }
+  return doExplore(basePlan, branches, resultsEl);
+}
+
+async function doExplore(basePlan, branches, resultsEl) {
+  resultsEl.textContent = 'Exploring branches…';
   const res = await fetch('/api/branches', {method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({plan: basePlan, branches})});
@@ -643,6 +677,14 @@ function renderPlan(data) {
     btn.addEventListener('click', () => doBranches(data, results));
     out.appendChild(btn);
     out.appendChild(results);
+    const sbtn = document.createElement('button');
+    sbtn.type = 'button'; sbtn.className = 'suggestbtn';
+    sbtn.textContent = 'Suggest branches';
+    const sresults = document.createElement('div');
+    sresults.className = 'suggestresults';
+    sbtn.addEventListener('click', () => doSuggest(data, sresults));
+    out.appendChild(sbtn);
+    out.appendChild(sresults);
   }
   const history = (data.swap_history && data.swap_history.length)
     ? data.swap_history

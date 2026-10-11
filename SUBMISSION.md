@@ -125,7 +125,16 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    does not apply reported beside the successful branches
    rather than aborting the comparison; loading a branch gives
    an ordinary swapped plan that verifies, undoes, and swaps
-   further like any other.
+   further like any other. And the agent guides which branches
+   are worth exploring: guided branch suggestions rank every
+   verified primary/alternative pair by affinity delta and
+   taste coverage (tags the alternative would add that no
+   primary carries), and propose the top single swaps plus a
+   combined guided-tour branch picking the best swap in each
+   domain — as branch specs the explorer accepts unchanged,
+   with a score and rationale per suggestion. Suggestions
+   propose only: the base is verified first, never mutated,
+   and a tampered plan is refused rather than suggested from.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -252,11 +261,11 @@ stops being a liability and becomes pure upside.
   and platform maps links, with two-way calendar sync, instead
   of the one-tap template/search links and one-way share
   payload the handoff layer already produces.
-- Guided branch suggestions — the agent proposing the swap
-  branches worth exploring (ranked by affinity delta and taste
-  coverage across domains) instead of the user enumerating
-  every path themselves in the built branch explorer, which
-  already forks, re-seals, and compares any spec it is given.
+- Learned suggestion ranking — personalising the built
+  deterministic affinity-delta/coverage ranking from a user's
+  own past swap choices (which suggestions they loaded, kept,
+  or undid), instead of the fixed formula the guided-suggestion
+  engine already applies to every verified pair.
 
 ## Built with
 

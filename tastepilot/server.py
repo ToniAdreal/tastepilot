@@ -59,6 +59,13 @@ Routes:
                                plan exports with a NOT VERIFIED banner,
                                never a clean one. ics on a plan with no
                                dated leg -> 400.
+  POST /api/suggest            {"plan": {...}, "limit": 5} -> guided
+                               branch suggestions: every admissible
+                               primary/alternative pair ranked by
+                               affinity delta + taste coverage, as
+                               branch specs /api/branches accepts.
+                               Suggestions propose only — nothing is
+                               applied, mutated, or re-sealed.
   GET  /api/shares             the caller's own share links (dashboard):
                                requires an ``X-Owner-Token`` header and
                                returns only the shares that token owns —
@@ -149,7 +156,8 @@ from .checker import check_plan, item_reports
 from .evidence import qloo_responses, verify_chain
 from .export import export_plan, media_for
 from .imports import parse_import_bytes
-from .swap import explore_branches, swap_history, swap_plan, undo_last_swap
+from .swap import (explore_branches, suggest_branches, swap_history,
+                   swap_plan, undo_last_swap)
 from .timetable import parse_timetable_bytes
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -978,6 +986,53 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                         evidence_cache.popitem(last=False)
             self._send_json(200, result)
 
+        def _handle_suggest(self):
+            """Guided branch suggestions for one base plan.
+
+            Body: {"plan": {...}, "limit": 5 (optional)}. The plan
+            is untrusted input held to the swap endpoint's gates;
+            swap.suggest_branches verifies the plan first, ranks
+            only admissible pairs by affinity delta + taste
+            coverage, and returns branch specs the /api/branches
+            endpoint accepts unchanged. Nothing is applied or
+            re-sealed. Refusals are categorised 400s."""
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_VERIFY_BODY_BYTES:
+                self._send_json(413, {"error": "plan too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            if not isinstance(payload, dict) or \
+                    not isinstance(payload.get("plan"), dict):
+                self._send_json(400, {"error": "plan is required"})
+                return
+            plan = payload["plan"]
+            error = validate_plan_payload(plan)
+            if error is not None:
+                self._send_json(400, {"error": error})
+                return
+            limit = payload.get("limit", 5)
+            try:
+                result = suggest_branches(plan, limit=limit)
+            except ValueError as exc:  # categorised refusal
+                self._send_json(400, {"error": f"suggest failed: {exc}"})
+                return
+            except (KeyError, TypeError, AttributeError, IndexError):
+                self._send_json(400, {"error": "suggest failed: bad_plan"})
+                return
+            self._send_json(200, result)
+
         def _handle_share(self):
             """Store a plan under its content-addressed share id.
 
@@ -1042,6 +1097,9 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return
             if path == "/api/branches":
                 self._handle_branches()
+                return
+            if path == "/api/suggest":
+                self._handle_suggest()
                 return
             if path != "/api/plan":
                 self._send(404, b"not found", "text/plain")

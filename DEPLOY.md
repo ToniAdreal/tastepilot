@@ -116,6 +116,13 @@ the reason recorded (the demo never goes down because the LLM did).
     plan with that branch's item primary, the status line names
     the branch, and the loaded plan still PASSes in the verify
     panel.
+14. Suggest probe: on the same plan, click "Suggest branches" →
+    ranked guided suggestions appear (score, affinity delta,
+    coverage gain, rationale per line, the combined guided-tour
+    branch last); "Explore suggested branches" compares those
+    exact branches with recomputed PASS verdicts. A tampered
+    plan posted to `POST /api/suggest` → `400
+    suggest failed: plan_not_verified`, never suggestions.
 
 ## Notes
 

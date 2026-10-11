@@ -116,7 +116,11 @@ tastepilot/
                as an undo_of event; explore_branches forks one base
                plan into named swap paths (each applied
                independently, re-sealed, and compared by verdicts
-               recomputed from its own record)
+               recomputed from its own record); suggest_branches
+               ranks every verified primary/alternative pair by
+               affinity delta and taste coverage and proposes
+               branch specs (singles plus a combined guided tour)
+               that explore_branches accepts unchanged
   smoke.py     real-mode smoke check: one search + one insights call,
                payload-shape validation, both sealed + chain re-verified
   imports.py   external taste-file imports: Spotify playlist-export JSON,
@@ -397,6 +401,24 @@ baked into the image or the repo.
   ordinary swapped plan (its `branch` field is reader-facing
   provenance, never trusted by verification), so it verifies,
   exports, shares, swaps further, and undoes like any other.
+* The agent also proposes which branches are worth exploring:
+  `suggest_branches` (the UI's "Suggest branches" button, `POST
+  /api/suggest`, or `tastepilot suggest --plan plan.json [--limit
+  5] [--out suggestions.json]`) verifies the base plan first,
+  then ranks every admissible primary/alternative pair sharing a
+  domain and a leg by a deterministic score — the alternative's
+  affinity plus its affinity delta against the primary (a loss
+  is charged in full) plus a small bonus per taste tag the
+  alternative would introduce that no primary item carries
+  (taste coverage). The output is the top single-swap branches
+  plus, when at least two domains offer a swap, a combined
+  "Guided tour: best swap in each domain" branch — each with
+  its score, delta, new tags, and a plain-language rationale —
+  as a `branches` spec that the branches surfaces accept
+  unchanged (`suggest --out` writes a file `branches` can read
+  directly). Suggestions propose only: nothing is applied,
+  mutated, or re-sealed, and a tampered plan is refused with
+  the swap path's categories instead of being suggested from.
 * Anyone holding a plan JSON can re-verify it in the browser: the UI's
   "Verify a shared plan" panel posts it to `POST /api/verify`, which
   recomputes the hash chain and every per-item checker verdict from the

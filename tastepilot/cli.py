@@ -16,6 +16,8 @@
   python -m tastepilot history --plan plan.json
   python -m tastepilot branches --plan plan.json --spec branches.json
                              [--out-dir branch-dir]
+  python -m tastepilot suggest --plan plan.json [--limit 5]
+                             [--out suggestions.json]
   python -m tastepilot serve [--host 127.0.0.1] [--port 8765]
                              [--mode mock|auto] [--llm template|nebius]
                              [--share-file shares.json]
@@ -130,6 +132,16 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--out-dir",
                    help="write each successful branch plan here as "
                         "<branch-name>.json")
+    g = sub.add_parser("suggest")
+    g.add_argument("--plan", required=True,
+                   help="a saved plan JSON to suggest swap branches for")
+    g.add_argument("--limit", type=int, default=5,
+                   help="max suggestions (1-6, default 5); the combined "
+                        "guided-tour branch counts toward the limit")
+    g.add_argument("--out",
+                   help="write the suggestions JSON here — its "
+                        "\"branches\" list is a spec the branches "
+                        "command accepts unchanged")
     s = sub.add_parser("serve")
     s.add_argument("--host", default="127.0.0.1",
                    help="bind host (hosted deployments: 0.0.0.0)")
@@ -345,6 +357,41 @@ def main(argv: list[str] | None = None) -> int:
         # Like verify: every branch applying is success (0); any
         # branch refusal is a reported verdict (1), not a crash.
         return 0 if all_ok else 1
+    if args.cmd == "suggest":
+        from .swap import suggest_branches
+        try:
+            plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: suggest failed: cannot read plan "
+                  f"({type(exc).__name__})", file=sys.stderr)
+            return 2
+        if not isinstance(plan, dict):
+            print("error: suggest failed: bad_plan", file=sys.stderr)
+            return 2
+        try:
+            result = suggest_branches(plan, limit=args.limit)
+        except ValueError as exc:  # categorised refusal, no traceback
+            print(f"error: suggest failed: {exc}", file=sys.stderr)
+            # A plan that does not verify is a verdict (exit 1, like
+            # verify/history); every other refusal is a caller error.
+            return 1 if str(exc) in ("evidence_chain_invalid",
+                                     "plan_not_verified") else 2
+        if args.out:
+            Path(args.out).write_text(
+                json.dumps(result, indent=1, ensure_ascii=False),
+                encoding="utf-8")
+        print(f"suggest: candidates={len(result['candidates'])} "
+              f"suggestions={len(result['suggestions'])} "
+              f"passed={result['base']['passed']} "
+              f"chain_valid={result['base']['chain_valid']}"
+              + (f" out={args.out}" if args.out else ""))
+        for i, sug in enumerate(result["suggestions"], 1):
+            print(f"  suggestion #{i} '{sug['name']}': "
+                  f"score={sug['score']:.2f} "
+                  f"delta={sug['affinity_delta']:+.2f} "
+                  f"coverage_gain={sug['coverage_gain']} "
+                  f"— {sug['rationale']}")
+        return 0
     if args.cmd == "verify":
         data = json.loads(Path(args.record).read_text(encoding="utf-8"))
         record = data.get("evidence", data)
