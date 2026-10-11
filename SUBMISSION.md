@@ -170,6 +170,13 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    kept, added, removed, or re-scored with its affinity, and
    each column headed by its recomputed verdict — a tampered
    branch is a FAIL column in the grid, never a clean one.
+   And that timeline also leaves as one of the plan's take-away
+   exports: the same grid rendered into Markdown and plain-text
+   itinerary exports (CLI, API, and the explorer's download
+   buttons), its banner and every column verdict recomputed at
+   export time — a tampered branch exports as a FAIL column
+   under a NOT VERIFIED banner, exactly as a tampered single
+   plan exports.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -303,11 +310,13 @@ stops being a liability and becomes pure upside.
   the user across devices without them carrying a token, with
   conflict resolution when two devices save lessons offline,
   instead of the single-server store the built profile uses.
-- Branch timelines in take-away exports — the built visual
-  branch timeline (slots grouped by leg, one column per branch,
-  every verdict recomputed) rendered into the Markdown/text
-  itinerary exports, instead of living only in the demo page
-  and the CLI timeline grid.
+- Branch timelines in iCalendar exports — the built branch
+  timeline take-away exports (Markdown/text grids with every
+  column's verdict recomputed) extended to a calendar form:
+  one event series per branch, so a recipient can compare swap
+  paths on their own calendar, instead of the Markdown/text
+  grids the timeline export already produces (iCalendar is
+  currently refused for timelines, as it has no grid meaning).
 
 ## Built with
 

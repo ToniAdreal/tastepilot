@@ -96,6 +96,16 @@ Routes:
                                verdict recomputed from its own sealed
                                record — a tampered branch is a FAIL
                                column in the grid, never a 400.
+  POST /api/export-timeline?format=markdown|text
+                               {"base": {...}, "branches": [...]}
+                               -> the branch timeline as a take-away
+                               export (tastepilot.export.export_timeline):
+                               same gates as /api/timeline, rendered
+                               as a download whose banner and column
+                               verdicts are recomputed — a tampered
+                               branch exports as a FAIL column under
+                               a NOT VERIFIED banner, never clean.
+                               ics -> 400 (no timeline meaning).
   GET  /api/shares             the caller's own share links (dashboard):
                                requires an ``X-Owner-Token`` header and
                                returns only the shares that token owns —
@@ -204,7 +214,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from .checker import check_plan, item_reports
 from .diff import diff_plans
 from .evidence import qloo_responses, verify_chain
-from .export import export_plan, media_for
+from .export import TIMELINE_FORMATS, export_plan, export_timeline, media_for
 from .imports import parse_import_bytes
 from .profiles import ProfileStore
 from .timeline import branch_timeline
@@ -1247,6 +1257,71 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return
             self._send_json(200, result)
 
+        def _handle_export_timeline(self, fmt: str):
+            """Branch timeline as a take-away export (download).
+
+            Body: {"base": {...}, "branches": [{"name": ...,
+            "plan": {...}}, ...]} — exactly the /api/timeline
+            gates. The rendered banner and every column verdict
+            are recomputed by export.export_timeline; a tampered
+            branch exports as a FAIL column under a NOT VERIFIED
+            banner (a 200 download, like a tampered single-plan
+            export), never clean. ics is refused categorically."""
+            if fmt not in TIMELINE_FORMATS:
+                self._send_json(
+                    400, {"error": "unsupported timeline export format"})
+                return
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_VERIFY_BODY_BYTES:
+                self._send_json(413, {"error": "plan too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            if not isinstance(payload, dict) or \
+                    not isinstance(payload.get("base"), dict) or \
+                    not isinstance(payload.get("branches"), list):
+                self._send_json(
+                    400, {"error": "base plan and branches are required"})
+                return
+            error = validate_plan_payload(payload["base"])
+            if error is not None:
+                self._send_json(400, {"error": error})
+                return
+            for branch in payload["branches"]:
+                if isinstance(branch, dict) and \
+                        isinstance(branch.get("plan"), dict):
+                    error = validate_plan_payload(branch["plan"])
+                    if error is not None:
+                        self._send_json(400, {"error": error})
+                        return
+            try:
+                content, _all_passed = export_timeline(
+                    payload["base"], payload["branches"], fmt)
+            except ValueError as exc:  # categorised refusal
+                self._send_json(
+                    400, {"error": f"timeline export failed: {exc}"})
+                return
+            except (KeyError, TypeError, AttributeError, IndexError):
+                self._send_json(
+                    400, {"error": "timeline export failed: bad_plan"})
+                return
+            _ctype, ext = media_for(fmt)
+            self._send(200, content.encode("utf-8"), _ctype, extra={
+                "Cache-Control": "no-store",
+                "Content-Disposition":
+                    f'attachment; filename="tastepilot-timeline.{ext}"'})
+
         def _handle_suggest(self):
             """Guided branch suggestions for one base plan.
 
@@ -1378,6 +1453,11 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 fmt = parse_qs(urlparse(self.path).query).get(
                     "format", ["markdown"])[0]
                 self._handle_export(fmt)
+                return
+            if path == "/api/export-timeline":
+                fmt = parse_qs(urlparse(self.path).query).get(
+                    "format", ["markdown"])[0]
+                self._handle_export_timeline(fmt)
                 return
             if path == "/api/share":
                 self._handle_share()

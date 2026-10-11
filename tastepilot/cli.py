@@ -10,6 +10,9 @@
   python -m tastepilot verify --record plan.json
   python -m tastepilot export --plan plan.json
                              [--format markdown|text|ics] [--out file]
+                             [--branch NAME=branch.json ...]
+                             (with --branch: a branch-timeline export,
+                             markdown|text only)
   python -m tastepilot swap --plan plan.json --primary NAME
                              --alternative NAME [--out swapped.json]
   python -m tastepilot undo --plan plan.json [--out undone.json]
@@ -57,7 +60,7 @@ from pathlib import Path
 from .agent import TastePilotAgent
 from .checker import check_plan, plan_recommendations
 from .evidence import verify_chain
-from .export import FORMATS as EXPORT_FORMATS, export_plan
+from .export import FORMATS as EXPORT_FORMATS, export_plan, export_timeline
 from .imports import fetch_import, load_import
 from .llm import NebiusExplainer, TemplateExplainer
 from .models import DOMAIN_URNS
@@ -118,6 +121,13 @@ def main(argv: list[str] | None = None) -> int:
                    choices=list(EXPORT_FORMATS),
                    help="itinerary format (ics needs a dated leg)")
     e.add_argument("--out", help="write the export here instead of stdout")
+    e.add_argument("--branch", action="append", default=[],
+                   metavar="NAME=PLAN_JSON",
+                   help="export a branch timeline instead of a single "
+                        "plan: the --plan plan is the base and each "
+                        "--branch names a branch plan file "
+                        "(repeatable, max 6; markdown|text only); "
+                        "every column's verdict is recomputed")
     w = sub.add_parser("swap")
     w.add_argument("--plan", required=True,
                    help="a saved plan JSON (e.g. from plan --out)")
@@ -337,6 +347,36 @@ def main(argv: list[str] | None = None) -> int:
             print("error: export failed: plan must be a JSON object",
                   file=sys.stderr)
             return 2
+        if args.branch:
+            branches = []
+            for spec in args.branch:
+                name, sep, path = spec.partition("=")
+                if not sep or not name.strip() or not path:
+                    print("error: export failed: bad_branch_spec",
+                          file=sys.stderr)
+                    return 2
+                try:
+                    branch_plan = json.loads(
+                        Path(path).read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError) as exc:
+                    print(f"error: export failed: cannot read branch "
+                          f"({type(exc).__name__})", file=sys.stderr)
+                    return 2
+                branches.append({"name": name.strip(),
+                                 "plan": branch_plan})
+            try:
+                content, verified = export_timeline(
+                    plan, branches, args.format)
+            except ValueError as exc:
+                print(f"error: export failed: {exc}", file=sys.stderr)
+                return 2
+            if args.out:
+                Path(args.out).write_text(content, encoding="utf-8")
+                print(f"export format={args.format} timeline=True "
+                      f"verified={verified} out={args.out}")
+            else:
+                sys.stdout.write(content)
+            return 0 if verified else 1
         try:
             content, verified = export_plan(plan, args.format)
         except ValueError as exc:

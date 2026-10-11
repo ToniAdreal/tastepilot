@@ -163,6 +163,15 @@ the reason recorded (the demo never goes down because the LLM did).
     edit one affinity in the branch plan first → that column
     reports `passed: false` in the same `200` (a FAIL column,
     never a clean grid).
+19. Timeline export probe (branch timelines in take-away
+    exports): in the branch explorer's timeline view, "Download
+    timeline (Markdown)" downloads `tastepilot-timeline.md`
+    whose grid carries the same recomputed column verdicts.
+    `POST /api/export-timeline?format=markdown` with the
+    timeline body → `200` download with `Verification: PASS`;
+    edit one affinity in a branch plan first → the download
+    still returns `200` but its banner reads NOT VERIFIED and
+    that column heads FAIL; `?format=ics` → `400`.
 
 ## Notes
 

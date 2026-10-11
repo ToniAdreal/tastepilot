@@ -92,7 +92,13 @@ tastepilot/
                iCalendar, one all-day event per dated leg): every
                export carries a verification banner recomputed from
                the sealed record — a tampered plan exports as NOT
-               VERIFIED, never clean; rendering is deterministic
+               VERIFIED, never clean; rendering is deterministic;
+               export_timeline renders a branch timeline (branch_timeline
+               grid: one table/section per leg, one column per branch)
+               into Markdown/text take-away exports under the same
+               recomputed-verdict doctrine — a tampered branch is a
+               FAIL column under a NOT VERIFIED banner; ics is
+               refused for timelines (no calendar meaning)
   handoff.py   native handoffs: one-tap links into the user's own
                apps — a Google Calendar template URL per dated leg
                (all-day, exclusive end; a dateless leg gets none —
@@ -563,6 +569,15 @@ baked into the image or the repo.
   --plan plan.json [--format markdown|text|ics] [--out file]`, the
   demo UI's export row and verify-panel button, and
   `POST /api/export?format=...` all render the same exporter.
+  A branch timeline leaves the same way — a branch-timeline export:
+  `tastepilot export --plan base.json --branch NAME=branch.json
+  [--format markdown|text]`, `POST /api/export-timeline?format=...`,
+  and the branch explorer's "Download timeline" buttons render the
+  timeline grid (slots grouped by leg, one column per branch,
+  kept/added/removed/re-scored cells with affinities) as a Markdown
+  table or plain-text grid, each column headed by its recomputed
+  verdict; a tampered branch exports as a FAIL column under a NOT
+  VERIFIED banner, and the CLI exits 1 while still writing it.
   Markdown and plain-text exports carry the request, schedule and
   transfer warnings, per-leg domain sections (item, affinity, why,
   evidence reference), rejected items with their reasons, and a

@@ -617,6 +617,25 @@ async function doTimeline(basePlan, okBranches, outEl) {
     }
   }
   outEl.appendChild(table);
+  for (const fmt of ['markdown', 'text']) {
+    const dl = document.createElement('button');
+    dl.type = 'button'; dl.className = 'timelineexportbtn';
+    dl.textContent = fmt === 'markdown'
+      ? 'Download timeline (Markdown)' : 'Download timeline (text)';
+    dl.addEventListener('click', async () => {
+      const r = await fetch('/api/export-timeline?format=' + fmt,
+        {method: 'POST', headers: {'Content-Type': 'application/json'},
+         body: JSON.stringify({base: basePlan,
+           branches: okBranches.map(b => ({name: b.name, plan: b.plan}))})});
+      if (!r.ok) { dl.textContent = 'Export failed'; return; }
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'tastepilot-timeline.' + (fmt === 'markdown' ? 'md' : 'txt');
+      a.click(); URL.revokeObjectURL(a.href);
+    });
+    outEl.appendChild(dl);
+  }
 }
 
 async function doExplore(basePlan, branches, resultsEl) {

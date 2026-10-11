@@ -33,8 +33,10 @@ import json
 from datetime import date, timedelta
 
 from .checker import check_plan, plan_recommendations
+from .timeline import branch_timeline
 
 FORMATS = ("markdown", "text", "ics")
+TIMELINE_FORMATS = ("markdown", "text")
 
 _MEDIA = {
     "markdown": ("text/markdown; charset=utf-8", "md"),
@@ -463,6 +465,115 @@ def render_ics(plan: dict) -> str:
     for line in lines:
         folded.extend(_ics_fold(line))
     return "\r\n".join(folded) + "\r\n"
+
+
+def _timeline_cell_text(cell) -> str:
+    status = cell.get("status", "absent")
+    affinity = cell.get("affinity")
+    if affinity is None:
+        return status
+    text = f"{status} ({float(affinity):.2f})"
+    if status == "rescored" and cell.get("delta") is not None:
+        text = f"rescored ({float(affinity):.2f}, {float(cell['delta']):+.2f})"
+    return text
+
+
+def _timeline_banner(doc) -> str:
+    columns = doc.get("columns") or []
+    if doc.get("summary", {}).get("all_passed"):
+        return (f"Verification: PASS — every one of the "
+                f"{len(columns)} timeline column(s) recomputes as "
+                f"PASS from its own sealed evidence record.")
+    failing = ", ".join(c.get("name", "?") for c in columns
+                        if not c.get("passed")) or "unknown"
+    return (f"Verification: NOT VERIFIED — timeline column(s) "
+            f"FAIL their recomputed evidence check: {failing}. "
+            f"Do not trust those columns' recommendations.")
+
+
+def _timeline_doc(base, branches):
+    return branch_timeline(base, branches)
+
+
+def render_timeline_markdown(base, branches) -> str:
+    """Render a branch timeline (base + branches) as a Markdown
+    take-away: one table per leg, slots as rows, branches as
+    columns, every column headed by its recomputed verdict."""
+    doc = _timeline_doc(base, branches)
+    out = ["# TastePilot branch timeline", ""]
+    if isinstance(base, dict) and base.get("request"):
+        out += [f"> {_one_line(base['request'])}", ""]
+    out += [f"> {_timeline_banner(doc)}", ""]
+    out += ["Columns: " + " · ".join(
+        f"{c['name']} ({'PASS' if c['passed'] else 'FAIL'}, "
+        f"{c['item_count']} item(s), {c['swap_count']} swap(s))"
+        for c in doc["columns"]), ""]
+    for leg in doc["legs"]:
+        where = leg.get("location") or "Anywhere"
+        out += [f"## Leg: {where}", ""]
+        header = ["Recommendation", "Domain"] + \
+            [_one_line(c["name"]).replace("|", "\\|")
+             for c in doc["columns"]]
+        out.append("| " + " | ".join(header) + " |")
+        out.append("| " + " | ".join(["---"] * len(header)) + " |")
+        for row in leg["rows"]:
+            cells = [_one_line(row.get("name") or "").replace("|", "\\|"),
+                     _one_line(row.get("domain") or "")]
+            cells += [_timeline_cell_text(c) for c in row["cells"]]
+            out.append("| " + " | ".join(cells) + " |")
+        out.append("")
+    out += ["Re-verify each plan in this timeline with: "
+            "`python3 -m tastepilot verify --record <plan.json>` — "
+            "a column whose plan was edited FAILs here, never "
+            "renders clean."]
+    return "\n".join(out) + "\n"
+
+
+def render_timeline_text(base, branches) -> str:
+    """Plain-text branch timeline: no Markdown, one line per slot
+    with every column's status on that line."""
+    doc = _timeline_doc(base, branches)
+    out = ["TastePilot branch timeline", "=" * 26, ""]
+    if isinstance(base, dict) and base.get("request"):
+        out += [_one_line(base["request"]), ""]
+    out += [_timeline_banner(doc), ""]
+    out += ["Columns: " + " | ".join(
+        f"{c['name']} ({'PASS' if c['passed'] else 'FAIL'})"
+        for c in doc["columns"]), ""]
+    for leg in doc["legs"]:
+        heading = f"Leg: {leg.get('location') or 'Anywhere'}"
+        out += [heading, "-" * len(heading)]
+        for row in leg["rows"]:
+            cells = " | ".join(
+                f"{c['name']}: {_timeline_cell_text(cell)}"
+                for c, cell in zip(doc["columns"], row["cells"]))
+            out.append(f"  * {_one_line(row.get('name') or '')} "
+                       f"[{row.get('domain', '')}] — {cells}")
+        out.append("")
+    out += ["Re-verify each plan with: python3 -m tastepilot "
+            "verify --record <plan.json>"]
+    return "\n".join(out) + "\n"
+
+
+_TIMELINE_RENDERERS = {"markdown": render_timeline_markdown,
+                       "text": render_timeline_text}
+
+
+def export_timeline(base, branches, fmt: str) -> tuple[str, bool]:
+    """Render a branch timeline in *fmt* (markdown/text only —
+    iCalendar has no branch-grid meaning and is refused
+    categorically); returns (content, all_passed) where
+    all_passed is every column's recomputed verdict. A tampered
+    branch still renders, as a FAIL column under a NOT VERIFIED
+    banner. Raises ValueError with a category for an unsupported
+    format or a malformed base/branch (from branch_timeline)."""
+    if fmt not in TIMELINE_FORMATS:
+        raise ValueError(
+            f"unsupported: timeline export format {fmt!r} "
+            f"(markdown or text only)")
+    doc = _timeline_doc(base, branches)
+    content = _TIMELINE_RENDERERS[fmt](base, branches)
+    return content, bool(doc["summary"]["all_passed"])
 
 
 _RENDERERS = {"markdown": render_markdown, "text": render_text,
