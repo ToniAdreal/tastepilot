@@ -152,6 +152,17 @@ the reason recorded (the demo never goes down because the LLM did).
     affinity in the `other` plan first → that side reports
     `passed: false` with an `affinity_mismatch` violation (the
     comparison is recomputed, never read from a stored field).
+18. Timeline probe (visual branch timeline): in the branch
+    explorer, "View branch timeline" renders a table whose rows
+    are grouped by leg and whose columns are the base plus each
+    successful branch, headed by its recomputed verdict; the
+    swapped slot reads `−` in the base column's successor and
+    `+` under the branch. `POST /api/timeline` with
+    `{"base": <plan>, "branches": [{"name": "B", "plan":
+    <branch plan>}]}` → `200` with `summary.all_passed: true`;
+    edit one affinity in the branch plan first → that column
+    reports `passed: false` in the same `200` (a FAIL column,
+    never a clean grid).
 
 ## Notes
 

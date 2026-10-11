@@ -158,6 +158,16 @@ def main(argv: list[str] | None = None) -> int:
                         "stored checker fields")
     d.add_argument("--out",
                    help="write the full comparison JSON here")
+    t = sub.add_parser("timeline")
+    t.add_argument("--base", required=True,
+                   help="the base plan JSON the branches fork from")
+    t.add_argument("--branch", action="append", default=[],
+                   metavar="NAME=PLAN_JSON",
+                   help="a branch plan file under a display name "
+                        "(repeatable, max 6); every column's verdict "
+                        "is recomputed from its own sealed record")
+    t.add_argument("--out",
+                   help="write the full timeline JSON here")
     g = sub.add_parser("suggest")
     g.add_argument("--plan", required=True,
                    help="a saved plan JSON to suggest swap branches for")
@@ -531,6 +541,59 @@ def main(argv: list[str] | None = None) -> int:
         # side failing recomputation is a reported verdict (1).
         return 0 if result["base"]["passed"] and \
             result["other"]["passed"] else 1
+    if args.cmd == "timeline":
+        from .timeline import branch_timeline
+        try:
+            base = json.loads(Path(args.base).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: timeline failed: cannot read base "
+                  f"({type(exc).__name__})", file=sys.stderr)
+            return 2
+        branches = []
+        for spec in args.branch:
+            name, sep, path = spec.partition("=")
+            if not sep or not name.strip() or not path:
+                print("error: timeline failed: bad_branch_spec",
+                      file=sys.stderr)
+                return 2
+            try:
+                plan = json.loads(Path(path).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                print(f"error: timeline failed: cannot read branch "
+                      f"({type(exc).__name__})", file=sys.stderr)
+                return 2
+            branches.append({"name": name.strip(), "plan": plan})
+        try:
+            result = branch_timeline(base, branches)
+        except ValueError as exc:  # categorised refusal, no traceback
+            print(f"error: timeline failed: {exc}", file=sys.stderr)
+            return 2
+        columns = result["columns"]
+        print(f"timeline: branches={result['summary']['branches']} "
+              f"legs={result['summary']['legs']} "
+              f"rows={result['summary']['rows']} "
+              f"all_passed={result['summary']['all_passed']}")
+        print("  columns: " + " | ".join(
+            f"{c['name']} ({'PASS' if c['passed'] else 'FAIL'})"
+            for c in columns))
+        marks = {"kept": "=", "added": "+", "removed": "-",
+                 "rescored": "~", "absent": "."}
+        for leg in result["legs"]:
+            print(f"  leg {leg['location']}:")
+            for row in leg["rows"]:
+                cells = " | ".join(
+                    f"{marks[c['status']]}"
+                    f"{'' if c['affinity'] is None else c['affinity']}"
+                    for c in row["cells"])
+                print(f"    [{row['domain']}] {row['name']}: {cells}")
+        if args.out:
+            Path(args.out).write_text(
+                json.dumps(result, indent=1, ensure_ascii=False),
+                encoding="utf-8")
+            print(f"timeline written to {args.out}")
+        # Like verify: every column passing is success (0); any
+        # column failing recomputation is a reported verdict (1).
+        return 0 if result["summary"]["all_passed"] else 1
     if args.cmd == "suggest":
         from .swap import suggest_branches
         try:

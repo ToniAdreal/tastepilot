@@ -147,6 +147,13 @@ tastepilot/
                checker field is never read on either side, and swap
                counts come from the sealed swap history, never the
                stored mirror
+  timeline.py  visual branch timeline data: recommendation slots
+               grouped by leg (trip mention order), one column per
+               branch beside the base, every cell kept / added /
+               removed / re-scored / absent with its affinity —
+               built on diff.py, so every column's verdict is
+               recomputed from its own sealed record and a
+               tampered branch is a FAIL column in the grid
   smoke.py     real-mode smoke check: one search + one insights call,
                payload-shape validation, both sealed + chain re-verified
   imports.py   external taste-file imports: Spotify playlist-export JSON,
@@ -429,7 +436,14 @@ baked into the image or the repo.
   b.json` is the CLI form): the two plans are diffed item by item
   and BOTH sides' verdicts are recomputed from their own sealed
   records, so a tampered branch diffs as NOT VERIFIED on its side
-  of the comparison. Branches never share
+  of the comparison. The branch explorer's "View branch timeline"
+  button lays the successful branches over the trip's legs as a
+  table (`POST /api/timeline`; `tastepilot timeline --base a.json
+  --branch Name=b.json` is the CLI form): one row per
+  recommendation slot grouped by leg, one column per branch, each
+  cell marked kept / added / removed / re-scored with its
+  affinity, and each column headed by its recomputed verdict — a
+  tampered branch is a FAIL column in the grid. Branches never share
   state and the base is never mutated; a branch plan is an
   ordinary swapped plan (its `branch` field is reader-facing
   provenance, never trusted by verification), so it verifies,

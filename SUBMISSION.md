@@ -164,7 +164,12 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    plans' verdicts recomputed from their own sealed records, so
    the branch explorer can state exactly what a swap path changed
    (+added, −removed, ~rescored) instead of asking the reader to
-   eyeball two item lists.
+   eyeball two item lists. And the branches render as a visual
+   timeline: recommendation slots grouped by the trip's legs,
+   one column per branch beside the base plan, each cell marked
+   kept, added, removed, or re-scored with its affinity, and
+   each column headed by its recomputed verdict — a tampered
+   branch is a FAIL column in the grid, never a clean one.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -298,11 +303,11 @@ stops being a liability and becomes pure upside.
   the user across devices without them carrying a token, with
   conflict resolution when two devices save lessons offline,
   instead of the single-server store the built profile uses.
-- A visual side-by-side branch timeline — the built plan
-  comparison (added/removed/re-scored items between two plans,
-  both verdicts recomputed) rendered as a graphical timeline
-  over a trip's legs, instead of the summary lines the branch
-  explorer and the CLI diff already print.
+- Branch timelines in take-away exports — the built visual
+  branch timeline (slots grouped by leg, one column per branch,
+  every verdict recomputed) rendered into the Markdown/text
+  itinerary exports, instead of living only in the demo page
+  and the CLI timeline grid.
 
 ## Built with
 

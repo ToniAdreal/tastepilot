@@ -86,6 +86,16 @@ Routes:
                                recomputed from their own sealed
                                records — a stored checker field is
                                never read on either side.
+  POST /api/timeline           {"base": {...}, "branches":
+                               [{"name": ..., "plan": {...}}, ...]}
+                               -> the visual branch timeline data
+                               (tastepilot.timeline): recommendation
+                               slots grouped by leg, one column per
+                               branch, every cell kept/added/removed/
+                               re-scored/absent, and every column's
+                               verdict recomputed from its own sealed
+                               record — a tampered branch is a FAIL
+                               column in the grid, never a 400.
   GET  /api/shares             the caller's own share links (dashboard):
                                requires an ``X-Owner-Token`` header and
                                returns only the shares that token owns —
@@ -197,6 +207,7 @@ from .evidence import qloo_responses, verify_chain
 from .export import export_plan, media_for
 from .imports import parse_import_bytes
 from .profiles import ProfileStore
+from .timeline import branch_timeline
 from .swap import (explore_branches, suggest_branches, swap_history,
                    swap_plan, undo_last_swap)
 from .timetable import parse_timetable_bytes
@@ -1179,6 +1190,63 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return
             self._send_json(200, result)
 
+        def _handle_timeline(self):
+            """Visual branch timeline: branches over the base's legs.
+
+            Body: {"base": {...}, "branches": [{"name": ...,
+            "plan": {...}}, ...]}. All plans are untrusted input
+            held to exactly the verify endpoint's gates; timeline.
+            branch_timeline recomputes every column's verdict from
+            its own sealed record. A tampered branch is a 200 with
+            that column passed=false — a verdict, not an error.
+            Malformed input is a categorised 400, never a 500."""
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_VERIFY_BODY_BYTES:
+                self._send_json(413, {"error": "plan too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            if not isinstance(payload, dict) or \
+                    not isinstance(payload.get("base"), dict) or \
+                    not isinstance(payload.get("branches"), list):
+                self._send_json(
+                    400, {"error": "base plan and branches are required"})
+                return
+            error = validate_plan_payload(payload["base"])
+            if error is not None:
+                self._send_json(400, {"error": error})
+                return
+            for branch in payload["branches"]:
+                if isinstance(branch, dict) and \
+                        isinstance(branch.get("plan"), dict):
+                    error = validate_plan_payload(branch["plan"])
+                    if error is not None:
+                        self._send_json(400, {"error": error})
+                        return
+            try:
+                result = branch_timeline(payload["base"],
+                                         payload["branches"])
+            except ValueError as exc:  # categorised refusal
+                self._send_json(
+                    400, {"error": f"timeline failed: {exc}"})
+                return
+            except (KeyError, TypeError, AttributeError, IndexError):
+                self._send_json(
+                    400, {"error": "timeline failed: bad_plan"})
+                return
+            self._send_json(200, result)
+
         def _handle_suggest(self):
             """Guided branch suggestions for one base plan.
 
@@ -1328,6 +1396,9 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return
             if path == "/api/diff":
                 self._handle_diff()
+                return
+            if path == "/api/timeline":
+                self._handle_timeline()
                 return
             if path == "/api/profile":
                 self._handle_profile_update()

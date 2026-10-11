@@ -27,6 +27,11 @@
   #vout { margin-top: .6rem; white-space: pre-wrap; font-size: .9rem; }
   .evlink { color: #2563eb; cursor: pointer; text-decoration: underline; background: none;
             border: none; padding: 0; font-size: .85rem; }
+  table.timeline { border-collapse: collapse; margin: .8rem 0; font-size: .85rem; }
+  table.timeline th, table.timeline td { border: 1px solid #ddd; padding: .3rem .5rem; text-align: left; }
+  table.timeline tr.leghead td { background: #f3f4f6; font-weight: 600; }
+  table.timeline td.added { background: #eef6ee; } table.timeline td.removed { background: #fdeeee; color: #a33; }
+  table.timeline td.rescored { background: #fff7e6; } table.timeline td.absent { color: #bbb; }
 </style>
 </head>
 <body>
@@ -566,6 +571,54 @@ async function doBranches(basePlan, resultsEl) {
   return doExplore(basePlan, branches, resultsEl);
 }
 
+async function doTimeline(basePlan, okBranches, outEl) {
+  outEl.textContent = 'Building branch timeline…';
+  const res = await fetch('/api/timeline', {method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({base: basePlan,
+      branches: okBranches.map(b => ({name: b.name, plan: b.plan}))})});
+  const data = await res.json();
+  if (!res.ok) { outEl.textContent = 'Error: ' + (data.error || res.status); return; }
+  outEl.innerHTML = '';
+  const table = document.createElement('table');
+  table.className = 'timeline';
+  const head = document.createElement('tr');
+  const corner = document.createElement('th');
+  corner.textContent = 'Branch timeline (✓ kept · + added · − removed · ~ re-scored)';
+  head.appendChild(corner);
+  for (const col of data.columns) {
+    const th = document.createElement('th');
+    th.textContent = `${col.name} — ${col.passed ? 'PASS' : 'FAIL'}`;
+    head.appendChild(th);
+  }
+  table.appendChild(head);
+  const marks = {kept: '✓', added: '+', removed: '−', rescored: '~', absent: '·'};
+  for (const leg of data.legs) {
+    const lrow = document.createElement('tr');
+    lrow.className = 'leghead';
+    const ltd = document.createElement('td');
+    ltd.colSpan = data.columns.length + 1;
+    ltd.textContent = `Leg: ${leg.location || 'anywhere'}`;
+    lrow.appendChild(ltd);
+    table.appendChild(lrow);
+    for (const row of leg.rows) {
+      const tr = document.createElement('tr');
+      const label = document.createElement('td');
+      label.textContent = `${row.name} (${row.domain})`;
+      tr.appendChild(label);
+      for (const cell of row.cells) {
+        const td = document.createElement('td');
+        td.className = cell.status;
+        td.textContent = marks[cell.status] +
+          (cell.affinity != null ? ` ${cell.affinity}` : '');
+        tr.appendChild(td);
+      }
+      table.appendChild(tr);
+    }
+  }
+  outEl.appendChild(table);
+}
+
 async function doExplore(basePlan, branches, resultsEl) {
   resultsEl.textContent = 'Exploring branches…';
   const res = await fetch('/api/branches', {method: 'POST',
@@ -574,6 +627,7 @@ async function doExplore(basePlan, branches, resultsEl) {
   const data = await res.json();
   if (!res.ok) { resultsEl.textContent = 'Error: ' + (data.error || res.status); return; }
   resultsEl.innerHTML = '';
+  const okBranches = [];
   for (const branch of data.branches) {
     const div = document.createElement('div');
     div.className = 'meta branchline';
@@ -607,6 +661,17 @@ async function doExplore(basePlan, branches, resultsEl) {
     div.appendChild(document.createTextNode(' '));
     div.appendChild(btn);
     resultsEl.appendChild(div);
+    okBranches.push(branch);
+  }
+  if (okBranches.length) {
+    const tbtn = document.createElement('button');
+    tbtn.type = 'button'; tbtn.className = 'timelinebtn';
+    tbtn.textContent = 'View branch timeline';
+    const tout = document.createElement('div');
+    tout.className = 'timelineout';
+    tbtn.addEventListener('click', () => doTimeline(basePlan, okBranches, tout));
+    resultsEl.appendChild(tbtn);
+    resultsEl.appendChild(tout);
   }
 }
 
