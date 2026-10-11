@@ -486,6 +486,22 @@ the reason recorded (the demo never goes down because the LLM did).
     bundle's UIDs never collide with the leg-level bundle
     calendar's, the paced timeline calendar's, or the
     single-plan paced calendar's.
+39. Paced feed calendar probe: create a single-timeline
+    subscription from a dated timeline (probe 20) → the
+    response carries an `etag` and a `paced_url`
+    (`/api/feeds/<id>.ics?format=ics-days`). Fetching the
+    leg-level URL returns the per-leg series under that etag;
+    fetching `paced_url` returns one all-day event per dated
+    day per branch (summaries name branch and day) under an
+    ETag ending in `-days`. A conditional poll with each
+    variant's own etag returns `304`; presenting the leg etag
+    to the paced URL (or the paced etag to the leg URL)
+    returns the full `200` calendar — the variants never
+    answer each other's polls. Updating the feed in place
+    changes both etags (neither old etag earns a `304`), a
+    tampered branch's paced days read NOT VERIFIED, and an
+    unknown format on the feed URL returns `400`
+    (`unsupported feed format`).
 
 ## Notes
 

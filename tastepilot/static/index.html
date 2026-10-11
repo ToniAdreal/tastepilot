@@ -697,11 +697,12 @@ async function doTimeline(basePlan, okBranches, outEl) {
     }
     feedId = d.feed_id;
     feedBtn.textContent = 'Update timeline feed';
-    feedOut.textContent = 'Calendar subscription: ' +
-      location.origin + d.url + ' — add this URL to your calendar ' +
-      'app as a subscription; it refreshes when this feed is ' +
-      'updated. Expires ' + new Date(d.expires_at).toLocaleString() +
-      ' unless updated.';
+    feedOut.textContent = 'Calendar subscription (etag ' + d.etag +
+      '): ' + location.origin + d.url + ' — add this URL to your ' +
+      'calendar app as a subscription; it refreshes when this feed ' +
+      'is updated. Paced by day: ' + location.origin + d.paced_url +
+      ' — the same timeline as one event per paced day. Expires ' +
+      new Date(d.expires_at).toLocaleString() + ' unless updated.';
   });
   outEl.appendChild(feedBtn);
   outEl.appendChild(feedOut);

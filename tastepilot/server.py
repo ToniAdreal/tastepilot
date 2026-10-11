@@ -124,7 +124,17 @@ Routes:
                                when the feed is updated, the next
                                poll serves the new series under the
                                same URL. A tampered branch's series
-                               reads NOT VERIFIED, never PASS.
+                               reads NOT VERIFIED, never PASS. The
+                               response carries an ETag (a hash of
+                               the stored timeline): a poller
+                               presenting it in If-None-Match gets
+                               304 while nothing changed.
+                               ?format=ics-days renders the paced
+                               variant instead (one event per dated
+                               day per branch) under its own etag
+                               (the feed etag with a -days suffix),
+                               so the two variants never answer
+                               each other's polls.
   GET  /api/feeds/<id>         the feed's metadata plus its timeline
                                verdict, recomputed on the spot.
   POST /api/feeds/<id>         replace the feed's timeline in place
@@ -426,7 +436,10 @@ Persistence, expiry, revocation:
     the feed, which renews it; revocable via DELETE. A feed's .ics
     response is the one API response that is not ``no-store`` — it
     carries a short public cache lifetime so calendar apps re-poll
-    instead of caching the series forever.
+    instead of caching the series forever, plus an ETag (see
+    ``feed_etag``) so a poller can ask conditionally; the paced
+    variant (?format=ics-days) carries its own etag (the feed
+    etag with a -days suffix).
   * Multi-timeline feeds follow the same pattern in a
     MultiTimelineFeedStore: file-backed via ``serve(...,
     multi_feed_file=...)``, ``--multi-feed-file``, or
@@ -524,6 +537,9 @@ DEFAULT_FEED_TTL_SECONDS = 30 * 24 * 3600  # feeds live for 30 days;
                                  # because a subscription is long-lived
                                  # by design (unlike a share link)
 FEED_FILE_ENV_VAR = "TASTEPILOT_FEED_FILE"  # opt-in persistence path
+FEED_FORMATS = ("ics", "ics-days")  # calendar variants a single-
+                                 # timeline feed serves: leg-level
+                                 # (ics) and paced by day (ics-days)
 MAX_MULTI_TIMELINE_FEEDS = 32    # multi-timeline feeds kept at once
 MAX_MULTI_FEED_BODY_BYTES = 2 * 1024 * 1024  # a bundle carries up to
                                  # six timelines, each a base plan plus
@@ -956,6 +972,24 @@ class ShareStore:
         return self.revoke_status(share_id, owner_token) == "revoked"
 
 
+def feed_etag(payload: dict) -> str:
+    """Change detector for a single-timeline feed: a truncated
+    SHA-256 of the canonical payload. A single feed carries no
+    version or change log (that is the multi-feed's surface), so
+    the payload itself is the whole change signal: an in-place
+    update replacing the timeline changes the etag, so a
+    subscriber polling with If-None-Match learns "changed" (200
+    with a new etag) vs "unchanged" (304) without downloading
+    the calendar — and re-posting the identical timeline keeps
+    the etag, because the served calendar genuinely did not
+    change. The etag reveals nothing beyond the payload the
+    feed URL already serves."""
+    canonical = json.dumps(payload, sort_keys=True,
+                           ensure_ascii=False,
+                           separators=(",", ":")).encode()
+    return hashlib.sha256(canonical).hexdigest()[:32]
+
+
 class TimelineFeedStore:
     """Bounded store behind the live calendar subscription feeds.
 
@@ -1073,7 +1107,8 @@ class TimelineFeedStore:
                 if owner_hash is not None else None,
                 "branches": [b.get("name") if isinstance(b, dict)
                              else None for b in branches],
-                "columns": 1 + len(branches)}
+                "columns": 1 + len(branches),
+                "etag": feed_etag(payload)}
 
     def _new_id(self) -> str:
         for _ in range(100):
@@ -1127,6 +1162,13 @@ class TimelineFeedStore:
                 self._save()
             entry = self._entries.get(feed_id)
             return None if entry is None else self._meta(feed_id, entry)
+
+    def etag(self, feed_id: str) -> str | None:
+        with self._lock:
+            entry = self._entries.get(feed_id)
+            if entry is None or entry["expires_at"] <= self._clock():
+                return None
+            return feed_etag(entry["payload"])
 
     def update_status(self, feed_id: str, payload: dict, owner_token=None):
         with self._lock:
@@ -2460,7 +2502,10 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             elif path.startswith("/api/feeds/"):
                 rest = unquote(path[len("/api/feeds/"):])
                 if rest.endswith(".ics"):
-                    self._handle_feed_fetch(rest[:-len(".ics")])
+                    fmt = parse_qs(urlparse(self.path).query).get(
+                        "format", ["ics"])[0]
+                    self._handle_feed_fetch(
+                        rest[:-len(".ics")], fmt=fmt)
                 elif rest and "/" not in rest:
                     self._handle_feed_meta(rest)
                 else:
@@ -3047,6 +3092,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 **meta,
                 "url": f"/api/feeds/{feed_id}.ics",
                 "feed_url": f"/api/feeds/{feed_id}.ics",
+                "paced_url":
+                    f"/api/feeds/{feed_id}.ics?format=ics-days",
                 "all_passed": all_passed,
             })
 
@@ -3079,23 +3126,58 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 **meta,
                 "url": f"/api/feeds/{feed_id}.ics",
                 "feed_url": f"/api/feeds/{feed_id}.ics",
+                "paced_url":
+                    f"/api/feeds/{feed_id}.ics?format=ics-days",
                 "all_passed": all_passed,
                 "updated": True,
             })
 
-        def _handle_feed_fetch(self, feed_id):
+        def _handle_feed_fetch(self, feed_id, fmt="ics"):
             """Serve a feed's calendar: GET /api/feeds/<id>.ics.
             The stored timeline is rendered fresh on every fetch —
             verdicts recomputed, so a re-sealed (or tampered) branch
             shows exactly what it verifies as — with a short public
-            cache lifetime so calendar apps actually re-poll."""
+            cache lifetime so calendar apps actually re-poll.
+            Change notification mirrors the multi-feed: the
+            response carries the feed's ETag; a poller presenting
+            that etag in If-None-Match gets a cheap 304 until an
+            in-place update changes it.
+
+            ?format=ics-days serves the paced variant (one
+            event per dated day per branch) under its own etag —
+            the feed etag with a -days suffix — so a leg-level
+            poller and a paced poller never answer each other's
+            conditional requests with a 304 for a calendar they
+            did not ask for. Any other format is a categorised
+            400."""
+            if fmt not in FEED_FORMATS:
+                self._send_json(
+                    400, {"error": "unsupported feed format"})
+                return
             payload = feed_store.get(feed_id) if feed_id else None
             if payload is None:
                 self._send_json(404, {"error": "unknown feed id"})
                 return
+            etag = feed_store.etag(feed_id)
+            if fmt == "ics-days" and etag is not None:
+                etag = f"{etag}-days"
+            quoted = f'"{etag}"'
+            presented = (self.headers.get("If-None-Match") or "")
+            presented = {p.strip().strip('"')
+                         for p in presented.split(",")}
+            if etag is not None and etag in presented:
+                self.send_response(304)
+                self.send_header("ETag", quoted)
+                self.send_header("Cache-Control",
+                                 "public, max-age=300")
+                for name, value in SECURITY_HEADERS.items():
+                    self.send_header(name, value)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             try:
                 content, _all_passed = export_timeline(
-                    payload["base"], payload["branches"], "ics")
+                    payload["base"], payload["branches"], fmt)
             except ValueError as exc:  # stored feeds were gated at
                 # write time; a refusal here is a categorised 400.
                 self._send_json(
@@ -3106,7 +3188,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                     400, {"error": "feed failed: bad_plan"})
                 return
             self._send(200, content.encode("utf-8"), "text/calendar",
-                       extra={"Cache-Control": "public, max-age=300"})
+                       extra={"Cache-Control": "public, max-age=300",
+                              "ETag": quoted})
 
         def _handle_feed_meta(self, feed_id):
             """Feed metadata + the recomputed timeline verdict."""
@@ -3127,6 +3210,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 **meta,
                 "url": f"/api/feeds/{feed_id}.ics",
                 "feed_url": f"/api/feeds/{feed_id}.ics",
+                "paced_url":
+                    f"/api/feeds/{feed_id}.ics?format=ics-days",
                 "all_passed": all_passed,
             })
 

@@ -679,7 +679,21 @@ baked into the image or the repo.
   timeline view's "Subscribe to timeline feed (iCalendar)"
   button creates or updates the feed for the timeline on screen.
   Every fetch recomputes the verdicts: a tampered branch's series
-  reads NOT VERIFIED under the same URL, never PASS.
+  reads NOT VERIFIED under the same URL, never PASS. The feed's
+  calendar response carries an ETag (`feed_etag` — a hash of the
+  stored timeline; a single feed has no version or change log, so
+  the payload itself is the change signal): a poller presenting
+  it in `If-None-Match` gets a cheap `304` until an in-place
+  update changes the etag, and re-posting the identical timeline
+  keeps it. The same feed URL with `?format=ics-days` (also
+  returned as the feed's `paced_url`) serves the
+  paced variant of that subscription — one paced event per
+  dated day per branch, summaries naming branch and day —
+  under its own ETag
+  (the feed etag with a `-days` suffix), so the two variants
+  never answer each other's conditional polls; a tampered
+  branch's paced days read NOT VERIFIED, exactly like its
+  leg-level series.
 * Many timelines also share one subscription: `POST
   /api/multi-feeds` stores a bundle of named timelines
   (`{"timelines": [{"name", "base", "branches"}, ...]}`, each

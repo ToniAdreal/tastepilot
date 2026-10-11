@@ -202,7 +202,15 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    when a branch is re-sealed, so subscribers see the new
    series under the same URL instead of importing a new file;
    feeds expire, can be revoked, and follow the same
-   owner-token rules as share links. And several timelines
+   owner-token rules as share links. The
+   single-timeline feed has a paced form too: the same feed
+   URL with
+   `?format=ics-days` serves one paced event per dated day per
+   branch instead of one per leg, under its own ETag (the feed
+   etag — a hash of the stored timeline — with a `-days`
+   suffix), so a leg-level poller and a paced poller each get
+   a cheap 304 only for the variant they asked for, and an
+   in-place update changes both etags at once. And several timelines
    travel together as one multi-timeline subscription: a
    bundle of named timelines stored under a single feed URL
    whose calendar carries every timeline's branch series at
