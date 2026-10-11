@@ -533,6 +533,21 @@ the reason recorded (the demo never goes down because the LLM did).
     with `all_passed: false`. An unowned feed appears in
     no token's directory, and no row carries a stored
     payload or the token (or its full hash).
+42. Subscriber overview probe:
+    `GET /api/subscriber/overview` (the subscriber
+    overview; the demo page's "Your subscriber
+    overview" panel) with the token from probe 41 →
+    `200` with `counts.calendar_feeds: 2`,
+    `counts.shares` matching the shares dashboard,
+    `verification.passed` counting the passing shares
+    and feeds, the webhook delivery tallies matching
+    the subscriber directory, and `profile.exists`
+    matching the profile panel; with no token → `401`,
+    with a malformed token → `400`, and with a
+    different token → `200` with
+    `counts.artefacts: 0`. No part of the response
+    carries a stored payload, a webhook URL, a signing
+    secret, or the token (or its full hash).
 
 ## Notes
 

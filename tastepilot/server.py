@@ -373,6 +373,24 @@ Routes:
                                on the per-feed routes); feeds owned
                                by another token, or by no token,
                                never appear.
+  GET  /api/subscriber/overview
+                               the caller's subscriber overview: one
+                               read-only summary over every artefact
+                               the presenting token owns — its share
+                               links, single- and multi-timeline
+                               calendar feeds, push webhooks, and
+                               whether a persistent preference profile
+                               exists — with counts, recomputed
+                               verdict tallies, and webhook delivery
+                               tallies aggregated across the built
+                               per-kind directories, beside the same
+                               lightweight rows those directories
+                               return. Requires an ``X-Owner-Token``
+                               header; artefacts owned by another
+                               token, or by no token, never appear,
+                               and neither the token, its full hash,
+                               a stored payload, a webhook URL, or a
+                               signing secret ever appears.
   GET  /api/profile            the caller's persistent preference
                                profile: requires an ``X-Owner-Token``
                                header; returns the stored profile (the
@@ -2334,18 +2352,11 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return None, True
             return token, False
 
-        def _handle_shares(self):
-            """The owner's dashboard list: only the presenting
-            token's shares, each with its recomputed checker verdict
-            — listing grants nothing, it just names what the token
-            already owns. No token → 401; a malformed one → 400."""
-            token, invalid = self._owner_token()
-            if invalid:
-                self._send_json(400, {"error": "invalid owner token"})
-                return
-            if token is None:
-                self._send_json(401, {"error": "owner token required"})
-                return
+        def _share_rows(self, token):
+            """The presenting token's share rows, each with its
+            recomputed checker verdict — shared by the shares
+            dashboard and the subscriber overview, so both
+            surfaces report one and the same recomputation."""
             shares = []
             for meta in share_store.list_for_owner(token):
                 entry = dict(meta)
@@ -2364,10 +2375,39 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 entry["chain_valid"] = report["chain_valid"] \
                     if report is not None else None
                 shares.append(entry)
+            return shares
+
+        def _handle_shares(self):
+            """The owner's dashboard list: only the presenting
+            token's shares, each with its recomputed checker verdict
+            — listing grants nothing, it just names what the token
+            already owns. No token → 401; a malformed one → 400."""
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            if token is None:
+                self._send_json(401, {"error": "owner token required"})
+                return
+            shares = self._share_rows(token)
             self._send_json(200, {"shares": shares,
                                   "count": len(shares),
                                   "owner_fingerprint":
                                       owner_fingerprint(token)})
+
+        def _webhook_rows(self, token):
+            """The presenting token's webhook rows across its
+            multi-feeds — shared by the subscriber directory
+            and the subscriber overview."""
+            rows = []
+            for meta in multi_feed_store.webhooks_for_owner(token):
+                entry = dict(meta)
+                entry["feed_url"] = \
+                    f"/api/multi-feeds/{meta['feed_id']}.ics"
+                entry["notifications_url"] = \
+                    f"/api/multi-feeds/{meta['feed_id']}/notifications"
+                rows.append(entry)
+            return rows
 
         def _handle_subscriber_webhooks(self):
             """The subscriber directory: every push webhook
@@ -2386,38 +2426,17 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             if token is None:
                 self._send_json(401, {"error": "owner token required"})
                 return
-            rows = []
-            for meta in multi_feed_store.webhooks_for_owner(token):
-                entry = dict(meta)
-                entry["feed_url"] = \
-                    f"/api/multi-feeds/{meta['feed_id']}.ics"
-                entry["notifications_url"] = \
-                    f"/api/multi-feeds/{meta['feed_id']}/notifications"
-                rows.append(entry)
+            rows = self._webhook_rows(token)
             self._send_json(200, {
                 "webhooks": rows, "count": len(rows),
                 "feeds": len({r["feed_id"] for r in rows}),
                 "owner_fingerprint": owner_fingerprint(token)})
 
-        def _handle_subscriber_feeds(self):
-            """The subscriber feed directory: every live
-            calendar subscription the presenting token owns —
-            single-timeline feeds and multi-timeline feeds in
-            one view — each row carrying its stable URLs and
-            the verdict recomputed from its stored timeline at
-            list time, so a feed whose branch was tampered
-            with lists as FAIL, never as the verdict it was
-            created with. Read-only: listing grants nothing
-            and changes nothing; management (update, revoke)
-            stays on the per-feed routes under the same owner
-            rule. No token → 401; a malformed one → 400."""
-            token, invalid = self._owner_token()
-            if invalid:
-                self._send_json(400, {"error": "invalid owner token"})
-                return
-            if token is None:
-                self._send_json(401, {"error": "owner token required"})
-                return
+        def _feed_rows(self, token):
+            """The presenting token's (single, multi) feed rows,
+            each with its verdict recomputed at list time —
+            shared by the feed directory and the subscriber
+            overview."""
             feeds = []
             for meta in feed_store.list_for_owner(token):
                 entry = dict(meta)
@@ -2464,10 +2483,122 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 entry["all_passed"] = all_passed
                 entry["timelines_summary"] = summaries
                 multi_feeds.append(entry)
+            return feeds, multi_feeds
+
+        def _handle_subscriber_feeds(self):
+            """The subscriber feed directory: every live
+            calendar subscription the presenting token owns —
+            single-timeline feeds and multi-timeline feeds in
+            one view — each row carrying its stable URLs and
+            the verdict recomputed from its stored timeline at
+            list time, so a feed whose branch was tampered
+            with lists as FAIL, never as the verdict it was
+            created with. Read-only: listing grants nothing
+            and changes nothing; management (update, revoke)
+            stays on the per-feed routes under the same owner
+            rule. No token → 401; a malformed one → 400."""
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            if token is None:
+                self._send_json(401, {"error": "owner token required"})
+                return
+            feeds, multi_feeds = self._feed_rows(token)
             self._send_json(200, {
                 "feeds": feeds, "multi_feeds": multi_feeds,
                 "count": len(feeds) + len(multi_feeds),
                 "owner_fingerprint": owner_fingerprint(token)})
+
+        def _handle_subscriber_overview(self):
+            """The subscriber overview: one read-only summary
+            over every artefact the presenting token owns —
+            share links, calendar feeds of both kinds, push
+            webhooks, and its persistent preference profile —
+            aggregated from the same rows the per-kind
+            directories return (share and feed verdicts
+            recomputed at list time, webhook tallies from the
+            feeds' own logs), so the overview can never disagree
+            with the directory it summarises. A token with
+            nothing yet gets zero counts and exists=false, not
+            an error. Read-only: listing grants nothing and
+            changes nothing; management stays on the per-kind
+            routes. No token → 401; a malformed one → 400."""
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            if token is None:
+                self._send_json(401, {"error": "owner token required"})
+                return
+            shares = self._share_rows(token)
+            feeds, multi_feeds = self._feed_rows(token)
+            webhooks = self._webhook_rows(token)
+            profile = profile_store.get(token)
+            profile_meta = profile_store.meta(token)
+            feed_rows = feeds + multi_feeds
+
+            def _tally(rows):
+                return {
+                    "passed": sum(1 for r in rows
+                                  if r.get("passed") is True
+                                  or r.get("all_passed") is True),
+                    "failed": sum(1 for r in rows
+                                  if r.get("passed") is False
+                                  or r.get("all_passed") is False),
+                    "unknown": sum(1 for r in rows
+                                   if r.get("passed") is None
+                                   and r.get("all_passed") is None)}
+
+            share_tally = _tally(shares)
+            feed_tally = _tally(feed_rows)
+            deliveries = {
+                key: sum(int(r.get(key) or 0) for r in webhooks)
+                for key in ("deliveries", "delivered", "failed",
+                            "skipped")}
+            self._send_json(200, {
+                "owner_fingerprint": owner_fingerprint(token),
+                "counts": {
+                    "shares": len(shares),
+                    "feeds": len(feeds),
+                    "multi_feeds": len(multi_feeds),
+                    "calendar_feeds": len(feed_rows),
+                    "webhooks": len(webhooks),
+                    "webhook_feeds": len({r["feed_id"]
+                                          for r in webhooks}),
+                    "artefacts": len(shares) + len(feed_rows)
+                    + len(webhooks)},
+                "verification": {
+                    "shares": share_tally,
+                    "feeds": feed_tally,
+                    "passed": share_tally["passed"]
+                    + feed_tally["passed"],
+                    "failed": share_tally["failed"]
+                    + feed_tally["failed"],
+                    "unknown": share_tally["unknown"]
+                    + feed_tally["unknown"]},
+                "deliveries": deliveries,
+                "webhooks_summary": {
+                    "signed": sum(1 for r in webhooks
+                                  if r.get("signed")),
+                    "paused": sum(1 for r in webhooks
+                                  if r.get("paused"))},
+                "profile": {
+                    "exists": profile is not None,
+                    "updated_at": profile_meta["updated_at"],
+                    "kept_swaps": profile["kept_swaps"]
+                    if profile is not None else 0,
+                    "undone_swaps": profile["undone_swaps"]
+                    if profile is not None else 0,
+                    "plans_used": profile["plans_used"]
+                    if profile is not None else 0,
+                    "tag_weight_count": len(profile["tag_weights"])
+                    if profile is not None else 0,
+                    "domain_weight_count":
+                        len(profile["domain_weights"])
+                        if profile is not None else 0},
+                "shares": shares, "feeds": feeds,
+                "multi_feeds": multi_feeds, "webhooks": webhooks})
 
         def _profile_token(self):
             """Owner-token gate for the profile routes, mirroring
@@ -2577,6 +2708,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 self._handle_subscriber_webhooks()
             elif path == "/api/subscriber/feeds":
                 self._handle_subscriber_feeds()
+            elif path == "/api/subscriber/overview":
+                self._handle_subscriber_overview()
             elif path.startswith("/api/share/"):
                 rest = unquote(path[len("/api/share/"):])
                 want_verify = rest.endswith("/verify")

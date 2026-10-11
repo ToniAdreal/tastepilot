@@ -356,6 +356,16 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    whose branch no longer verifies lists as FAIL —
    read-only, metadata only, and feeds owned by
    another token, or by no token, never appear in it.
+   And one view summarises all of a subscriber's
+   artefacts at once: the subscriber overview
+   (`GET /api/subscriber/overview`, owner token
+   required) aggregates the same rows the shares
+   dashboard, the feed directory, and the webhook
+   directory return — counts, share and feed verdict
+   tallies recomputed at list time, webhook delivery
+   tallies, and whether a persistent preference
+   profile exists — so the overview can never
+   disagree with the directory it summarises.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -540,7 +550,9 @@ stops being a liability and becomes pure upside.
   across all of its feeds with their delivery tallies,
   and a feed directory listing a token's single- and
   multi-timeline subscriptions with their recomputed
-  verdicts)
+  verdicts, and a subscriber overview aggregating a
+  token's shares, feeds, webhooks, and profile state
+  with recomputed verdict tallies)
   graduating to a hosted notification service with
   subscriber accounts — managed endpoints, email delivery,
   and provider-side delivery guarantees — instead of

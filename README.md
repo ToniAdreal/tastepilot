@@ -964,6 +964,23 @@ baked into the image or the repo.
   another token, or by no token, never appear in it;
   rows carry metadata only, never a stored payload.
   The demo page's "Your calendar subscriptions" panel
+  renders it. And one view summarises all of it: the
+  subscriber overview
+  (`GET /api/subscriber/overview`, owner token required)
+  aggregates the same rows the shares dashboard, the
+  feed directory, and the webhook directory return —
+  counts of share links, calendar feeds of both kinds,
+  and webhooks, share and feed verdict tallies
+  recomputed at list time, webhook delivery tallies,
+  and whether a persistent preference profile exists
+  for the token — beside those rows themselves, so the
+  overview can never disagree with the directory it
+  summarises. A token with nothing yet gets zero
+  counts, not an error. The overview is read-only, and
+  artefacts owned by another token, or by no token,
+  never appear in it; no stored payload, webhook URL,
+  signing secret, token, or full hash ever appears.
+  The demo page's "Your subscriber overview" panel
   renders it.
   Webhooks are
   listed (`GET .../webhooks`, host labels only) and removed
