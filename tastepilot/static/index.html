@@ -773,6 +773,53 @@ async function doTimeline(basePlan, okBranches, outEl) {
   outEl.appendChild(hookUrl);
   outEl.appendChild(hookBtn);
   outEl.appendChild(hookOut);
+  // Failed pushes are not final: redeliver them on demand. The
+  // server resends each failed record's stored payload to the
+  // webhook's current URL and records the resend as a new
+  // delivery naming the original (redelivery_of).
+  const redeliverBtn = document.createElement('button');
+  redeliverBtn.type = 'button'; redeliverBtn.className = 'redeliverbtn';
+  redeliverBtn.textContent = 'Redeliver failed pushes';
+  const redeliverOut = document.createElement('div');
+  redeliverOut.className = 'meta redeliverout';
+  redeliverBtn.addEventListener('click', async () => {
+    if (!multiFeedId) {
+      redeliverOut.textContent =
+        'Create the multi-timeline subscription first.';
+      return;
+    }
+    const r = await fetch('/api/multi-feeds/' + multiFeedId +
+      '/notifications', {headers: {...ownerHeaders()}});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      redeliverOut.textContent =
+        'Delivery log error: ' + (d.error || r.status);
+      return;
+    }
+    const failed = (d.deliveries || []).filter(
+      x => x.status === 'failed' && x.delivery_id);
+    if (!failed.length) {
+      redeliverOut.textContent = 'No failed deliveries to redeliver.';
+      return;
+    }
+    const lines = [];
+    for (const rec of failed) {
+      const rr = await fetch('/api/multi-feeds/' + multiFeedId +
+        '/notifications/' + rec.delivery_id + '/redeliver',
+        {method: 'POST', headers: {...ownerHeaders()}});
+      const dd = await rr.json().catch(() => ({}));
+      lines.push(rr.ok
+        ? rec.event + ' v' + rec.version + ' → ' +
+          ((dd.delivery || {}).status || 'recorded')
+        : rec.event + ' v' + rec.version + ' → ' +
+          (dd.error || rr.status));
+    }
+    redeliverOut.textContent = 'Redeliveries: ' + lines.join('; ') +
+      '. Each resend is a new delivery in the log naming the ' +
+      'original it redelivers.';
+  });
+  outEl.appendChild(redeliverBtn);
+  outEl.appendChild(redeliverOut);
 }
 
 async function doExplore(basePlan, branches, resultsEl) {

@@ -33,6 +33,17 @@ instead of a named service's API:
   never fails the feed operation that triggered it — the feed
   update stands, the failure is recorded, and the subscriber can
   read it back from the notifications surface;
+- a failed delivery is not the end of the story: each record
+  is stamped by the feed store with a ``delivery_id`` and
+  carries the exact notification payload it attempted, so the
+  subscriber can ask for it to be resent on demand
+  (``POST /api/multi-feeds/<id>/notifications/<delivery_id>/
+  redeliver``). The resend goes to the webhook's currently
+  registered URL, is itself recorded as a new delivery naming
+  the one it redelivers (``redelivery_of``), and the original
+  record is never edited — the log stays an audit trail, not a
+  status board. A delivered record cannot be redelivered; a
+  record from before payloads were kept cannot be either;
 - webhook URLs carrying userinfo (``user:pass@host``) are
   refused: a credential does not belong in a stored URL.
 
@@ -98,6 +109,20 @@ def webhook_id_for(url: str) -> str:
     reveals nothing about the URL beyond what its host label
     already shows."""
     return hashlib.sha256(url.encode()).hexdigest()[:16]
+
+
+def delivery_id_for(feed_id: str, webhook_id, event, version,
+                    at: str, seq: int) -> str:
+    """Deterministic id for one stamped delivery record: a
+    SHA-256 prefix over the feed, webhook, event, version, the
+    store-stamped time, and the record's position in the feed's
+    delivery log — unique per record (two records stamped in
+    the same second for the same event still differ), and
+    revealing nothing beyond what the record itself shows."""
+    material = json.dumps(
+        [feed_id, webhook_id, event, version, at, seq],
+        ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(material.encode()).hexdigest()[:16]
 
 
 def build_notification(feed_id: str, kind: str, version: int,

@@ -681,7 +681,17 @@ baked into the image or the repo.
   log; URLs carrying credentials are refused. Each delivery's
   outcome is recorded in the feed's capped delivery log (`GET
   /api/multi-feeds/<id>/notifications`), and a failed delivery
-  never fails the update that triggered it. Webhooks are
+  never fails the update that triggered it. A failed delivery
+  can be redelivered on demand: every record is stamped with a
+  `delivery_id` and keeps the exact payload it attempted, and
+  `POST /api/multi-feeds/<id>/notifications/<delivery_id>/
+  redeliver` resends that payload to the webhook's currently
+  registered URL, recording the resend as a new delivery whose
+  `redelivery_of` names the original — the original record is
+  never edited, so the log stays an audit trail. A delivered
+  record, a payload-less legacy record, and a removed webhook
+  are categorised refusals; the timeline view's "Redeliver
+  failed pushes" button drives the same flow. Webhooks are
   listed (`GET .../webhooks`, host labels only) and removed
   (`DELETE .../webhooks/<id>`) under the same owner rule, and
   persist with the feed in file mode. Bundles expire after 30 days

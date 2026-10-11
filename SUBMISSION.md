@@ -214,7 +214,12 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    feed's delivery log; the webhook URL is stored only
    inside the feed entry and named everywhere else by host
    label only, and a failed delivery never fails the update
-   that triggered it.
+   that triggered it. A failed delivery is not lost, either:
+   every record is stamped with a delivery id and keeps the
+   payload it attempted, so the subscriber can have it
+   redelivered on demand — the resend goes to the webhook's
+   current URL and is recorded as a new delivery naming the
+   original, which is never edited.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -353,11 +358,13 @@ stops being a liability and becomes pure upside.
   registers an endpoint on their multi-timeline feed;
   registration pings it once, and every in-place update
   pushes the change to it with bounded retries, each
-  delivery recorded in the feed's log) graduating to a
-  hosted notification service with subscriber accounts —
-  managed endpoints, email delivery, and delivery
-  guarantees — instead of endpoints a subscriber registers
-  per feed on a single server.
+  delivery recorded in the feed's log, and a failed
+  delivery redeliverable on demand from its stored payload)
+  graduating to a hosted notification service with
+  subscriber accounts — managed endpoints, email delivery,
+  and provider-side delivery guarantees — instead of
+  endpoints a subscriber registers per feed on a single
+  server.
 
 ## Built with
 

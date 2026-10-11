@@ -233,6 +233,23 @@ the reason recorded (the demo never goes down because the LLM did).
     → `200`, the list is empty again, and a further update
     pushes nothing. On an owned feed, registering or
     removing a webhook without the owner's token → `403`.
+23. Redelivery probe (failed push, resent on demand): point
+    the probe-22 webhook at a receiver that answers `500`
+    and register it → the test delivery is recorded
+    `failed` with a `delivery_id` and its payload kept.
+    Make the receiver answer `200`, then `POST
+    /api/multi-feeds/<id>/notifications/<delivery_id>/
+    redeliver` → `200` with a new delivery `delivered`
+    whose `redelivery_of` names the failed record; the
+    receiver got a body byte-identical to the failed
+    attempt's, and `GET .../notifications` shows the
+    original still `failed`, first — the log is an audit
+    trail, never edited. Redelivering the delivered record
+    → `400` `already_delivered`; an unknown delivery id →
+    `404`; after `DELETE .../webhooks/<webhook_id>`,
+    redelivering its failed record → `400`
+    `webhook_not_found`. On an owned feed, redelivery
+    without the owner's token → `403`.
 
 ## Notes
 

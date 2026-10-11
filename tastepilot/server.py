@@ -192,6 +192,15 @@ Routes:
                                how a subscriber audits what was
                                pushed without any registry beyond
                                their own feed's webhooks.
+  POST /api/multi-feeds/<id>/notifications/<delivery_id>/redeliver
+                               resend one FAILED delivery's
+                               stored payload to its webhook's
+                               currently registered URL (owner
+                               rule as for the feed); the resend
+                               is recorded as a new delivery
+                               naming the original
+                               (``redelivery_of``) and the
+                               original record is never edited.
   GET  /api/shares             the caller's own share links (dashboard):
                                requires an ``X-Owner-Token`` header and
                                returns only the shares that token owns —
@@ -332,8 +341,8 @@ from .export import (TIMELINE_FORMATS, export_multi_timeline_ics,
 from .imports import parse_import_bytes
 from .notify import (MAX_DELIVERIES, MAX_WEBHOOKS_PER_FEED,
                      build_notification, deliver_to_webhooks,
-                     validate_webhook_url, webhook_host_label,
-                     webhook_id_for)
+                     delivery_id_for, validate_webhook_url,
+                     webhook_host_label, webhook_id_for)
 from .profiles import ProfileStore
 from .timeline import branch_timeline
 from .swap import (explore_branches, suggest_branches, swap_history,
@@ -1380,26 +1389,80 @@ class MultiTimelineFeedStore:
             self._save()
             return "removed"
 
-    def record_deliveries(self, feed_id: str, records) -> list:
+    def record_deliveries(self, feed_id: str, records,
+                          payload=None, redelivery_of=None) -> list:
         """Append delivery records (stamped with the store
         clock), capped at notify.MAX_DELIVERIES per feed, and
-        return the stamped copies. A feed that vanished between
-        the operation and the recording simply keeps nothing."""
+        return the stamped copies. Each record is also stamped
+        with a ``delivery_id`` (notify.delivery_id_for) and —
+        when the caller supplies the attempted ``payload``, as
+        every push path does — a deep copy of that payload plus
+        a ``redelivery_of`` pointer (None for a first attempt),
+        which is what makes a later on-demand redelivery of a
+        failed record possible without re-deriving anything.
+        A feed that vanished between the operation and the
+        recording simply keeps nothing."""
         with self._lock:
             entry = self._entries.get(feed_id)
             if entry is None:
                 return []
             stamped = []
-            for record in records or []:
+            base = len(entry.get("deliveries", []))
+            for seq, record in enumerate(records or []):
                 item = copy.deepcopy(record)
                 item["at"] = _iso(self._clock())
                 item["feed_id"] = feed_id
+                item["delivery_id"] = delivery_id_for(
+                    feed_id, item.get("webhook_id"),
+                    item.get("event"), item.get("version"),
+                    item["at"], base + seq)
+                item["payload"] = copy.deepcopy(payload) \
+                    if payload is not None else None
+                item["redelivery_of"] = redelivery_of
                 stamped.append(item)
             entry.setdefault("deliveries", []).extend(stamped)
             entry["deliveries"] = \
                 entry["deliveries"][-MAX_DELIVERIES:]
             self._save()
             return stamped
+
+    def redelivery_target(self, feed_id: str, delivery_id: str,
+                          owner_token=None):
+        """(status, target): what an on-demand redelivery of one
+        recorded delivery would resend, and where. Status is
+        ok / not_found (feed) / forbidden / delivery_not_found /
+        already_delivered / not_redeliverable (a record stamped
+        before payloads were kept, or without one) /
+        webhook_not_found (the webhook was removed after the
+        original attempt — there is no current address to send
+        to). On ok, target is ``{record, payload, webhook}``:
+        deep copies of the original record, the payload it
+        attempted, and the webhook's CURRENT registered entry
+        (a re-registered endpoint receives the resend)."""
+        with self._lock:
+            entry, status = self._webhook_gate(feed_id, owner_token)
+            if entry is None:
+                return status, None
+            record = next(
+                (d for d in entry.get("deliveries", [])
+                 if isinstance(d, dict)
+                 and d.get("delivery_id") == delivery_id), None)
+            if record is None:
+                return "delivery_not_found", None
+            if record.get("status") == "delivered":
+                return "already_delivered", None
+            payload = record.get("payload")
+            if not isinstance(payload, dict):
+                return "not_redeliverable", None
+            webhook = next(
+                (w for w in entry.get("webhooks", [])
+                 if w.get("webhook_id") == record.get("webhook_id")),
+                None)
+            if webhook is None:
+                return "webhook_not_found", None
+            return "ok", {"record": copy.deepcopy(record),
+                          "payload": copy.deepcopy(payload),
+                          "webhook": copy.deepcopy(webhook)}
 
     def deliveries(self, feed_id: str, owner_token=None):
         """(status, [delivery record]) — the feed's capped push
@@ -2574,7 +2637,55 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             if webhook_sleeper is not None:
                 kwargs["sleeper"] = webhook_sleeper
             records = deliver_to_webhooks(entries, payload, **kwargs)
-            return multi_feed_store.record_deliveries(feed_id, records)
+            return multi_feed_store.record_deliveries(
+                feed_id, records, payload=payload)
+
+        def _handle_notification_redeliver(self, feed_id, delivery_id):
+            """Resend one failed push delivery on demand: POST
+            /api/multi-feeds/<id>/notifications/<delivery_id>/
+            redeliver. The stored payload goes to the webhook's
+            currently registered URL through the same bounded-
+            retry delivery path as the original push; the resend
+            is recorded as a NEW delivery whose ``redelivery_of``
+            names the original, and the original record is never
+            edited. A delivered record, a payload-less legacy
+            record, and a removed webhook are categorised 400s;
+            an unknown feed or delivery id is a 404; a non-owner
+            on an owned feed is a 403."""
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            status, target = multi_feed_store.redelivery_target(
+                feed_id, delivery_id, owner_token=token)
+            if status == "not_found":
+                self._send_json(404, {"error": "unknown multi-feed id"})
+                return
+            if status == "forbidden":
+                self._send_json(
+                    403, {"error": "only the owner can redeliver "
+                                   "notifications for this multi-feed"})
+                return
+            if status == "delivery_not_found":
+                self._send_json(404, {"error": "unknown delivery id"})
+                return
+            if status != "ok":
+                self._send_json(
+                    400, {"error": f"redelivery failed: {status}"})
+                return
+            kwargs = {}
+            if webhook_transport is not None:
+                kwargs["transport"] = webhook_transport
+            if webhook_sleeper is not None:
+                kwargs["sleeper"] = webhook_sleeper
+            records = deliver_to_webhooks(
+                [target["webhook"]], target["payload"], **kwargs)
+            stamped = multi_feed_store.record_deliveries(
+                feed_id, records, payload=target["payload"],
+                redelivery_of=delivery_id)
+            self._send_json(200, {
+                "feed_id": feed_id, "redelivery_of": delivery_id,
+                "delivery": stamped[0] if stamped else None})
 
         def _handle_webhook_create(self, feed_id):
             """Register a push webhook on a multi-feed:
@@ -2826,7 +2937,13 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return
             if path.startswith("/api/multi-feeds/"):
                 rest = unquote(path[len("/api/multi-feeds/"):])
-                if rest.endswith("/webhooks") and \
+                parts = rest.split("/")
+                if len(parts) == 4 and parts[1] == "notifications" \
+                        and parts[3] == "redeliver" \
+                        and parts[0] and parts[2]:
+                    self._handle_notification_redeliver(
+                        parts[0], parts[2])
+                elif rest.endswith("/webhooks") and \
                         "/" not in rest[:-len("/webhooks")]:
                     self._handle_webhook_create(
                         rest[:-len("/webhooks")])
