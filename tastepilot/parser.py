@@ -51,6 +51,15 @@ consecutive pair of legs, with its schedule window and an
 ``ok``/``tight``/``infeasible``/``unknown`` status) and
 ``travel_warnings`` for tight or infeasible transfers — same
 report-never-repair doctrine as ``date_warnings``.
+
+Negative preferences: a short clause behind a cue word ("no jazz",
+"avoid ramen and wine", "allergic to shellfish", "don't want
+museums") is captured as ``exclusions`` — phrases the agent filters
+recommendations against deterministically (exact name/tag/domain
+match in ``exclusion_match``) AFTER the evidence checker has run.
+Exclusions are user preference only: they are never sent to Qloo,
+and an excluded item keeps its (passing) evidence verification —
+excluded is not rejected.
 """
 from __future__ import annotations
 
@@ -130,6 +139,12 @@ class ParsedRequest:
     # [{"code", "location", "detail"}] with codes transfer_tight /
     # transfer_infeasible.
     travel_warnings: list[dict] = field(default_factory=list)
+    # Negative preferences, in mention order: the phrases the user
+    # asked to keep out ("no jazz", "avoid ramen and wine"). The agent
+    # applies them as a deterministic filter AFTER the evidence
+    # checker — an excluded item is evidence-backed but unwanted,
+    # which is a different thing from a rejected hallucination.
+    exclusions: list[str] = field(default_factory=list)
 
 
 def _clean_list_item(raw: str) -> str | None:
@@ -406,6 +421,101 @@ def assign_leg_dates(text: str, locations: list[str],
     return leg_dates, warnings
 
 
+_EXCLUSION_CUE_RE = re.compile(
+    r"\b(?:allergic\s+to|avoid|skip|exclude|excluding|without|never|"
+    r"no\s+more|no|don'?t\s+want|do\s+not\s+want)\b\s+", re.IGNORECASE)
+_EXCLUSION_STOP_RE = re.compile(
+    r"[.;!?\n]|\s+but\s+|\s+please\b|,\s+(?:i|we|you)\s+",
+    re.IGNORECASE)
+_CUE_WORDS_RE = re.compile(
+    r"^(?:allergic\s+to|avoid|skip|exclude|excluding|without|never|"
+    r"no\s+more|no)\s+", re.IGNORECASE)
+_MAX_EXCLUSIONS = 8
+
+
+def extract_exclusions(text: str) -> list[str]:
+    """Negative preferences stated in the request, in mention order.
+
+    A cue ("no", "avoid", "skip", "without", "never", "allergic to",
+    "don't want", …) captures the text up to the end of its clause;
+    the clause is split on commas, "and", "or", and "&" into phrases,
+    with articles stripped. A phrase is only ever a *request* to
+    filter — whether it removes anything is decided by the agent's
+    exact name/tag/domain matching, so an unmatched phrase ("no
+    plans") is recorded and harmlessly removes nothing. Labelled seed
+    lists are not exclusion clauses: a cue inside a list segment is
+    ignored so a watchlist title is never read as an exclusion."""
+    list_spans = []
+    for m in _LABEL_RE.finditer(text):
+        list_spans.append((m.start(), m.end()))
+    phrases: list[str] = []
+    for m in _EXCLUSION_CUE_RE.finditer(text):
+        if any(s <= m.start() < e for s, e in list_spans):
+            continue
+        segment = text[m.end():]
+        stop = _EXCLUSION_STOP_RE.search(segment)
+        if stop:
+            segment = segment[:stop.start()]
+        # Guards against prose that merely contains a cue word: a
+        # genuine exclusion clause is short ("no jazz or ramen");
+        # "don't want to miss X" wants X, it does not exclude it; and
+        # "never been to Kyoto" is biography, not a preference.
+        if segment.strip().lower().startswith(("to ", "been ")):
+            continue
+        if len(segment.split()) > 5:
+            continue
+        for part in re.split(r",|\band\b|\bor\b|&", segment):
+            phrase = re.sub(r"\s+", " ", part.strip().lower())
+            # A second cue can hide inside the first cue's clause
+            # ("allergic to shellfish, skip kaiseki") — strip it so
+            # the recorded phrase is the thing excluded, not the cue.
+            phrase = _CUE_WORDS_RE.sub("", phrase)
+            phrase = re.sub(r"^(any|the|a|an|more)\s+", "", phrase)
+            phrase = phrase.strip(" \"'“”")
+            if (2 <= len(phrase) <= 40 and not phrase.isdigit()
+                    and phrase not in phrases):
+                phrases.append(phrase)
+            if len(phrases) >= _MAX_EXCLUSIONS:
+                return phrases
+    return phrases
+
+
+def exclusion_match(item: dict, exclusions: list[str]) -> str | None:
+    """The exclusion phrase that removes ``item``, or None.
+
+    Deterministic and exact: a phrase matches when it equals the
+    entity's name or short name, equals its domain, is one of its
+    tags, or has a word (≥3 chars, naive singulars count) that is
+    one of its tags or one of the words of its name — so "jazz"
+    removes jazz-tagged items, "jazz bars" still finds the "jazz"
+    tag, and "no museums" finds the museum by name, while an
+    unrelated phrase removes nothing."""
+    entity = item.get("entity") or {}
+    name = (entity.get("name") or "").lower()
+    short = name.split(" (")[0]
+    tags = {t.lower() for t in entity.get("tags") or []}
+    name_words = {w for w in re.split(r"[^a-z0-9]+", name) if w}
+    domain = (item.get("domain") or "").lower()
+
+    def variants(word: str) -> tuple[str, ...]:
+        # "books" should find the "book" domain, "museums" the
+        # "museum" in a name: try the naive singular beside the word.
+        return (word, word[:-1]) if word.endswith("s") and len(word) > 3 \
+            else (word,)
+
+    for phrase in exclusions:
+        if phrase in (name, short, domain) or phrase in tags:
+            return phrase
+        if any(v in (domain,) for v in variants(phrase)):
+            return phrase
+        for word in phrase.split():
+            if len(word) < 3:
+                continue
+            if any(v in tags or v in name_words for v in variants(word)):
+                return phrase
+    return None
+
+
 def parse_request(text: str,
                   reference_date: _date | None = None,
                   timetable_provider=None) -> ParsedRequest:
@@ -455,4 +565,5 @@ def parse_request(text: str,
                          seed_lists=seed_lists, leg_dates=leg_dates,
                          date_warnings=date_warnings,
                          transfers=transfers,
-                         travel_warnings=travel_warnings)
+                         travel_warnings=travel_warnings,
+                         exclusions=extract_exclusions(text))

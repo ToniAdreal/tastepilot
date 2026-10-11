@@ -88,7 +88,12 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    fits your taste" line grounded in the Qloo correlation that produced
    it (Nemotron via Nebius Token Factory, with a deterministic template
    fallback; the LLM writes explanations only — it can never create a
-   recommendation).
+   recommendation). A request can also state negative preferences —
+   "no jazz", "avoid ramen and wine", "allergic to shellfish" — which
+   are captured deterministically and applied as a filter after the
+   evidence check: an excluded item is reported with the phrase it
+   matched and its (passing) verification, removed by preference and
+   never confused with a checker rejection.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,

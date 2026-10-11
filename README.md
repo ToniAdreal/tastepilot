@@ -42,7 +42,10 @@ tastepilot/
                watchlist / playlist / reading list, bulleted or delimited —
                multi-city legs: every city mentioned, in mention order —
                and date-aware legs: explicit / range / relative dates
-               attached per leg, with ordering + pacing warnings)
+               attached per leg, with ordering + pacing warnings;
+               negative preferences: short cued clauses — "no jazz",
+               "avoid ramen and wine", "allergic to shellfish" — are
+               captured as exclusions the agent filters against)
   travel.py    inter-leg travel-time feasibility: offline door-to-door
                transfer estimates (haversine distance between leg
                cities; surface under 400 km, air above) checked
@@ -305,6 +308,18 @@ baked into the image or the repo.
   (`seed_lists`: label + items) and the UI status line names them.
   Delimiters are commas, semicolons, bullets, and newlines only —
   `and` never splits, so "Klara and the Sun" stays one seed.
+* A request can also say what to leave out: a short cued clause —
+  "no jazz", "avoid ramen and wine", "allergic to shellfish",
+  "skip the museums", "no books" — is captured deterministically as
+  an exclusion and applied by the agent as a filter AFTER the
+  evidence checker, by exact name/tag/domain match (naive singulars
+  count, so "books" finds the book domain). An excluded item is
+  reported separately (`excluded`, with the phrase it matched and
+  its evidence verification, which stays `ok`): it was removed by
+  preference, not rejected as unbacked — the two lists never mix,
+  and exclusions are never sent to Qloo. Prose that merely contains
+  a cue word is guarded out ("don't want to miss the jazz bars"
+  wants the jazz bars; "never been to Kyoto" is biography).
 * Anyone holding a plan JSON can re-verify it in the browser: the UI's
   "Verify a shared plan" panel posts it to `POST /api/verify`, which
   recomputes the hash chain and every per-item checker verdict from the

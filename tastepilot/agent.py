@@ -9,7 +9,7 @@ from __future__ import annotations
 from . import checker
 from .evidence import EvidenceLog
 from .llm import TemplateExplainer
-from .parser import DEFAULT_SEEDS, parse_request
+from .parser import DEFAULT_SEEDS, exclusion_match, parse_request
 from .qloo import MockQlooClient
 
 ITEMS_PER_DOMAIN = 2
@@ -154,6 +154,37 @@ class TastePilotAgent:
             rep = by_key.get((item["entity"]["id"], item["entity"]["name"],
                               item["evidence_ref"]))
             item["verification"] = rep
+        # Negative preferences (parser.exclusions): a deterministic
+        # filter applied AFTER the evidence checker, never instead of
+        # it. An excluded item was admissible — it keeps its passing
+        # verification report — but the user asked not to see it, so
+        # it leaves the plan's items/groups/legs and is reported
+        # separately as excluded, with the phrase that matched. This
+        # is deliberately a different list from `rejected` (evidence
+        # failures): preference is not a hallucination verdict, and
+        # the checker never learns about exclusions.
+        excluded_items: list[dict] = []
+        if parsed.exclusions:
+            kept: list[dict] = []
+            for item in admissible:
+                matched = exclusion_match(item, parsed.exclusions)
+                if matched is None:
+                    kept.append(item)
+                else:
+                    item["exclusion"] = {"matched": matched,
+                                         "reason": "excluded_by_request"}
+                    excluded_items.append(item)
+            admissible = kept
+        excluded_details = [
+            {"name": i["entity"]["name"], "domain": i["domain"],
+             "location": i["location"],
+             "matched": i["exclusion"]["matched"],
+             "reason": i["exclusion"]["reason"],
+             # The item's evidence verdict, kept visible precisely so
+             # "excluded by preference" can never be mistaken for
+             # "rejected as unbacked": this reads "ok".
+             "verification": (i.get("verification") or {}).get("reason")}
+            for i in excluded_items]
         rejected_details = [
             {"name": r["item"], "domain": r["domain"], "reason": r["reason"]}
             for r in reports if not r["admissible"]]
@@ -226,6 +257,8 @@ class TastePilotAgent:
             "legs": legs,
             "rejected": [i["entity"]["name"] for i in rejected],
             "rejected_details": rejected_details,
+            "exclusions": parsed.exclusions,
+            "excluded": excluded_details,
             "checker": {"passed": final_report["passed"] and bool(admissible),
                         "chain_valid": final_report["chain_valid"],
                         "violations": rejected_report["violations"],

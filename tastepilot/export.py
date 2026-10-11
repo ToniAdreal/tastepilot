@@ -149,6 +149,9 @@ def _provenance_lines(plan) -> list[str]:
         lines.append(f"Timetable: {tt.get('source_file')} "
                      f"({tt.get('format')}) — {tt.get('entries')} "
                      f"service(s)")
+    if plan.get("exclusions"):
+        lines.append("Exclusions: " + ", ".join(
+            _one_line(e) for e in plan["exclusions"]))
     explainer = plan.get("explainer") or {}
     if explainer:
         lines.append(f"Explanations by: {explainer.get('source', 'template')}"
@@ -251,6 +254,14 @@ def render_markdown(plan: dict) -> str:
         out += ["## Rejected by the evidence checker", ""]
         out += [f"- {r.get('name')} ({r.get('domain')}): {r.get('reason')}"
                 for r in rejected] + [""]
+    excluded = plan.get("excluded") or []
+    if excluded:
+        out += ["## Excluded by your request", ""]
+        out += [f"- {r.get('name')} ({r.get('domain')}): matched "
+                f"exclusion '{r.get('matched')}' — evidence-backed "
+                f"(verification: {r.get('verification')}), removed by "
+                f"preference, not by the checker"
+                for r in excluded] + [""]
     handoffs = _handoff_lines(plan)
     if handoffs:
         out += ["## Handoffs (your own calendar / maps)", ""]
@@ -291,6 +302,14 @@ def render_text(plan: dict) -> str:
         out += ["Rejected by the evidence checker:"]
         out += [f"  * {r.get('name')} ({r.get('domain')}): "
                 f"{r.get('reason')}" for r in rejected] + [""]
+    excluded = plan.get("excluded") or []
+    if excluded:
+        out += ["Excluded by your request:"]
+        out += [f"  * {r.get('name')} ({r.get('domain')}): matched "
+                f"exclusion '{r.get('matched')}' — evidence-backed "
+                f"(verification: {r.get('verification')}), removed by "
+                f"preference, not by the checker"
+                for r in excluded] + [""]
     handoffs = _handoff_lines(plan)
     if handoffs:
         out += ["Handoffs (your own calendar / maps):"]

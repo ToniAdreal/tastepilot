@@ -432,6 +432,9 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   const timetableSum = data.timetable && data.timetable.length
     ? ` · Timetable: ${data.timetable.map(t => `${t.source_file} (${t.format}, ${t.entries} services)`).join(', ')}`
     : '';
+  const exclusionSum = data.exclusions && data.exclusions.length
+    ? ` · Exclusions: ${data.exclusions.join(', ')}`
+    : '';
   const legLabel = (l) => (l.location || 'anywhere') +
     (l.start ? ` (${l.start}${l.end ? ' – ' + l.end : ''}` +
       `${l.nights != null ? `, ${l.nights} night${l.nights === 1 ? '' : 's'}` : ''})` : '');
@@ -447,7 +450,7 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   const travelWarnSum = data.travel_warnings && data.travel_warnings.length
     ? ` · Travel warnings: ${data.travel_warnings.length}`
     : '';
-  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${importSum}${timetableSum}${legsSum}${warnSum}${transferSum}${travelWarnSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
+  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${importSum}${timetableSum}${exclusionSum}${legsSum}${warnSum}${transferSum}${travelWarnSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
   const mapsByKey = {};
   for (const hi of (data.handoffs && data.handoffs.items) || []) {
     mapsByKey[hi.name + '|' + (hi.location || '')] = hi.maps_url;
@@ -541,6 +544,14 @@ document.getElementById('f').addEventListener('submit', async (e) => {
     div.className = 'rejected';
     div.textContent = 'Travel warnings: ' +
       data.travel_warnings.map(w => `${w.code} (${w.location || 'anywhere'}): ${w.detail}`).join('; ');
+    out.appendChild(div);
+  }
+  if (data.excluded && data.excluded.length) {
+    const div = document.createElement('div');
+    div.className = 'rejected';
+    div.textContent = 'Excluded by your request (evidence-backed, ' +
+      'removed by preference — not rejected by the checker): ' +
+      data.excluded.map(r => `${r.name} (matched '${r.matched}', verification: ${r.verification})`).join(', ');
     out.appendChild(div);
   }
   if (data.rejected_details && data.rejected_details.length) {

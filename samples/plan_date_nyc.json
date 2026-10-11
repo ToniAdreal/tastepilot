@@ -577,6 +577,8 @@
  ],
  "rejected": [],
  "rejected_details": [],
+ "exclusions": [],
+ "excluded": [],
  "checker": {
   "passed": true,
   "chain_valid": true,
@@ -639,7 +641,7 @@
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-11T02:08:34.310531+00:00",
+  "created_at": "2026-10-11T03:41:08.156476+00:00",
   "verdict": "PASS",
   "entries": [
    {

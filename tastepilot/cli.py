@@ -221,8 +221,13 @@ def main(argv: list[str] | None = None) -> int:
         Path(args.out).write_text(text, encoding="utf-8")
     print(f"scenario={result['scenario']} mode={result['mode']} "
           f"items={len(result['items'])} rejected={len(result['rejected'])} "
+          f"excluded={len(result.get('excluded', []))} "
           f"checker_passed={result['checker']['passed']} "
           f"chain_valid={result['checker']['chain_valid']}")
+    for ex in result.get("excluded", []):
+        print(f"  excluded: {ex['name']} ({ex['domain']}) — matched "
+              f"exclusion '{ex['matched']}' "
+              f"(evidence verification: {ex.get('verification')})")
     for imp in result.get("imports", []):
         print(f"  import: {imp['source_file']} ({imp['format']}) "
               f"— {len(imp['items'])} seed(s)")
