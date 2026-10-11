@@ -734,6 +734,45 @@ async function doTimeline(basePlan, okBranches, outEl) {
   outEl.appendChild(bundleOut);
   outEl.appendChild(multiBtn);
   outEl.appendChild(multiOut);
+  // Push notifications: register a webhook on the multi-feed —
+  // TastePilot POSTs a multi_feed.subscribed test delivery on
+  // registration and a multi_feed.updated delivery on every
+  // in-place update, recording each delivery on the feed.
+  const hookUrl = document.createElement('input');
+  hookUrl.type = 'text'; hookUrl.className = 'webhookurl';
+  hookUrl.placeholder = 'Webhook URL for push notifications (https://…)';
+  const hookBtn = document.createElement('button');
+  hookBtn.type = 'button'; hookBtn.className = 'webhookbtn';
+  hookBtn.textContent = 'Register push webhook';
+  const hookOut = document.createElement('div');
+  hookOut.className = 'meta hookout';
+  hookBtn.addEventListener('click', async () => {
+    if (!multiFeedId) {
+      hookOut.textContent = 'Create the multi-timeline subscription first.';
+      return;
+    }
+    const url = hookUrl.value.trim();
+    if (!url) { hookOut.textContent = 'Enter a webhook URL first.'; return; }
+    const r = await fetch('/api/multi-feeds/' + multiFeedId + '/webhooks',
+      {method: 'POST',
+       headers: {'Content-Type': 'application/json', ...ownerHeaders()},
+       body: JSON.stringify({url})});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      hookOut.textContent = 'Webhook error: ' + (d.error || r.status);
+      return;
+    }
+    const dlv = d.delivery || {};
+    hookOut.textContent = 'Push webhook registered: ' + d.host +
+      ' (id ' + d.webhook_id + ') — test delivery ' +
+      (dlv.status || 'not attempted') +
+      '. Updates to this feed will be pushed here; the delivery ' +
+      'log is at ' + location.origin + '/api/multi-feeds/' +
+      multiFeedId + '/notifications.';
+  });
+  outEl.appendChild(hookUrl);
+  outEl.appendChild(hookBtn);
+  outEl.appendChild(hookOut);
 }
 
 async function doExplore(basePlan, branches, resultsEl) {

@@ -214,6 +214,25 @@ the reason recorded (the demo never goes down because the LLM did).
     `TASTEPILOT_MULTI_FEED_FILE` multi-feeds live in the
     server process; with it set they survive restarts.
     `GET /api/health` reports the multi-feed store.
+22. Push-webhook probe (webhook notifications): with the
+    bundle feed from probe 21 live, `POST
+    /api/multi-feeds/<id>/webhooks` with `{"url":
+    "https://example.org/hook"}` (a receiver you control)
+    → `201` naming the webhook by id + host label only,
+    with a `multi_feed.subscribed` test delivery recorded
+    (delivered, or failed with its category if the receiver
+    is unreachable — registration stands either way).
+    `GET /api/multi-feeds/<id>/webhooks` lists it by host
+    label; `POST /api/multi-feeds/<id>` (the probe-21
+    update) → the response's `notifications` shows one
+    `multi_feed.updated` delivery for the new version, and
+    `GET /api/multi-feeds/<id>/notifications` shows both
+    deliveries in order. A URL with credentials
+    (`https://user:pass@…`) → `400` `bad_webhook_url`.
+    `DELETE /api/multi-feeds/<id>/webhooks/<webhook_id>`
+    → `200`, the list is empty again, and a further update
+    pushes nothing. On an owned feed, registering or
+    removing a webhook without the owner's token → `403`.
 
 ## Notes
 

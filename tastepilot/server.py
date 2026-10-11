@@ -148,8 +148,8 @@ Routes:
                                ETag: a poller presenting the etag in
                                If-None-Match gets 304 while nothing
                                changed — the poll-based change
-                               notification. No subscriber registry
-                               is kept and nothing is pushed.
+                               notification. Push is opt-in per feed
+                               via registered webhooks (below).
   GET  /api/multi-feeds/<id>   metadata + per-timeline recomputed
                                verdicts + version + etag.
   GET  /api/multi-feeds/<id>/changes
@@ -159,9 +159,39 @@ Routes:
   POST /api/multi-feeds/<id>   replace the bundle in place (same
                                id, version incremented, change
                                logged, expiry renewed; owner rule
-                               as for feeds).
+                               as for feeds). A successful update
+                               also pushes a multi_feed.updated
+                               notification to every webhook
+                               registered on the feed (below) and
+                               records each delivery.
   DELETE /api/multi-feeds/<id> revoke a multi-feed (owner rule as
                                for feeds).
+  POST /api/multi-feeds/<id>/webhooks
+                               {"url": ...} -> register a push
+                               webhook (tastepilot.notify) on the
+                               feed: the URL is stored inside the
+                               feed entry (it is the delivery
+                               address) and named everywhere else
+                               by host label only. Registration
+                               fires one multi_feed.subscribed test
+                               delivery to the new webhook. Owner
+                               rule as for the feed; at most 4
+                               webhooks per feed.
+  GET  /api/multi-feeds/<id>/webhooks
+                               the feed's registered webhooks
+                               (webhook id + host label + created
+                               time; never the stored URLs).
+  DELETE /api/multi-feeds/<id>/webhooks/<webhook_id>
+                               remove one webhook (owner rule as
+                               for the feed).
+  GET  /api/multi-feeds/<id>/notifications
+                               the feed's capped push delivery
+                               log: one record per delivery
+                               attempt (registration pings and
+                               update pushes), with its outcome —
+                               how a subscriber audits what was
+                               pushed without any registry beyond
+                               their own feed's webhooks.
   GET  /api/shares             the caller's own share links (dashboard):
                                requires an ``X-Owner-Token`` header and
                                returns only the shares that token owns —
@@ -254,7 +284,12 @@ Persistence, expiry, revocation:
     revocation. Each entry additionally carries a version and a
     capped change log (persisted with the entry), and its .ics
     response carries an ETag so pollers can detect changes with
-    If-None-Match instead of downloading the calendar.
+    If-None-Match instead of downloading the calendar. A feed
+    entry also carries its registered webhooks and its capped
+    delivery log (both persisted with the entry): on an in-place
+    update the server pushes a notification to every webhook
+    via tastepilot.notify and records each delivery; a failed
+    delivery never fails the update.
 
 Hardening (Oct 21–24 milestone):
   * Request bodies are capped (``MAX_BODY_BYTES``) and plan text is capped
@@ -295,6 +330,10 @@ from .export import (TIMELINE_FORMATS, export_multi_timeline_ics,
                      export_plan, export_timeline, media_for,
                      validate_multi_timelines)
 from .imports import parse_import_bytes
+from .notify import (MAX_DELIVERIES, MAX_WEBHOOKS_PER_FEED,
+                     build_notification, deliver_to_webhooks,
+                     validate_webhook_url, webhook_host_label,
+                     webhook_id_for)
 from .profiles import ProfileStore
 from .timeline import branch_timeline
 from .swap import (explore_branches, suggest_branches, swap_history,
@@ -332,6 +371,8 @@ MAX_MULTI_FEED_BODY_BYTES = 2 * 1024 * 1024  # a bundle carries up to
                                  # branch plans — bounded, but larger
                                  # than the single-plan verify cap
 MULTI_FEED_FILE_ENV_VAR = "TASTEPILOT_MULTI_FEED_FILE"  # persistence
+MAX_WEBHOOK_BODY_BYTES = MAX_BODY_BYTES  # a webhook registration is
+                                 # one small {"url": ...} object
 PROFILE_FILE_ENV_VAR = "TASTEPILOT_PROFILE_FILE"  # opt-in profile store
 MAX_PROFILES = 256               # owners with a persistent profile
 OWNER_TOKEN_HEADER = "X-Owner-Token"  # per-browser owner credential
@@ -980,7 +1021,11 @@ class MultiTimelineFeedStore:
     a poller — a calendar app or the changes endpoint — detect
     a change cheaply. There is no push channel and no subscriber
     registry: TastePilot keeps no list of who polls, and sends
-    nothing to anyone.
+    nothing to anyone. The generic push half built later
+    (tastepilot.notify) is layered on this store as opt-in,
+    per-feed webhook registrations with a capped delivery log;
+    a feed without webhooks keeps exactly this poll-only
+    behaviour.
 
     Everything else mirrors TimelineFeedStore: 30-day expiry
     renewed only by an explicit owner update, DELETE revocation,
@@ -1056,6 +1101,15 @@ class MultiTimelineFeedStore:
                 "changes": [c for c in changes
                             if isinstance(c, dict)][-self.MAX_CHANGES:]
                 if isinstance(changes, list) else [],
+                "webhooks": [w for w in entry.get("webhooks", [])
+                             if isinstance(w, dict)
+                             and isinstance(w.get("url"), str)
+                             and isinstance(w.get("webhook_id"), str)
+                             ][:MAX_WEBHOOKS_PER_FEED]
+                if isinstance(entry.get("webhooks"), list) else [],
+                "deliveries": [d for d in entry.get("deliveries", [])
+                               if isinstance(d, dict)][-MAX_DELIVERIES:]
+                if isinstance(entry.get("deliveries"), list) else [],
             }
             if isinstance(entry.get("owner_hash"), str):
                 loaded["owner_hash"] = entry["owner_hash"]
@@ -1109,7 +1163,9 @@ class MultiTimelineFeedStore:
                 "version": entry["version"],
                 "etag": multi_feed_etag(entry["payload"],
                                          entry["version"]),
-                "changes": len(entry["changes"])}
+                "changes": len(entry["changes"]),
+                "webhooks": len(entry.get("webhooks", [])),
+                "deliveries": len(entry.get("deliveries", []))}
 
     def _new_id(self) -> str:
         for _ in range(100):
@@ -1140,7 +1196,8 @@ class MultiTimelineFeedStore:
             entry = {"payload": copy.deepcopy(payload),
                      "created_at": now, "updated_at": now,
                      "expires_at": now + self.ttl_seconds,
-                     "version": 1, "changes": []}
+                     "version": 1, "changes": [],
+                     "webhooks": [], "deliveries": []}
             digest = owner_token_hash(owner_token)
             if digest is not None:
                 entry["owner_hash"] = digest
@@ -1231,6 +1288,128 @@ class MultiTimelineFeedStore:
     def revoke(self, feed_id: str, owner_token=None) -> bool:
         return self.revoke_status(feed_id, owner_token) == "revoked"
 
+    # -- push webhooks (tastepilot.notify) ----------------------------
+    # A webhook is a subscriber-supplied http(s) URL stored inside
+    # the feed entry (it is the delivery address). Every listing
+    # names it by host label only. Registration/management follows
+    # the feed's ownership rule: an owned feed answers only its
+    # owner's token; an unowned feed keeps the link-holder rule.
+
+    def _webhook_gate(self, feed_id: str, owner_token):
+        """(entry, status): the live entry when access is
+        allowed, else None + not_found/forbidden. The caller
+        already pruned expired entries via any store read, but
+        every webhook method prunes first like the others."""
+        if self._prune_expired():
+            self._save()
+        entry = self._entries.get(feed_id)
+        if entry is None:
+            return None, "not_found"
+        digest = entry.get("owner_hash")
+        if digest is not None and \
+                owner_token_hash(owner_token) != digest:
+            return None, "forbidden"
+        return entry, "ok"
+
+    @staticmethod
+    def _webhook_meta(webhook: dict) -> dict:
+        return {"webhook_id": webhook.get("webhook_id"),
+                "host": webhook.get("host"),
+                "created_at": webhook.get("created_at")}
+
+    def add_webhook(self, feed_id: str, url, owner_token=None):
+        """Register (or re-register) a webhook URL on a feed.
+        Returns (status, meta): status is ok / not_found /
+        forbidden / too_many_webhooks; re-registering the same
+        URL is idempotent (same deterministic id, original
+        created_at). The URL itself is validated by the caller
+        via notify.validate_webhook_url before this is called
+        for a new URL, and re-validated here for safety."""
+        with self._lock:
+            entry, status = self._webhook_gate(feed_id, owner_token)
+            if entry is None:
+                return status, None
+            url = validate_webhook_url(url)
+            webhook_id = webhook_id_for(url)
+            for webhook in entry.get("webhooks", []):
+                if webhook.get("webhook_id") == webhook_id:
+                    return "ok", self._webhook_meta(webhook)
+            if len(entry.get("webhooks", [])) >= MAX_WEBHOOKS_PER_FEED:
+                return "too_many_webhooks", None
+            webhook = {"webhook_id": webhook_id, "url": url,
+                       "host": webhook_host_label(url),
+                       "created_at": _iso(self._clock())}
+            entry.setdefault("webhooks", []).append(webhook)
+            self._save()
+            return "ok", self._webhook_meta(webhook)
+
+    def webhooks(self, feed_id: str, owner_token=None):
+        """(status, [webhook meta]) — host labels only, never
+        the stored URLs."""
+        with self._lock:
+            entry, status = self._webhook_gate(feed_id, owner_token)
+            if entry is None:
+                return status, None
+            return "ok", [self._webhook_meta(w)
+                          for w in entry.get("webhooks", [])]
+
+    def webhook_entries(self, feed_id: str) -> list:
+        """The raw webhook entries (URLs included) for delivery.
+        Internal only: handlers call this after the operation
+        that needed the URLs has already passed its gate."""
+        with self._lock:
+            entry = self._entries.get(feed_id)
+            if entry is None:
+                return []
+            return copy.deepcopy(entry.get("webhooks", []))
+
+    def remove_webhook(self, feed_id: str, webhook_id: str,
+                       owner_token=None) -> str:
+        """ok status is "removed"; also not_found (feed),
+        forbidden, webhook_not_found."""
+        with self._lock:
+            entry, status = self._webhook_gate(feed_id, owner_token)
+            if entry is None:
+                return status
+            webhooks = entry.get("webhooks", [])
+            kept = [w for w in webhooks
+                    if w.get("webhook_id") != webhook_id]
+            if len(kept) == len(webhooks):
+                return "webhook_not_found"
+            entry["webhooks"] = kept
+            self._save()
+            return "removed"
+
+    def record_deliveries(self, feed_id: str, records) -> list:
+        """Append delivery records (stamped with the store
+        clock), capped at notify.MAX_DELIVERIES per feed, and
+        return the stamped copies. A feed that vanished between
+        the operation and the recording simply keeps nothing."""
+        with self._lock:
+            entry = self._entries.get(feed_id)
+            if entry is None:
+                return []
+            stamped = []
+            for record in records or []:
+                item = copy.deepcopy(record)
+                item["at"] = _iso(self._clock())
+                item["feed_id"] = feed_id
+                stamped.append(item)
+            entry.setdefault("deliveries", []).extend(stamped)
+            entry["deliveries"] = \
+                entry["deliveries"][-MAX_DELIVERIES:]
+            self._save()
+            return stamped
+
+    def deliveries(self, feed_id: str, owner_token=None):
+        """(status, [delivery record]) — the feed's capped push
+        delivery log, oldest first."""
+        with self._lock:
+            entry, status = self._webhook_gate(feed_id, owner_token)
+            if entry is None:
+                return status, None
+            return "ok", copy.deepcopy(entry.get("deliveries", []))
+
 def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                  max_shared_plans: int = MAX_SHARED_PLANS,
                  share_ttl_seconds: float = DEFAULT_SHARE_TTL_SECONDS,
@@ -1246,7 +1425,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                  max_multi_feeds: int = MAX_MULTI_TIMELINE_FEEDS,
                  multi_feed_ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS,
                  multi_feed_file: str | Path | None = None,
-                 multi_feed_clock=None):
+                 multi_feed_clock=None,
+                 webhook_transport=None, webhook_sleeper=None):
     # response_id -> (record, response) for plans produced by this server,
     # bounded FIFO: the oldest sealed responses are evicted first.
     evidence_cache: OrderedDict[str, tuple[dict, dict]] = OrderedDict()
@@ -1493,6 +1673,14 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                         "/" not in rest[:-len("/changes")]:
                     self._handle_multi_feed_changes(
                         rest[:-len("/changes")])
+                elif rest.endswith("/webhooks") and \
+                        "/" not in rest[:-len("/webhooks")]:
+                    self._handle_webhooks_list(
+                        rest[:-len("/webhooks")])
+                elif rest.endswith("/notifications") and \
+                        "/" not in rest[:-len("/notifications")]:
+                    self._handle_notifications(
+                        rest[:-len("/notifications")])
                 elif rest and "/" not in rest:
                     self._handle_multi_feed_meta(rest)
                 else:
@@ -2221,6 +2409,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 "url": f"/api/multi-feeds/{feed_id}.ics",
                 "feed_url": f"/api/multi-feeds/{feed_id}.ics",
                 "changes_url": f"/api/multi-feeds/{feed_id}/changes",
+                "notifications_url":
+                    f"/api/multi-feeds/{feed_id}/notifications",
                 "all_passed": all_passed,
                 "timelines_summary": summaries,
             })
@@ -2253,14 +2443,22 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                     403, {"error": "only the owner can update "
                                    "this multi-feed"})
                 return
+            # Push the change to registered webhooks (recorded in
+            # the feed's delivery log; a failed delivery never
+            # fails this update).
+            deliveries = self._notify_multi_feed(
+                feed_id, "updated", all_passed)
             self._send_json(200, {
                 **meta,
                 "url": f"/api/multi-feeds/{feed_id}.ics",
                 "feed_url": f"/api/multi-feeds/{feed_id}.ics",
                 "changes_url": f"/api/multi-feeds/{feed_id}/changes",
+                "notifications_url":
+                    f"/api/multi-feeds/{feed_id}/notifications",
                 "all_passed": all_passed,
                 "timelines_summary": summaries,
                 "updated": True,
+                "notifications": deliveries,
             })
 
         def _handle_multi_feed_fetch(self, feed_id):
@@ -2326,6 +2524,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 "url": f"/api/multi-feeds/{feed_id}.ics",
                 "feed_url": f"/api/multi-feeds/{feed_id}.ics",
                 "changes_url": f"/api/multi-feeds/{feed_id}/changes",
+                "notifications_url":
+                    f"/api/multi-feeds/{feed_id}/notifications",
                 "all_passed": all_passed,
                 "timelines_summary": summaries,
             })
@@ -2345,6 +2545,144 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return
             result["url"] = f"/api/multi-feeds/{feed_id}.ics"
             self._send_json(200, result)
+
+        def _notify_multi_feed(self, feed_id, kind, all_passed,
+                               only_webhook_id=None):
+            """Push one notification for a multi-feed change to
+            its registered webhooks and record the deliveries.
+            Best-effort by design: a failing endpoint is recorded
+            as a failed delivery and never fails (or rolls back)
+            the feed operation that triggered it. Returns the
+            stamped delivery records ([] when no webhook matches).
+            """
+            entries = multi_feed_store.webhook_entries(feed_id)
+            if only_webhook_id is not None:
+                entries = [e for e in entries
+                           if e.get("webhook_id") == only_webhook_id]
+            if not entries:
+                return []
+            meta = multi_feed_store.meta(feed_id)
+            if meta is None:
+                return []
+            payload = build_notification(
+                feed_id, kind, meta["version"], meta["etag"],
+                meta["timelines"], all_passed,
+                _iso(time.time()))
+            kwargs = {}
+            if webhook_transport is not None:
+                kwargs["transport"] = webhook_transport
+            if webhook_sleeper is not None:
+                kwargs["sleeper"] = webhook_sleeper
+            records = deliver_to_webhooks(entries, payload, **kwargs)
+            return multi_feed_store.record_deliveries(feed_id, records)
+
+        def _handle_webhook_create(self, feed_id):
+            """Register a push webhook on a multi-feed:
+            POST /api/multi-feeds/<id>/webhooks {"url": ...}.
+            Registration fires one multi_feed.subscribed test
+            delivery to the new webhook (recorded either way),
+            so the subscriber learns immediately whether their
+            endpoint works. The response names the webhook by id
+            + host label only — the stored URL is never echoed.
+            """
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_WEBHOOK_BODY_BYTES:
+                self._send_json(413, {"error": "request body too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            if not isinstance(payload, dict) or \
+                    not isinstance(payload.get("url"), str):
+                self._send_json(
+                    400, {"error": "webhook failed: bad_webhook_url"})
+                return
+            try:
+                url = validate_webhook_url(payload["url"])
+            except ValueError as exc:  # categorised, never echoes URL
+                self._send_json(
+                    400, {"error": f"webhook failed: {exc}"})
+                return
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            status, meta = multi_feed_store.add_webhook(
+                feed_id, url, owner_token=token)
+            if status == "not_found":
+                self._send_json(404, {"error": "unknown multi-feed id"})
+                return
+            if status == "forbidden":
+                self._send_json(
+                    403, {"error": "only the owner can manage "
+                                   "webhooks for this multi-feed"})
+                return
+            if status == "too_many_webhooks":
+                self._send_json(
+                    400, {"error": "webhook failed: too_many_webhooks"})
+                return
+            deliveries = self._notify_multi_feed(
+                feed_id, "subscribed", None,
+                only_webhook_id=meta["webhook_id"])
+            self._send_json(201, {
+                **meta, "feed_id": feed_id,
+                "delivery": deliveries[0] if deliveries else None,
+            })
+
+        def _handle_webhooks_list(self, feed_id):
+            """The feed's registered webhooks (host labels only)."""
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            status, webhooks = multi_feed_store.webhooks(
+                feed_id, owner_token=token)
+            if status == "not_found":
+                self._send_json(404, {"error": "unknown multi-feed id"})
+                return
+            if status == "forbidden":
+                self._send_json(
+                    403, {"error": "only the owner can view "
+                                   "webhooks for this multi-feed"})
+                return
+            self._send_json(200, {"feed_id": feed_id,
+                                  "webhooks": webhooks,
+                                  "count": len(webhooks)})
+
+        def _handle_notifications(self, feed_id):
+            """The feed's push delivery log: one record per
+            delivery attempt (registration pings + update pushes),
+            oldest first — how a subscriber audits what was
+            pushed, what arrived, and what failed, without any
+            server-side subscriber registry beyond their own
+            feed's webhooks."""
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            status, deliveries = multi_feed_store.deliveries(
+                feed_id, owner_token=token)
+            if status == "not_found":
+                self._send_json(404, {"error": "unknown multi-feed id"})
+                return
+            if status == "forbidden":
+                self._send_json(
+                    403, {"error": "only the owner can view "
+                                   "notifications for this multi-feed"})
+                return
+            self._send_json(200, {"feed_id": feed_id,
+                                  "deliveries": deliveries,
+                                  "count": len(deliveries)})
 
         def _handle_suggest(self):
             """Guided branch suggestions for one base plan.
@@ -2487,9 +2825,13 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 self._handle_multi_feed_create()
                 return
             if path.startswith("/api/multi-feeds/"):
-                feed_id = unquote(path[len("/api/multi-feeds/"):])
-                if feed_id and "/" not in feed_id:
-                    self._handle_multi_feed_update(feed_id)
+                rest = unquote(path[len("/api/multi-feeds/"):])
+                if rest.endswith("/webhooks") and \
+                        "/" not in rest[:-len("/webhooks")]:
+                    self._handle_webhook_create(
+                        rest[:-len("/webhooks")])
+                elif rest and "/" not in rest:
+                    self._handle_multi_feed_update(rest)
                 else:
                     self._send_json(
                         404, {"error": "unknown multi-feed id"})
@@ -2613,7 +2955,31 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                     self._send_json(404, {"error": "no profile stored"})
                 return
             if path.startswith("/api/multi-feeds/"):
-                feed_id = unquote(path[len("/api/multi-feeds/"):])
+                rest = unquote(path[len("/api/multi-feeds/"):])
+                parts = rest.split("/")
+                if len(parts) == 3 and parts[1] == "webhooks" \
+                        and parts[0] and parts[2]:
+                    token, invalid = self._owner_token()
+                    if invalid:
+                        self._send_json(
+                            400, {"error": "invalid owner token"})
+                        return
+                    status = multi_feed_store.remove_webhook(
+                        parts[0], parts[2], owner_token=token)
+                    if status == "removed":
+                        self._send_json(200, {"removed": True,
+                                              "feed_id": parts[0],
+                                              "webhook_id": parts[2]})
+                        return
+                    if status == "forbidden":
+                        self._send_json(
+                            403, {"error": "only the owner can manage "
+                                           "webhooks for this multi-feed"})
+                        return
+                    self._send_json(
+                        404, {"error": "unknown multi-feed or webhook id"})
+                    return
+                feed_id = rest
                 if not feed_id or "/" in feed_id:
                     self._send_json(
                         404, {"error": "unknown multi-feed id"})

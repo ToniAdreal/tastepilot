@@ -98,6 +98,8 @@ tastepilot/
                change log and an ETag for poll-based change
                notification (If-None-Match → 304 while unchanged),
                same expiry/revocation/ownership/persistence rules);
+               push webhooks on multi-feeds (notify.py — see the
+               Demo section)
                hardened: input caps, security headers, bounded caches,
                leak-free 500s)
   export.py    take-away itinerary exports (Markdown / plain text /
@@ -115,6 +117,16 @@ tastepilot/
                export_multi_timeline_ics renders a bundle of named
                timelines as one calendar (one series per timeline
                per branch) under the same doctrine
+  notify.py    push change notifications for calendar
+               subscriptions: subscriber-registered webhooks on
+               multi-feeds — a URL is validated (http(s), no
+               credentials in the URL), stored only inside the
+               feed entry, and named everywhere else by host
+               label only; delivery is a plain JSON POST with
+               bounded retries on transient failures through an
+               injectable transport, no credential ever sent;
+               every delivery outcome is a record the feed store
+               keeps (capped per feed)
   handoff.py   native handoffs: one-tap links into the user's own
                apps — a Google Calendar template URL per dated leg
                (all-day, exclusive end; a dateless leg gets none —
@@ -655,8 +667,24 @@ baked into the image or the repo.
   at write time), and the calendar response carries an ETag —
   a poller presenting it in `If-None-Match` gets a cheap `304`
   until an update changes the etag, so subscribers learn a
-  feed changed without downloading it. No subscriber registry
-  is kept and nothing is pushed. Bundles expire after 30 days
+  feed changed without downloading it. Push is opt-in per feed:
+  a subscriber registers a webhook (`POST
+  /api/multi-feeds/<id>/webhooks {"url": ...}`, at most 4 per
+  feed, owner rule as for the feed) — registration fires one
+  `multi_feed.subscribed` test delivery, and every in-place
+  update then POSTs a `multi_feed.updated` notification (new
+  version, etag, timeline names, recomputed verdict) to every
+  registered webhook with bounded retries on transient
+  failures. The URL is stored only inside the feed entry (it
+  is the delivery address) and named everywhere else by host
+  label only, so a query string never reaches a response or a
+  log; URLs carrying credentials are refused. Each delivery's
+  outcome is recorded in the feed's capped delivery log (`GET
+  /api/multi-feeds/<id>/notifications`), and a failed delivery
+  never fails the update that triggered it. Webhooks are
+  listed (`GET .../webhooks`, host labels only) and removed
+  (`DELETE .../webhooks/<id>`) under the same owner rule, and
+  persist with the feed in file mode. Bundles expire after 30 days
   (an update renews), can be revoked (`DELETE
   /api/multi-feeds/<id>`), follow the same owner-token rules
   as feeds, and persist across restarts with `serve

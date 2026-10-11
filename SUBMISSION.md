@@ -205,8 +205,16 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    so a subscriber polling with If-None-Match gets a cheap
    304 while nothing changed and the new series (with a new
    etag) the first poll after an update: poll-based change
-   notification, with no subscriber registry kept and
-   nothing pushed to anyone.
+   notification. And change also pushes: a subscriber can
+   register a webhook on the bundle feed — registration
+   fires one test delivery, and every in-place update then
+   POSTs the change (new version, etag, timeline names,
+   recomputed verdict) to every registered webhook with
+   bounded retries, each delivery's outcome recorded in the
+   feed's delivery log; the webhook URL is stored only
+   inside the feed entry and named everywhere else by host
+   label only, and a failed delivery never fails the update
+   that triggered it.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -340,14 +348,16 @@ stops being a liability and becomes pure upside.
   the user across devices without them carrying a token, with
   conflict resolution when two devices save lessons offline,
   instead of the single-server store the built profile uses.
-- Push change notifications for calendar subscriptions — the
-  built multi-timeline feed (one stable, subscribable URL
-  carrying many timelines at once, versioned with a change
-  log subscribers poll — or detect via its ETag — to learn
-  when the bundle changes) graduating to a hosted service
-  that pushes a notification (webhook or email) to
-  subscribers the moment a feed changes, instead of
-  subscribers polling the change log silently.
+- Hosted push-notification accounts for calendar
+  subscriptions — the built generic webhooks (a subscriber
+  registers an endpoint on their multi-timeline feed;
+  registration pings it once, and every in-place update
+  pushes the change to it with bounded retries, each
+  delivery recorded in the feed's log) graduating to a
+  hosted notification service with subscriber accounts —
+  managed endpoints, email delivery, and delivery
+  guarantees — instead of endpoints a subscriber registers
+  per feed on a single server.
 
 ## Built with
 
