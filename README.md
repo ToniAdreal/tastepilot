@@ -88,7 +88,10 @@ tastepilot/
                Letterboxd / Goodreads CSV, generic CSV/JSON/text lists —
                parsed offline (no account login, no network) into seeds
                with format + item provenance; size/item caps, categorised
-               errors, basename-only recording
+               errors, basename-only recording; the same schema can also
+               be fetched over HTTP from a user-supplied taste-feed
+               endpoint (fetch-once, bounded retries, host-only
+               provenance, formats stamped *_api_*)
   cli.py       plan / smoke / verify / serve commands
 tests/         unit + end-to-end tests, all green in mock (Judge) mode
 samples/       sample plans with their sealed evidence records
@@ -251,6 +254,18 @@ baked into the image or the repo.
   file, and malformed files fail cleanly with a categorised error
   (`bad_json`, `no_items`, `too_large`, …) and exit code 2. Files are
   capped at 1 MiB and 200 items.
+* Seeds can also arrive from a taste-feed endpoint: `plan
+  --import-url <url>` fetches a list serving the same export schema
+  over HTTP (a Spotify-shaped JSON such as `spotify_api_json`, a
+  Letterboxd CSV, or a plain text list) — fetched once with bounded
+  retries on transient failures, with no key or credential ever
+  sent, then parsed exactly like a file and fed through the same
+  sealed seed path. Only the endpoint's host is ever recorded as
+  provenance (`imports`: host, the API-stamped format, items): the
+  full URL — whose query string could carry a token — appears in
+  no plan, summary line, or error message, and fetch failures are
+  categorised (`http_error`, `network_error`, `unsupported`, plus
+  the file parse categories) with exit code 2, never a traceback.
 * Seeds can arrive as a pasted list, not just prose: a request like
   *"a weekend in Kyoto. Watchlist: Spirited Away, An Obscure Reel.
   Playlist: Kind of Blue; Bon Iver"* contributes every list item as a

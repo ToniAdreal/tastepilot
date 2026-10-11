@@ -44,6 +44,12 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    library CSV (or a generic CSV/JSON/text list) — parsed entirely
    offline by `plan --import-file`, with the file's format and items
    recorded as provenance in the plan; no account login is involved.
+   The same schema can also arrive from a taste-feed endpoint
+   serving it over HTTP (`plan --import-url`): fetched once with
+   bounded retries, no credential ever sent, with only the
+   endpoint's host recorded as provenance and its format stamped
+   as an API source — a fetched list is never presented as a
+   downloaded file, or vice versa.
 2. **Plans** by decomposing the scenario into taste domains (film,
    music, food, places, books, brands, destinations). A request naming
    several cities composes a multi-city trip: each city is a leg,
@@ -162,9 +168,11 @@ stops being a liability and becomes pure upside.
 
 ## What's next for TastePilot
 
-- Live connections to external taste accounts (OAuth-linked Spotify /
-  Letterboxd sync) on top of the built export-file imports, so seeds
-  refresh themselves instead of arriving as a downloaded file.
+- Named taste-account API integrations — a specific provider's own
+  API (the Spotify Web API's OAuth flow and schema, a Letterboxd
+  API) wired behind the built generic HTTP taste-feed provider, so
+  seeds refresh themselves from that account instead of arriving as
+  a downloaded file or a generic-schema endpoint.
 - Named timetable API integrations — a specific flight/train
   provider's own API (its auth, its schema) wired behind the built
   generic HTTP timetable provider, so scheduled services refresh

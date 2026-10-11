@@ -37,6 +37,20 @@ title. Catalogue titles are canonicalised exactly as pasted lists
 are, so an imported "Kind of Blue" resolves to the same seed as a
 typed one; unknown titles pass verbatim to Qloo search.
 
+The same export schema can also be *fetched* over HTTP from a
+taste-feed endpoint the user names (``fetch_import``: one GET,
+bounded retries on transient failures like the real Qloo client,
+injectable transport for tests) — the generic form of account
+sync, with no specific provider account, OAuth flow, or key
+involved. The endpoint is fetched once and then parsed exactly
+like a file, and only its host is ever recorded as provenance:
+the full URL (whose query string could carry a token) never
+enters a plan, a log line, or an error message. API-sourced
+formats are stamped accordingly (``spotify_api_json``,
+``letterboxd_api_csv``, …) and carry ``source_kind: "api"``, so a
+fetched list is never presented as a downloaded file, or vice
+versa.
+
 Safety rails, in the same spirit as the server caps: the file is
 capped at 1 MiB, at most 200 items are imported, and titles are
 2–120 characters after cleaning. A malformed file raises
@@ -51,6 +65,10 @@ import csv
 import io
 import json
 import re
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 MAX_IMPORT_BYTES = 1_048_576  # 1 MiB — exports are small; caps abuse
@@ -297,3 +315,100 @@ def load_import(path, source_hint: str | None = None) -> dict:
         raise ValueError(f"unreadable: cannot read import file {p.name}")
     return parse_import_bytes(data, filename=p.name,
                               source_hint=source_hint)
+
+
+#: HTTP statuses worth retrying for a taste-feed fetch: rate limiting
+#: and transient server-side failures, mirroring the real Qloo client.
+#: Other statuses (400/401/403/404) fail immediately.
+TRANSIENT_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
+def _api_origin(url: str) -> tuple[urllib.parse.ParseResult, str]:
+    """Validate a taste-feed URL and derive its provenance label:
+    the host (with port when present) and nothing else — no scheme,
+    path, userinfo, or query string ever reaches a plan or a log."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError("unsupported: import URL must be an "
+                         "http(s) URL with a host")
+    label = parsed.hostname
+    if parsed.port:
+        label = f"{label}:{parsed.port}"
+    return parsed, label
+
+
+def _api_format(fmt: str) -> str:
+    """Stamp a file format as API-sourced: ``spotify_json`` becomes
+    ``spotify_api_json``, ``text_list`` becomes ``text_api_list``."""
+    if "_" in fmt:
+        head, tail = fmt.split("_", 1)
+        return f"{head}_api_{tail}"
+    return f"{fmt}_api"
+
+
+def fetch_import(url: str, transport=None, timeout: float = 10.0,
+                 max_attempts: int = 3, sleeper=None,
+                 source_hint: str | None = None) -> dict:
+    """Fetch one taste-feed endpoint and parse it like a file.
+
+    ``transport`` is injectable for tests: a callable
+    ``(url, timeout) -> (status, body_bytes)``. The default transport
+    is a plain urllib GET with no headers beyond ``accept`` — no key
+    or credential is ever sent. Transient failures (HTTP 429/5xx and
+    transport-level network errors) are retried up to
+    ``max_attempts`` total attempts with exponential backoff through
+    the injectable ``sleeper``. Every failure raises ``ValueError``
+    with a category (``unsupported`` / ``http_error`` /
+    ``network_error``, plus the parse categories of
+    ``parse_import_bytes``) — never a traceback, and never an echo
+    of the URL, its query string, or the response body.
+
+    Returns the ``parse_import_bytes`` shape with provenance
+    rewritten for an API source: ``source_file`` is the endpoint's
+    host label only, ``format`` (and every item's ``source``) is the
+    API-stamped format, and ``source_kind`` is ``"api"``.
+    """
+    parsed_url, origin = _api_origin(url)
+    sleep = sleeper or time.sleep
+    attempts = max(1, max_attempts)
+    filename = Path(urllib.parse.unquote(parsed_url.path)).name \
+        or "taste-api"
+    for attempt in range(attempts):
+        try:
+            if transport is not None:
+                status, body = transport(url, timeout)
+            else:
+                req = urllib.request.Request(
+                    url, headers={"accept": "application/json, text/csv, "
+                                            "text/plain"},
+                    method="GET")
+                try:
+                    with urllib.request.urlopen(req, timeout=timeout) as resp:
+                        status, body = resp.status, resp.read()
+                except urllib.error.HTTPError as exc:  # live path
+                    status, body = exc.code, b""
+        except (urllib.error.URLError, OSError) as exc:
+            # The message names only the exception type — a URLError's
+            # own text can embed the full URL, query string included.
+            if attempt + 1 < attempts:
+                sleep(min(0.5 * (2 ** attempt), 4.0))
+                continue
+            raise ValueError(
+                f"network_error: taste API unreachable "
+                f"({type(exc).__name__})") from exc
+        if status == 200:
+            result = parse_import_bytes(body, filename=filename,
+                                        source_hint=source_hint)
+            api_fmt = _api_format(result["format"])
+            result["format"] = api_fmt
+            for item in result["items"]:
+                item["source"] = api_fmt
+            result["source_file"] = origin
+            result["source_kind"] = "api"
+            return result
+        if status in TRANSIENT_STATUSES and attempt + 1 < attempts:
+            sleep(min(0.5 * (2 ** attempt), 4.0))
+            continue
+        raise ValueError(f"http_error: taste API returned "
+                         f"HTTP {status}")
+    raise ValueError("network_error: taste API request failed")

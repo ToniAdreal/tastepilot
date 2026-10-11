@@ -2,6 +2,7 @@
 
   python -m tastepilot plan "<request>" [--mode mock|real|auto] [--out plan.json]
                              [--import-file taste-export.csv|json|txt ...]
+                             [--import-url https://host/taste.json ...]
                              [--timetable-file services.json|csv ...]
                              [--timetable-url https://host/services.json ...]
   python -m tastepilot smoke [--mode real|auto|mock] [--query Q] [--domain D]
@@ -30,7 +31,7 @@ from pathlib import Path
 from .agent import TastePilotAgent
 from .checker import check_plan
 from .evidence import verify_chain
-from .imports import load_import
+from .imports import fetch_import, load_import
 from .llm import NebiusExplainer, TemplateExplainer
 from .models import DOMAIN_URNS
 from .qloo import QlooError, make_client
@@ -56,6 +57,12 @@ def main(argv: list[str] | None = None) -> int:
                    help="import seeds from an exported taste file "
                         "(Spotify JSON / Letterboxd or Goodreads CSV / "
                         "generic CSV, JSON, or text list); repeatable")
+    p.add_argument("--import-url", action="append", default=[],
+                   dest="import_urls", metavar="URL",
+                   help="seeds from a taste-feed API endpoint serving "
+                        "the same export schema (JSON/CSV/text) over "
+                        "HTTP; fetched once (bounded retries), only "
+                        "its host is recorded; repeatable")
     p.add_argument("--timetable-file", action="append", default=[],
                    dest="timetable_files", metavar="FILE",
                    help="scheduled inter-leg services from a timetable "
@@ -143,6 +150,12 @@ def main(argv: list[str] | None = None) -> int:
     for import_path in getattr(args, "import_files", []) or []:
         try:
             imported.append(load_import(import_path))
+        except ValueError as exc:
+            print(f"error: import failed: {exc}", file=sys.stderr)
+            return 2
+    for import_url in getattr(args, "import_urls", []) or []:
+        try:
+            imported.append(fetch_import(import_url))
         except ValueError as exc:
             print(f"error: import failed: {exc}", file=sys.stderr)
             return 2
