@@ -106,7 +106,12 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    that creates a link presents an owner token (generated locally,
    kept in localStorage; the server stores only its hash), and only
    that token can list the owner's links — each shown with its
-   recomputed verdict — or revoke them. And a plan leaves the app
+   recomputed verdict — or revoke them. The token is portable:
+   every owned surface names it only by a fingerprint (the first
+   12 characters of its hash), and pasting the token into another
+   browser — validated against the server before it is adopted —
+   gives that browser the identical dashboard, so a user's links
+   follow them between devices with no sign-up at all. And a plan leaves the app
    as a take-away itinerary: Markdown, plain-text, and iCalendar
    exports (one all-day event per dated leg; a dateless plan is
    refused rather than assigned invented dates), each carrying a
@@ -121,7 +126,7 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    browser completes the action. The same handoffs also come in
    each platform's native dialect — an Apple Maps link and an
    Android `geo:` intent for every leg and recommendation — and
-   as an OS share-sheet payload (Web Share API): a title and a
+   as an OS share sheet payload (Web Share API): a title and a
    short text naming the legs and their recommendations, whose
    verification line is recomputed from the sealed evidence, so
    a plan shared to the user's own messaging or notes apps
@@ -197,10 +202,10 @@ stops being a liability and becomes pure upside.
   generic HTTP timetable provider, so scheduled services refresh
   themselves from that provider instead of arriving as a supplied
   file or a generic-schema endpoint.
-- Full user accounts (sign-up/login with cross-device sync) on top
-  of the built token-owned share management, so a user's link list
-  and dashboard follow them between browsers instead of living in
-  one browser's localStorage.
+- Full user accounts (sign-up/login) on top of the built
+  token-owned share management and token portability, so a user's
+  identity is an account they sign into instead of a token they
+  carry between browsers themselves.
 - A native mobile app on top of the built share-sheet payload
   and platform maps links, with two-way calendar sync, instead
   of the one-tap template/search links and one-way share

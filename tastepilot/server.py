@@ -75,6 +75,12 @@ Owner-managed shares (no account system):
     revoking an owned share requires that same token. Shares created
     without a token ("legacy" shares) keep the original link-holder
     behaviour and never appear in any owner's list.
+  * The token is portable across devices: pasting the same token
+    into another browser gives that browser the same dashboard —
+    that is the cross-device sync story without an account system.
+    Responses name the token only by its fingerprint (the first 12
+    hex chars of its hash), so two browsers can confirm they hold
+    the same token without exposing the credential.
 
 Persistence, expiry, revocation:
   * The share store is in-memory by default (the original behaviour).
@@ -224,6 +230,19 @@ def owner_token_hash(token) -> str | None:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def owner_fingerprint(token) -> str | None:
+    """Short, non-credential identifier for an owner token: the first
+    12 hex chars of its stored hash, or None for an invalid token.
+
+    A fingerprint lets two browsers confirm they hold the *same*
+    token (cross-device portability) without either side exposing
+    the token or its full hash — 48 bits identify the token for a
+    human check but cannot be used as the credential, and reversing
+    them into a valid token is a preimage search."""
+    digest = owner_token_hash(token)
+    return digest[:12] if digest is not None else None
+
+
 class ShareStore:
     """Bounded store behind the shareable verification links.
 
@@ -333,10 +352,13 @@ class ShareStore:
 
     @staticmethod
     def _meta(share_id: str, entry: dict) -> dict:
+        owner_hash = entry.get("owner_hash")
         return {"share_id": share_id,
                 "created_at": _iso(entry["created_at"]),
                 "expires_at": _iso(entry["expires_at"]),
-                "owned": entry.get("owner_hash") is not None}
+                "owned": owner_hash is not None,
+                "owner_fingerprint": owner_hash[:12]
+                if owner_hash is not None else None}
 
     # -- public API --------------------------------------------------------
 
@@ -539,7 +561,9 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                     if report is not None else None
                 shares.append(entry)
             self._send_json(200, {"shares": shares,
-                                  "count": len(shares)})
+                                  "count": len(shares),
+                                  "owner_fingerprint":
+                                      owner_fingerprint(token)})
 
         def do_GET(self):
             path = urlparse(self.path).path
@@ -721,6 +745,7 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 "verify_url": f"/api/share/{share_id}/verify",
                 "expires_at": meta["expires_at"],
                 "owned": meta["owned"],
+                "owner_fingerprint": meta["owner_fingerprint"],
             })
 
         def do_POST(self):

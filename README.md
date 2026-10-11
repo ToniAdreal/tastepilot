@@ -334,6 +334,19 @@ baked into the image or the repo.
   remain legacy links: link-holder revocation, and they appear in
   no owner's list. Ownership governs management only — every read
   still recomputes verification from the sealed record.
+* The owner token is portable across browsers and devices — the
+  cross-device sync story without an account system. Every owned
+  surface (share creation, the dashboard list) names the token only
+  by its **fingerprint**: the first 12 hex characters of its stored
+  hash, enough for two browsers to confirm they hold the same token
+  and useless as a credential (the full hash is never returned
+  either). The demo UI shows the current browser's fingerprint,
+  copies its token to the local clipboard on request, and can adopt
+  a token pasted from another browser — validating it against
+  `GET /api/shares` *before* replacing its own, so a malformed
+  token never orphans the links this browser already owns. The
+  adopted browser gets the identical dashboard: same links, same
+  fingerprints, same list-and-revoke rights.
 * A plan also leaves as a take-away itinerary: `tastepilot export
   --plan plan.json [--format markdown|text|ics] [--out file]`, the
   demo UI's export row and verify-panel button, and

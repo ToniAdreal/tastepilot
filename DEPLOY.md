@@ -63,6 +63,10 @@ the reason recorded (the demo never goes down because the LLM did).
    owner-managed: “Your share links” in the same browser lists the
    new link with a `PASS` verdict, while a `DELETE` sent without that
    browser's owner token returns `403` and the link stays live.
+   Portability: “Your share links” shows a token fingerprint; copy
+   the token, paste it under “Use this token on this browser” in a
+   second browser → the fingerprint matches and the same dashboard
+   (same links, `PASS` verdicts) appears there.
    Without `TASTEPILOT_SHARE_FILE`
    links live in the server process — a restart clears them; with it
    set (on a persistent volume) they survive restarts.

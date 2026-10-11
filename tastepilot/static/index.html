@@ -79,7 +79,22 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
   created here are registered to that token: this list shows only
   yours, with each link's recomputed verification, and only this
   browser can revoke them.</p>
-  <div style="margin-top:.5rem"><button type="button" id="sharesbtn">List my share links</button></div>
+  <p class="meta">This browser's token fingerprint: <span id="ownerfp">…</span>
+  — the server names your token only by this fingerprint (the first
+  12 characters of its hash), never by the token itself.</p>
+  <div style="margin-top:.5rem"><button type="button" id="sharesbtn">List my share links</button>
+  <button type="button" id="copytokenbtn">Copy this browser's token</button></div>
+  <p class="meta">The token is portable: copy it here, then paste it
+  into the box below on another browser or device and that browser
+  gets this same dashboard — same links, same fingerprints. Treat
+  the token like a password for this list: anyone holding it can
+  list and revoke your links.</p>
+  <div style="margin-top:.5rem">
+    <input type="text" id="tokenin" size="52" autocomplete="off"
+      placeholder="Paste an owner token from another browser">
+    <button type="button" id="usetokenbtn">Use this token on this browser</button>
+  </div>
+  <div id="tokenout" class="meta" style="margin-top:.4rem"></div>
   <div id="sharesout" style="margin-top:.6rem"></div>
 </section>
 <script>
@@ -134,12 +149,64 @@ function showShareLink(el, data) {
   }
 }
 
+async function refreshOwnerFingerprint() {
+  const el = document.getElementById('ownerfp');
+  try {
+    const res = await fetch('/api/shares', {headers: ownerHeaders()});
+    const data = await res.json();
+    if (res.ok && data.owner_fingerprint) el.textContent = data.owner_fingerprint;
+  } catch (err) { /* the fingerprint line is informational only */ }
+}
+
+document.getElementById('copytokenbtn').addEventListener('click', async () => {
+  const out = document.getElementById('tokenout');
+  // The token is this browser's own locally generated credential;
+  // copying it is how the user carries their dashboard to another
+  // browser. TastePilot sends it nowhere — the clipboard is local.
+  if (navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(ownerToken());
+      out.textContent = 'Token copied. Paste it into “Use this token on ' +
+        'this browser” on your other browser — check the fingerprint matches.';
+      return;
+    } catch (err) { /* fall through to the plain message */ }
+  }
+  out.textContent = 'Clipboard unavailable in this browser.';
+});
+
+document.getElementById('usetokenbtn').addEventListener('click', async () => {
+  const out = document.getElementById('tokenout');
+  const candidate = document.getElementById('tokenin').value.trim();
+  if (!candidate) { out.textContent = 'Paste a token first.'; return; }
+  // Validate the candidate against the server BEFORE replacing this
+  // browser's token: a malformed token must never orphan the links
+  // this browser already owns.
+  const res = await fetch('/api/shares',
+    {headers: {'X-Owner-Token': candidate}});
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    out.textContent = 'That token was rejected (' +
+      (data.error || res.status) + ') — this browser keeps its own token.';
+    return;
+  }
+  localStorage.setItem('tastepilot_owner_token', candidate);
+  out.textContent = 'This browser now uses token fingerprint ' +
+    data.owner_fingerprint + ' — ' + data.count +
+    ' share link(s) on this dashboard.';
+  document.getElementById('tokenin').value = '';
+  refreshOwnerFingerprint();
+  listMyShares();
+});
+
 async function listMyShares() {
   const box = document.getElementById('sharesout');
   box.textContent = 'Loading…';
   const res = await fetch('/api/shares', {headers: ownerHeaders()});
   const data = await res.json();
   if (!res.ok) { box.textContent = 'Error: ' + (data.error || res.status); return; }
+  if (data.owner_fingerprint) {
+    document.getElementById('ownerfp').textContent = data.owner_fingerprint;
+  }
   box.innerHTML = '';
   if (!data.shares.length) {
     box.textContent = 'No share links owned by this browser yet — create one above.';
@@ -492,6 +559,8 @@ document.getElementById('sbtn').addEventListener('click', async () => {
     showShareLink(vout, await createShareLink(payload));
   } catch (err) { vout.textContent = 'Error: ' + err.message; }
 });
+
+refreshOwnerFingerprint();
 
 // Opening a shareable link (/?share=<id>): fetch the stored plan, fill
 // the verify box with it, and show its recomputed verification.
