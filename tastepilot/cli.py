@@ -14,6 +14,8 @@
                              --alternative NAME [--out swapped.json]
   python -m tastepilot undo --plan plan.json [--out undone.json]
   python -m tastepilot history --plan plan.json
+  python -m tastepilot branches --plan plan.json --spec branches.json
+                             [--out-dir branch-dir]
   python -m tastepilot serve [--host 127.0.0.1] [--port 8765]
                              [--mode mock|auto] [--llm template|nebius]
                              [--share-file shares.json]
@@ -116,6 +118,18 @@ def main(argv: list[str] | None = None) -> int:
     h.add_argument("--plan", required=True,
                    help="a saved plan JSON; its swap audit trail is "
                         "recomputed from the sealed evidence record")
+    b = sub.add_parser("branches")
+    b.add_argument("--plan", required=True,
+                   help="a saved plan JSON to fork branches from")
+    b.add_argument("--spec", required=True,
+                   help="branch spec JSON: a list of {name, swaps} "
+                        "(or {\"branches\": [...]}) where each swap is "
+                        "{primary, alternative}; every branch is "
+                        "applied to the base independently and its "
+                        "verdict recomputed from its re-sealed record")
+    b.add_argument("--out-dir",
+                   help="write each successful branch plan here as "
+                        "<branch-name>.json")
     s = sub.add_parser("serve")
     s.add_argument("--host", default="127.0.0.1",
                    help="bind host (hosted deployments: 0.0.0.0)")
@@ -280,6 +294,57 @@ def main(argv: list[str] | None = None) -> int:
         print(f"swap history: {len(events)} sealed swap(s), "
               f"chain_valid=True")
         return 0
+    if args.cmd == "branches":
+        import re as _re
+        from .swap import explore_branches
+        try:
+            plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+            spec = json.loads(Path(args.spec).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: branches failed: cannot read input "
+                  f"({type(exc).__name__})", file=sys.stderr)
+            return 2
+        if not isinstance(plan, dict):
+            print("error: branches failed: bad_plan", file=sys.stderr)
+            return 2
+        branches = spec.get("branches") if isinstance(spec, dict) else spec
+        try:
+            result = explore_branches(plan, branches)
+        except ValueError as exc:  # spec-shape refusal, no traceback
+            print(f"error: branches failed: {exc}", file=sys.stderr)
+            return 2
+        base = result["base"]
+        print(f"base: items={len(base['items'])} "
+              f"swaps={base['swap_count']} passed={base['passed']} "
+              f"chain_valid={base['chain_valid']}")
+        out_dir = Path(args.out_dir) if args.out_dir else None
+        if out_dir is not None:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        all_ok = True
+        for branch in result["branches"]:
+            if not branch["ok"]:
+                all_ok = False
+                print(f"  branch '{branch['name']}': FAILED "
+                      f"error={branch['error']}")
+                continue
+            line = (f"  branch '{branch['name']}': ok "
+                    f"swaps_applied={branch['swaps_applied']} "
+                    f"swaps={branch['swap_count']} "
+                    f"items={len(branch['items'])} "
+                    f"passed={branch['passed']} "
+                    f"chain_valid={branch['chain_valid']}")
+            if out_dir is not None:
+                slug = _re.sub(r"[^A-Za-z0-9._-]+", "-",
+                               branch["name"]).strip("-") or "branch"
+                target = out_dir / f"{slug}.json"
+                target.write_text(
+                    json.dumps(branch["plan"], indent=1,
+                               ensure_ascii=False), encoding="utf-8")
+                line += f" out={target}"
+            print(line)
+        # Like verify: every branch applying is success (0); any
+        # branch refusal is a reported verdict (1), not a crash.
+        return 0 if all_ok else 1
     if args.cmd == "verify":
         data = json.loads(Path(args.record).read_text(encoding="utf-8"))
         record = data.get("evidence", data)

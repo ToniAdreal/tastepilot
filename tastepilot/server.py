@@ -149,7 +149,7 @@ from .checker import check_plan, item_reports
 from .evidence import qloo_responses, verify_chain
 from .export import export_plan, media_for
 from .imports import parse_import_bytes
-from .swap import swap_history, swap_plan, undo_last_swap
+from .swap import explore_branches, swap_history, swap_plan, undo_last_swap
 from .timetable import parse_timetable_bytes
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -917,6 +917,67 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                     evidence_cache.popitem(last=False)
             self._send_json(200, result)
 
+        def _handle_branches(self):
+            """Explore named swap branches from one base plan.
+
+            Body: {"plan": {...}, "branches": [{name, swaps}]}.
+            The plan is untrusted input held to the swap endpoint's
+            gates; swap.explore_branches forks each branch
+            independently (every swap re-checked and re-sealed) and
+            returns the comparison with each successful branch's own
+            plan. A malformed spec is a categorised 400; a branch
+            whose path does not apply is a per-branch result in the
+            200 response, never a failed request."""
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_VERIFY_BODY_BYTES:
+                self._send_json(413, {"error": "plan too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            if not isinstance(payload, dict) or \
+                    not isinstance(payload.get("plan"), dict):
+                self._send_json(400, {"error": "plan is required"})
+                return
+            if "branches" not in payload:
+                self._send_json(400, {"error": "branches are required"})
+                return
+            plan = payload["plan"]
+            error = validate_plan_payload(plan)
+            if error is not None:
+                self._send_json(400, {"error": error})
+                return
+            try:
+                result = explore_branches(plan, payload["branches"])
+            except ValueError as exc:  # spec-shape refusal
+                self._send_json(
+                    400, {"error": f"branches failed: {exc}"})
+                return
+            except (KeyError, TypeError, AttributeError, IndexError):
+                self._send_json(
+                    400, {"error": "branches failed: bad_plan"})
+                return
+            for branch in result["branches"]:
+                if not branch.get("ok"):
+                    continue
+                record = branch["plan"].get("evidence") or {}
+                for rid, resp in qloo_responses(record).items():
+                    evidence_cache[rid] = (record, resp)
+                    evidence_cache.move_to_end(rid)
+                    while len(evidence_cache) > max_evidence_records:
+                        evidence_cache.popitem(last=False)
+            self._send_json(200, result)
+
         def _handle_share(self):
             """Store a plan under its content-addressed share id.
 
@@ -978,6 +1039,9 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return
             if path == "/api/undo":
                 self._handle_undo()
+                return
+            if path == "/api/branches":
+                self._handle_branches()
                 return
             if path != "/api/plan":
                 self._send(404, b"not found", "text/plain")

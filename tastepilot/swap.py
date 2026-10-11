@@ -34,6 +34,21 @@ stored ``swaps`` mirror is never trusted), and ``undo_last_swap``
 reverses the newest sealed event by re-running the same exchange
 through every swap precondition and sealing the reversal as
 another event whose ``undo_of`` names the swap it walked back.
+
+Branching lives here too. ``explore_branches`` forks ONE base
+plan into several named swap paths — each branch is a list of
+swaps applied to the base, independently — and returns every
+branch's resulting plan plus a comparison whose verdicts
+(passed / chain_valid / sealed swap count) are recomputed from
+each branch's own re-sealed record. Branches never share state:
+applying one branch cannot change another, a failing branch is
+reported with its categorised refusal beside the successful
+ones instead of aborting the exploration, and the base plan is
+never mutated. A branch plan is an ordinary swapped plan (its
+``branch`` field is reader-facing provenance, like the ``swaps``
+mirror — verification never trusts it), so every existing
+surface — verify, export, share, further swaps, undo — works
+on it unchanged.
 """
 from __future__ import annotations
 
@@ -333,3 +348,162 @@ def undo_last_swap(plan: dict) -> dict:
     return swap_plan(plan, _selector_from(last["alternative"]),
                      _selector_from(last["primary"]),
                      undo_of=last["swap_id"])
+
+
+MAX_BRANCHES = 6        # branches per exploration
+MAX_BRANCH_SWAPS = 10   # swaps per branch path
+MAX_BRANCH_NAME = 60    # characters
+
+
+def validate_branches(branches) -> None:
+    """Shape gate for a branch spec, shared by the CLI and server.
+
+    A spec is a non-empty list of ``{name, swaps}`` objects: names
+    are 1–60 chars and unique, each ``swaps`` is a list of at most
+    MAX_BRANCH_SWAPS ``{primary, alternative}`` steps whose
+    selectors are names or selector dicts. Raises ValueError with
+    a categorised message — bad_branches / too_many_branches /
+    bad_branch / bad_branch_name / duplicate_branch_name /
+    bad_branch_swaps / too_many_swaps / bad_branch_step. This is a
+    shape check only; whether a path applies is recomputed per
+    branch by explore_branches."""
+    if not isinstance(branches, list) or not branches:
+        raise ValueError("bad_branches")
+    if len(branches) > MAX_BRANCHES:
+        raise ValueError("too_many_branches")
+    seen = set()
+    for branch in branches:
+        if not isinstance(branch, dict):
+            raise ValueError("bad_branch")
+        name = branch.get("name")
+        if not isinstance(name, str) or not name.strip() \
+                or len(name) > MAX_BRANCH_NAME:
+            raise ValueError("bad_branch_name")
+        if name in seen:
+            raise ValueError("duplicate_branch_name")
+        seen.add(name)
+        swaps = branch.get("swaps")
+        if not isinstance(swaps, list):
+            raise ValueError("bad_branch_swaps")
+        if len(swaps) > MAX_BRANCH_SWAPS:
+            raise ValueError("too_many_swaps")
+        for step in swaps:
+            if not isinstance(step, dict) \
+                    or "primary" not in step or "alternative" not in step \
+                    or not all(isinstance(step[k], (str, dict))
+                               for k in ("primary", "alternative")):
+                raise ValueError("bad_branch_step")
+
+
+def _verify_base(plan: dict) -> None:
+    """The swap_plan precondition preamble, for a branch path with
+    no swaps: the base itself must be a verifiable plan before an
+    empty branch may present it as one path among the compared."""
+    if not isinstance(plan, dict):
+        raise ValueError("bad_plan")
+    items = plan.get("items")
+    alternatives = plan.get("alternatives")
+    if not isinstance(items, list) or not isinstance(alternatives, list) or \
+            any(not isinstance(i, dict) for i in items + alternatives):
+        raise ValueError("bad_plan")
+    record = plan.get("evidence")
+    if not isinstance(record, dict) or \
+            not isinstance(record.get("entries"), list) or not record["entries"]:
+        raise ValueError("missing_evidence")
+    if not verify_chain(record):
+        raise ValueError("evidence_chain_invalid")
+    try:
+        report = checker.check_plan(checker.plan_recommendations(plan),
+                                    record)
+    except TypeError:
+        raise ValueError("bad_plan") from None
+    if not report["passed"]:
+        raise ValueError("plan_not_verified")
+
+
+def apply_swap_path(plan: dict, swaps: list) -> dict:
+    """Apply a branch's swaps to a plan, in order.
+
+    Each step runs through swap_plan unchanged (full preconditions,
+    re-seal), so a path is only ever as trustworthy as the linear
+    swaps it is made of. Any refusal propagates with swap_plan's
+    categorised message; the input plan is never mutated and no
+    partial path is returned."""
+    result = plan
+    for step in swaps:
+        result = swap_plan(result, step["primary"], step["alternative"])
+    if result is plan:  # an empty path still proves the base first
+        _verify_base(plan)
+        result = copy.deepcopy(plan)
+    return result
+
+
+def _branch_verdict(plan: dict) -> dict:
+    """Recomputed comparison fields for one branch plan: verdicts
+    come from the checker against the branch's own sealed record,
+    never from the plan's stored checker field."""
+    record = plan.get("evidence") or {}
+    try:
+        report = checker.check_plan(checker.plan_recommendations(plan),
+                                    record)
+        passed, chain_valid = report["passed"], report["chain_valid"]
+    except TypeError:
+        passed, chain_valid = False, False
+    try:
+        swap_count = len(swap_history(plan))
+    except ValueError:
+        swap_count = 0
+    return {"passed": bool(passed), "chain_valid": bool(chain_valid),
+            "swap_count": swap_count,
+            "items": [(i.get("entity") or {}).get("name")
+                      for i in plan.get("items") or []]}
+
+
+def explore_branches(plan: dict, branches: list) -> dict:
+    """Fork a base plan into named swap branches and compare them.
+
+    Returns ``{base, branches}``: ``base`` is the base plan's
+    recomputed verdict summary (no plan body); each branch entry is
+    ``{name, ok, swaps_applied, passed, chain_valid, swap_count,
+    items, plan}`` on success — ``plan`` being the branch's own
+    re-sealed plan, stamped with a reader-facing ``branch``
+    provenance field — or ``{name, ok: False, error}`` with the
+    categorised refusal when that path does not apply. One
+    branch's failure never affects another branch, and the base
+    plan is never mutated. Spec-shape problems raise ValueError
+    via validate_branches (a caller error, not a branch result)."""
+    validate_branches(branches)
+    try:
+        _verify_base(plan)
+        base = _branch_verdict(plan)
+    except ValueError:
+        base = {"passed": False,
+                "chain_valid": bool(isinstance(plan, dict)
+                                    and verify_chain(
+                                        plan.get("evidence") or {})),
+                "swap_count": 0,
+                "items": [(i.get("entity") or {}).get("name")
+                          for i in (plan.get("items") or [])
+                          if isinstance(i, dict)]
+                if isinstance(plan, dict) else []}
+    results = []
+    for branch in branches:
+        name, swaps = branch["name"], branch["swaps"]
+        try:
+            forked = apply_swap_path(plan, swaps)
+        except ValueError as exc:  # categorised refusal, per-branch
+            results.append({"name": name, "ok": False,
+                            "error": str(exc)})
+            continue
+        except (KeyError, TypeError, AttributeError, IndexError):
+            results.append({"name": name, "ok": False,
+                            "error": "bad_plan"})
+            continue
+        forked["branch"] = {
+            "name": name,
+            "swaps_applied": len(swaps),
+            "base_swap_count": base["swap_count"]}
+        results.append({"name": name, "ok": True,
+                        "swaps_applied": len(swaps),
+                        **_branch_verdict(forked), "plan": forked})
+    return {"base": base, "branches": results}

@@ -108,6 +108,14 @@ the reason recorded (the demo never goes down because the LLM did).
     as the undo of the first), and the plan still PASSes in the
     verify panel, whose output now includes the two-line sealed
     swap history.
+13. Branch probe: on a plan with alternatives, click "Explore
+    branches from alternatives" → one comparison line per branch
+    (the plan as-is plus one swap-in branch per alternative),
+    each with its recomputed PASS, chain validity, and swap
+    count; "Load this branch" on a swap branch re-renders the
+    plan with that branch's item primary, the status line names
+    the branch, and the loaded plan still PASSes in the verify
+    panel.
 
 ## Notes
 

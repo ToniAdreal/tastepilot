@@ -453,6 +453,42 @@ async function doSwap(primary, alternative) {
   renderPlan(data);
 }
 
+async function doBranches(basePlan, resultsEl) {
+  resultsEl.textContent = 'Exploring branches…';
+  const sel = (i) => ({name: i.entity.name, domain: i.domain,
+                       location: i.location || null});
+  const branches = [{name: 'As planned', swaps: []}];
+  for (const alt of basePlan.alternatives || []) {
+    const primary = (basePlan.items || []).find(i => i.domain === alt.domain
+      && (i.location || null) === (alt.location || null));
+    if (primary) branches.push({name: `Swap in ${alt.entity.name}`,
+      swaps: [{primary: sel(primary), alternative: sel(alt)}]});
+  }
+  const res = await fetch('/api/branches', {method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({plan: basePlan, branches})});
+  const data = await res.json();
+  if (!res.ok) { resultsEl.textContent = 'Error: ' + (data.error || res.status); return; }
+  resultsEl.innerHTML = '';
+  for (const branch of data.branches) {
+    const div = document.createElement('div');
+    div.className = 'meta branchline';
+    if (!branch.ok) {
+      div.textContent = `${branch.name}: FAILED (${branch.error})`;
+      resultsEl.appendChild(div);
+      continue;
+    }
+    div.textContent = `${branch.name}: ${branch.passed ? 'PASS' : 'FAIL'} · chain valid: ${branch.chain_valid} · swaps: ${branch.swap_count} · items: ${branch.items.join(', ')}`;
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'loadbranchbtn';
+    btn.textContent = 'Load this branch';
+    btn.addEventListener('click', () => renderPlan(branch.plan));
+    div.appendChild(document.createTextNode(' '));
+    div.appendChild(btn);
+    resultsEl.appendChild(div);
+  }
+}
+
 function renderPlan(data) {
   lastPlan = data;
   out.innerHTML = '';
@@ -495,7 +531,10 @@ function renderPlan(data) {
   const swapSum = data.swaps && data.swaps.length
     ? ` · Swaps: ${data.swaps.length} (last: ${data.swaps[data.swaps.length - 1].primary.name} → ${data.swaps[data.swaps.length - 1].alternative.name}, re-sealed)`
     : '';
-  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${importSum}${timetableSum}${exclusionSum}${legsSum}${warnSum}${transferSum}${travelWarnSum}${swapSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
+  const branchSum = data.branch
+    ? ` · Branch: ${data.branch.name} (${data.branch.swaps_applied} swap(s) from base)`
+    : '';
+  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${importSum}${timetableSum}${exclusionSum}${legsSum}${warnSum}${transferSum}${travelWarnSum}${swapSum}${branchSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
   const mapsByKey = {};
   for (const hi of (data.handoffs && data.handoffs.items) || []) {
     mapsByKey[hi.name + '|' + (hi.location || '')] = hi.maps_url;
@@ -586,6 +625,24 @@ function renderPlan(data) {
       }
       out.appendChild(altCard);
     }
+  }
+  if (data.alternatives && data.alternatives.length) {
+    const h = document.createElement('h2');
+    h.className = 'leg';
+    h.textContent = 'Branch explorer (compare swap paths side by side)';
+    out.appendChild(h);
+    const note = document.createElement('div');
+    note.className = 'meta';
+    note.textContent = 'Fork this plan into one branch per alternative (plus the plan as-is): each branch is applied independently, re-sealed, and its verdict recomputed — branches never affect each other or this plan.';
+    out.appendChild(note);
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'branchbtn';
+    btn.textContent = 'Explore branches from alternatives';
+    const results = document.createElement('div');
+    results.className = 'branchresults';
+    btn.addEventListener('click', () => doBranches(data, results));
+    out.appendChild(btn);
+    out.appendChild(results);
   }
   const history = (data.swap_history && data.swap_history.length)
     ? data.swap_history

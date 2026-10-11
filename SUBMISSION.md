@@ -116,7 +116,16 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    history, re-checked against every precondition, and sealed
    as a further event naming the swap it reversed, so the
    record attests swaps and their undos alike and nothing is
-   ever deleted from the chain.
+   ever deleted from the chain. And swap paths can be compared
+   before committing to one: a branch spec forks the plan into
+   named branches — one swap path each, applied to the base
+   independently through the same re-check-and-reseal path —
+   and the explorer (UI button, API, and CLI alike) lines the
+   branches up by their recomputed verdicts, with a path that
+   does not apply reported beside the successful branches
+   rather than aborting the comparison; loading a branch gives
+   an ordinary swapped plan that verifies, undoes, and swaps
+   further like any other.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -243,10 +252,11 @@ stops being a liability and becomes pure upside.
   and platform maps links, with two-way calendar sync, instead
   of the one-tap template/search links and one-way share
   payload the handoff layer already produces.
-- Branching swap timelines — exploring several swap paths
-  side by side (and comparing their recomputed verdicts) instead
-  of the single linear history — swaps, undos, and redos on one
-  sealed stack — the built audit trail already attests.
+- Guided branch suggestions — the agent proposing the swap
+  branches worth exploring (ranked by affinity delta and taste
+  coverage across domains) instead of the user enumerating
+  every path themselves in the built branch explorer, which
+  already forks, re-seals, and compares any spec it is given.
 
 ## Built with
 
