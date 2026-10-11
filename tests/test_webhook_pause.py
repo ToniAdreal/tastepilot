@@ -23,7 +23,8 @@ from pathlib import Path
 
 from tastepilot.agent import TastePilotAgent
 from tastepilot.notify import (PAUSE_AFTER_CONSECUTIVE_FAILURES,
-                               skipped_record, webhook_id_for)
+                               idempotency_key_for, skipped_record,
+                               webhook_id_for)
 from tastepilot.server import MultiTimelineFeedStore, make_handler
 from tastepilot.swap import swap_plan
 
@@ -93,11 +94,18 @@ def test_skipped_record_shape():
              "signing_secret": "s" * 20}
     payload = {"event": "multi_feed.updated", "version": 4}
     record = skipped_record(entry, payload)
+    # The record shape gained an idempotency_key in run 50:
+    # the key its (never attempted) delivery would have
+    # carried — same webhook id, same canonical payload
+    # bytes — so a later redelivery matches it.
+    body = json.dumps(payload, ensure_ascii=False,
+                      separators=(",", ":")).encode()
     assert record == {"webhook_id": WID, "host": "hooks.example.com",
                       "event": "multi_feed.updated", "version": 4,
                       "status": "skipped", "attempts": 0,
                       "http_status": None, "error": "webhook_paused",
-                      "signed": True}
+                      "signed": True,
+                      "idempotency_key": idempotency_key_for(WID, body)}
     unsigned = skipped_record({"webhook_id": WID, "url": URL,
                                "host": "hooks.example.com"}, payload)
     assert unsigned["signed"] is False
