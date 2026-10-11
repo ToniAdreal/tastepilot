@@ -101,7 +101,15 @@ tastepilot/
                push webhooks on multi-feeds (notify.py — see the
                Demo section)
                hardened: input caps, security headers, bounded caches,
-               leak-free 500s)
+               leak-free 500s, per-client POST rate limiting — see
+               ratelimit.py)
+  ratelimit.py per-client POST rate limiting for the demo server: a
+               deterministic fixed-window limiter (injectable clock)
+               — at most 30 POSTs per client (remote IP) per 60 s by
+               default; over the limit is 429 {"error": "rate
+               limited"} with a Retry-After header; tracked client
+               state is bounded (512 clients, least-recently-seen
+               evicted first)
   export.py    take-away itinerary exports (Markdown / plain text /
                iCalendar, one all-day event per dated leg): every
                export carries a verification banner recomputed from
@@ -305,6 +313,21 @@ baked into the image or the repo.
 
 ## Demo
 
+* The hosted demo rate-limits its POST routes per client: every POST
+  (planning, verification, sharing, exports, bundles, feeds, webhooks,
+  profiles — anything that invokes the agent or stores state) counts
+  against one fixed-window quota per client (remote IP), **30 requests
+  per 60 seconds** by default. A client over the limit gets
+  `429 {"error": "rate limited"}` with a `Retry-After` header (whole
+  seconds) and the same security headers and `Cache-Control: no-store`
+  as every other API response; GET routes and `GET /api/health` are
+  never limited, and health reports the limiter's configuration and
+  tracked-client count. The quota is tuned with
+  `serve --rate-limit <n> --rate-window-seconds <s>` or the
+  `TASTEPILOT_RATE_LIMIT` env var (non-positive CLI values exit 2);
+  the limiter's tracked-client state is bounded (512 clients,
+  least-recently-seen evicted first), so a long-lived demo cannot
+  grow it without limit.
 * `samples/plan_weekend_kyoto.json` — a full mock-mode plan: items, the
   sealed evidence record, and the checker report. Run the `verify`
   command above against it; then edit any affinity in the file and watch

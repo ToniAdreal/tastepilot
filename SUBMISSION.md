@@ -464,7 +464,11 @@ VerifyGate project. A one-command smoke check (`tastepilot smoke`)
 validates the live payload shape on first real-key use, seals both
 calls, and re-verifies the chain before reporting. The demo server is
 hardened for a public URL (input caps, security headers, bounded
-evidence cache, leak-free error responses) and ships with a Dockerfile,
+evidence cache, leak-free error responses, and per-client
+rate limiting: every POST route is capped per client — 30 requests
+per 60 seconds by default — and a client over the limit gets a 429
+with a `Retry-After` header, while GETs and the health check stay
+unlimited) and ships with a Dockerfile,
 a PaaS Procfile, and a deployment guide.
 
 ## Challenges we ran into

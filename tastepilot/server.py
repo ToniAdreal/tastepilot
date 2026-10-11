@@ -525,6 +525,24 @@ Hardening (Oct 21–24 milestone):
     evicted first) so a long-lived hosted demo cannot grow without limit;
     the shared-plan store behind verification links is bounded the same
     way (``MAX_SHARED_PLANS``).
+  * Every POST route is rate-limited per client (remote IP) by a
+    fixed-window limiter (``tastepilot.ratelimit``): at most
+    ``DEFAULT_RATE_LIMIT`` POSTs per ``DEFAULT_RATE_WINDOW_SECONDS``
+    per client by default, configurable via ``make_handler(...,
+    rate_limit=..., rate_window_seconds=...)``, ``serve(...,
+    rate_limit=...)``, the CLI's ``--rate-limit`` /
+    ``--rate-window-seconds``, or the ``TASTEPILOT_RATE_LIMIT`` env
+    var. A client over the limit gets ``429 {"error": "rate
+    limited"}`` with a ``Retry-After`` header (whole seconds) and the
+    same security headers + ``Cache-Control: no-store`` as every
+    other API response. GET routes (including ``/api/health``, which
+    reports the limiter's config and tracked-client count) are never
+    limited — reads are cheap and health must stay reachable while a
+    client is throttled. Passing ``rate_limit=None`` (or 0) to
+    ``make_handler`` disables limiting; that is the documented test
+    escape hatch, not a CLI option (the CLI rejects non-positive
+    values with exit 2). The limiter tracks at most
+    ``MAX_RATE_CLIENTS`` clients, least-recently-seen evicted first.
   * ``serve()`` takes an explicit host: local runs keep the safe
     127.0.0.1 default; hosted deployments pass ``--host 0.0.0.0`` and the
     port from the platform's ``PORT`` env var (see DEPLOY.md).
@@ -566,6 +584,8 @@ from .notify import (MAX_DELIVERIES, MAX_WEBHOOKS_PER_FEED,
                      webhook_host_label, webhook_id_for,
                      webhook_subscribes_to)
 from .profiles import ProfileStore
+from .ratelimit import (DEFAULT_RATE_LIMIT, DEFAULT_RATE_WINDOW_SECONDS,
+                        MAX_RATE_CLIENTS, RATE_LIMIT_ENV_VAR, RateLimiter)
 from .timeline import branch_timeline
 from .swap import (explore_branches, suggest_branches, swap_history,
                    swap_plan, undo_last_swap)
@@ -608,6 +628,10 @@ MULTI_FEED_FILE_ENV_VAR = "TASTEPILOT_MULTI_FEED_FILE"  # persistence
 MAX_WEBHOOK_BODY_BYTES = MAX_BODY_BYTES  # a webhook registration is
                                  # one small {"url": ...} object
 PROFILE_FILE_ENV_VAR = "TASTEPILOT_PROFILE_FILE"  # opt-in profile store
+# Per-client POST rate limiting (tastepilot.ratelimit): the defaults
+# live in ratelimit.py (DEFAULT_RATE_LIMIT per
+# DEFAULT_RATE_WINDOW_SECONDS per client); RATE_LIMIT_ENV_VAR is
+# re-exported there as TASTEPILOT_RATE_LIMIT.
 MAX_PROFILES = 256               # owners with a persistent profile
 OWNER_TOKEN_HEADER = "X-Owner-Token"  # per-browser owner credential
 MIN_OWNER_TOKEN_CHARS = 16   # shorter than this is not a credential
@@ -2301,7 +2325,12 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                  multi_feed_ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS,
                  multi_feed_file: str | Path | None = None,
                  multi_feed_clock=None,
-                 webhook_transport=None, webhook_sleeper=None):
+                 webhook_transport=None, webhook_sleeper=None,
+                 rate_limit: int | None = DEFAULT_RATE_LIMIT,
+                 rate_window_seconds: float =
+                 DEFAULT_RATE_WINDOW_SECONDS,
+                 rate_clock=None,
+                 max_rate_clients: int = MAX_RATE_CLIENTS):
     # response_id -> (record, response) for plans produced by this server,
     # bounded FIFO: the oldest sealed responses are evicted first.
     evidence_cache: OrderedDict[str, tuple[dict, dict]] = OrderedDict()
@@ -2341,6 +2370,24 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
     if multi_feed_clock is not None:
         multi_feed_kwargs["clock"] = multi_feed_clock
     multi_feed_store = MultiTimelineFeedStore(**multi_feed_kwargs)
+    # Per-client POST rate limiter (fixed window, bounded client
+    # state). rate_limit=None or 0 disables it — the documented test
+    # escape hatch; serve()/the CLI keep it enabled by default.
+    if rate_limit is None or rate_limit == 0:
+        rate_limiter = None
+        rate_limit_info = {"enabled": False,
+                           "limit": 0,
+                           "window_seconds": float(rate_window_seconds),
+                           "max_clients": max_rate_clients,
+                           "clients": 0}
+    else:
+        rate_kwargs = {"limit": rate_limit,
+                       "window_seconds": rate_window_seconds,
+                       "max_clients": max_rate_clients}
+        if rate_clock is not None:
+            rate_kwargs["clock"] = rate_clock
+        rate_limiter = RateLimiter(**rate_kwargs)
+        rate_limit_info = None  # read live from the limiter instead
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):  # keep demo logs clean
@@ -2359,9 +2406,25 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             self.end_headers()
             self.wfile.write(body)
 
-        def _send_json(self, code, obj):
+        def _send_json(self, code, obj, extra=None):
             self._send(code, json.dumps(obj, ensure_ascii=False).encode(),
-                       "application/json; charset=utf-8")
+                       "application/json; charset=utf-8", extra=extra)
+
+        def _rate_limit_retry(self):
+            """Seconds this client must wait before its next POST, or
+            None when the request may proceed. Client identity is the
+            remote IP only — no header is trusted for it, so a client
+            cannot shed its quota by inventing a forwarding header."""
+            if rate_limiter is None:
+                return None
+            client = self.client_address[0] if self.client_address \
+                else "unknown"
+            return rate_limiter.check(client)
+
+        def _rate_limit_info(self):
+            if rate_limiter is not None:
+                return rate_limiter.info()
+            return dict(rate_limit_info)
 
         def _owner_token(self):
             """The presented owner token: (token, invalid). ``token``
@@ -2784,7 +2847,9 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                                       "profiles": profile_store.info(),
                                       "feeds": feed_store.info(),
                                       "multi_feeds":
-                                          multi_feed_store.info()})
+                                          multi_feed_store.info(),
+                                      "rate_limit":
+                                          self._rate_limit_info()})
             elif path == "/api/profile":
                 self._handle_profile_get()
             elif path == "/api/profile/export":
@@ -4638,6 +4703,15 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             })
 
         def do_POST(self):
+            # Every POST route invokes the agent or stores state, so
+            # the per-client rate limit gates the whole method here —
+            # before any body is read or any work is done. GETs are
+            # never limited (see the module docstring).
+            retry = self._rate_limit_retry()
+            if retry is not None:
+                self._send_json(429, {"error": "rate limited"},
+                                extra={"Retry-After": str(retry)})
+                return
             path = urlparse(self.path).path
             if path == "/api/verify":
                 self._handle_verify()
@@ -4935,7 +5009,29 @@ def serve(agent, port: int = 8765, host: str = "127.0.0.1",
           feed_file: str | Path | None = None,
           feed_ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS,
           multi_feed_file: str | Path | None = None,
-          multi_feed_ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS) -> None:
+          multi_feed_ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS,
+          rate_limit: int | None = None,
+          rate_window_seconds: float =
+          DEFAULT_RATE_WINDOW_SECONDS) -> None:
+    if rate_limit is None:
+        # Env override, mirroring the *_FILE pattern above: an
+        # explicit argument wins, then $TASTEPILOT_RATE_LIMIT, then
+        # the built-in default. A malformed or non-positive env value
+        # is a configuration error, never silently ignored.
+        raw_rate = os.environ.get(RATE_LIMIT_ENV_VAR) or None
+        if raw_rate is None:
+            rate_limit = DEFAULT_RATE_LIMIT
+        else:
+            try:
+                rate_limit = int(raw_rate)
+            except ValueError:
+                raise ValueError(
+                    f"{RATE_LIMIT_ENV_VAR} must be a positive integer, "
+                    f"got {raw_rate!r}") from None
+            if rate_limit < 1:
+                raise ValueError(
+                    f"{RATE_LIMIT_ENV_VAR} must be a positive integer, "
+                    f"got {raw_rate!r}")
     if share_file is None:
         share_file = os.environ.get(SHARE_FILE_ENV_VAR) or None
     if profile_file is None:
@@ -4950,15 +5046,21 @@ def serve(agent, port: int = 8765, host: str = "127.0.0.1",
                            feed_file=feed_file,
                            feed_ttl_seconds=feed_ttl_seconds,
                            multi_feed_file=multi_feed_file,
-                           multi_feed_ttl_seconds=multi_feed_ttl_seconds)
+                           multi_feed_ttl_seconds=multi_feed_ttl_seconds,
+                           rate_limit=rate_limit,
+                           rate_window_seconds=rate_window_seconds)
     server = ThreadingHTTPServer((host, port), handler)
     shares = "persistent" if share_file else "in-memory"
     profiles = "persistent" if profile_file else "in-memory"
     feeds = "persistent" if feed_file else "in-memory"
     multi_feeds = "persistent" if multi_feed_file else "in-memory"
+    window = rate_window_seconds
+    window_label = f"{window:g}s" if float(window) != int(window) \
+        else f"{int(window)}s"
+    rate = f"{rate_limit}/{window_label}" if rate_limit else "disabled"
     print(f"TastePilot listening on http://{host}:{port} "
           f"(mode={agent.mode}, explainer={agent.explainer_info['source']}, "
           f"shares={shares}, profiles={profiles}, feeds={feeds}, "
-          f"multi_feeds={multi_feeds})",
+          f"multi_feeds={multi_feeds}, rate_limit={rate})",
           flush=True)  # hosted log streams must see startup immediately
     server.serve_forever()

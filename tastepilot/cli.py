@@ -45,6 +45,8 @@
                              [--feed-ttl-days 30]
                              [--multi-feed-file multifeeds.json]
                              [--multi-feed-ttl-days 30]
+                             [--rate-limit 30]
+                             [--rate-window-seconds 60]
 
 For hosted deployments the port defaults to the platform's ``PORT``
 environment variable when ``--port`` is not given (see DEPLOY.md).
@@ -315,10 +317,34 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--multi-feed-ttl-days", type=float, default=30.0,
                    help="multi-timeline feed lifetime in days "
                         "(default 30)")
+    s.add_argument("--rate-limit", type=int, default=None,
+                   help="max POST requests per client per rate "
+                        "window (default: $TASTEPILOT_RATE_LIMIT "
+                        "or 30)")
+    s.add_argument("--rate-window-seconds", type=float, default=60.0,
+                   help="rate-limit window in seconds (default 60)")
     args = ap.parse_args(argv)
 
     if args.cmd == "serve":
         from .server import serve
+        if args.rate_limit is not None and args.rate_limit <= 0:
+            print("error: --rate-limit must be > 0", file=sys.stderr)
+            return 2
+        if args.rate_window_seconds <= 0:
+            print("error: --rate-window-seconds must be > 0",
+                  file=sys.stderr)
+            return 2
+        if args.rate_limit is None:
+            raw_rate = os.environ.get("TASTEPILOT_RATE_LIMIT")
+            if raw_rate:
+                try:
+                    env_rate_ok = int(raw_rate) >= 1
+                except ValueError:
+                    env_rate_ok = False
+                if not env_rate_ok:
+                    print("error: TASTEPILOT_RATE_LIMIT must be a "
+                          "positive integer", file=sys.stderr)
+                    return 2
         if args.share_ttl_days <= 0:
             print("error: --share-ttl-days must be > 0", file=sys.stderr)
             return 2
@@ -342,7 +368,9 @@ def main(argv: list[str] | None = None) -> int:
               feed_file=args.feed_file,
               feed_ttl_seconds=args.feed_ttl_days * 24 * 3600,
               multi_feed_file=args.multi_feed_file,
-              multi_feed_ttl_seconds=args.multi_feed_ttl_days * 24 * 3600)
+              multi_feed_ttl_seconds=args.multi_feed_ttl_days * 24 * 3600,
+              rate_limit=args.rate_limit,
+              rate_window_seconds=args.rate_window_seconds)
         return 0
     if args.cmd == "profile":
         from .profiles import ProfileStore, owner_token_hash

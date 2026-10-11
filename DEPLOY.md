@@ -38,6 +38,7 @@ No build/install step is required — there are no dependencies.
 | `TASTEPILOT_FEED_FILE` | no | Path of a JSON file the timeline calendar-feed store persists to (atomic writes), so subscription URLs survive restarts. Needs a writable, persistent volume; unset = in-memory feeds. The CLI equivalent is `serve --feed-file <path>`, and `--feed-ttl-days` tunes the 30-day default feed lifetime (an owner's in-place update renews it). The file holds only stored timeline payloads (fictional demo data) and, for owner-managed feeds, SHA-256 hashes of owner tokens — never the tokens themselves, and never the Qloo key. |
 | `TASTEPILOT_PROFILE_FILE` | no | Path of a JSON file the persistent preference-profile store persists to (atomic writes), so learned suggestion profiles survive restarts. Needs a writable, persistent volume; unset = in-memory profiles. The CLI equivalent is `serve --profile-file <path>`. The file holds only owner-token SHA-256 hashes and profiles derived from sealed swap histories — never the tokens themselves, never caller-supplied weights, and never the Qloo key. |
 | `TASTEPILOT_MULTI_FEED_FILE` | no | Path of a JSON file the multi-timeline calendar-feed store persists to (atomic writes), so bundle subscription URLs (with their versions and change logs) survive restarts. Needs a writable, persistent volume; unset = in-memory multi-feeds. The CLI equivalent is `serve --multi-feed-file <path>`, and `--multi-feed-ttl-days` tunes the 30-day default lifetime (an owner's in-place update renews it). The file holds only stored timeline bundles (fictional demo data), change-log entries, and, for owner-managed feeds, SHA-256 hashes of owner tokens — never the tokens themselves, and never the Qloo key. |
+| `TASTEPILOT_RATE_LIMIT` | no | Max POST requests per client (remote IP) per rate-limit window for the demo server's POST routes (default 30 per 60 seconds). Must be a positive integer; a malformed or non-positive value is a startup error (the CLI exits 2). The CLI equivalents are `serve --rate-limit <n>` and `--rate-window-seconds <s>`. GET routes and `/api/health` are never limited, and health reports the active limit under `rate_limit`. |
 
 For live Nemotron explanations instead of the deterministic template,
 append `--llm nebius` to the start command; every explanation records
@@ -576,6 +577,18 @@ the reason recorded (the demo never goes down because the LLM did).
     `manifest_valid: False`; a tampered plan posted to
     `/api/bundle` still packs, its packed
     `verification.json` reading NOT VERIFIED.
+45. Rate limit probe:
+    burst one POST endpoint (e.g. `POST /api/verify` with a
+    sample plan) from a single client past the configured
+    limit (default 30 POSTs per 60 seconds; health reports
+    the active limit under `rate_limit`) → the request
+    past the limit returns `429` with
+    `{"error": "rate limited"}`, a `Retry-After` header
+    (whole seconds, at least 1), the usual security
+    headers, and `Cache-Control: no-store`;
+    `GET /api/health` from the same client still returns
+    `200` while the client is throttled, and POSTs succeed
+    again once the window has passed.
 
 ## Notes
 
