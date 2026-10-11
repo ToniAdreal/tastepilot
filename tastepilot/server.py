@@ -152,6 +152,27 @@ Routes:
                                changed — the poll-based change
                                notification. Push is opt-in per feed
                                via registered webhooks (below).
+                               ?format=ics-days renders the paced
+                               variant instead (one event per dated
+                               day per column per timeline) under
+                               its own etag (the feed etag with a
+                               -days suffix), so the two variants
+                               never answer each other's polls.
+  POST /api/export-multi-timeline?format=ics|ics-days
+                               {"timelines": [...]} -> the bundle
+                               as a take-away export download
+                               (tastepilot.export.export_multi_
+                               timeline): same gates as
+                               /api/multi-feeds creation; every
+                               verdict recomputed — a tampered
+                               branch exports as a NOT VERIFIED
+                               series, never clean. ics renders
+                               one event series per column per
+                               timeline; ics-days renders one
+                               paced event per dated day per
+                               column per timeline; a bundle with
+                               no dated leg/day anywhere -> 400
+                               (no_dated_legs).
   GET  /api/multi-feeds/<id>   metadata + per-timeline recomputed
                                verdicts + version + etag.
   GET  /api/multi-feeds/<id>/changes
@@ -456,8 +477,10 @@ from urllib.parse import parse_qs, unquote, urlparse
 from .checker import check_plan, item_reports
 from .diff import diff_plans
 from .evidence import qloo_responses, verify_chain
-from .export import (TIMELINE_FORMATS, export_multi_timeline_ics,
-                     export_plan, export_timeline, media_for,
+from .export import (MULTI_TIMELINE_FORMATS, TIMELINE_FORMATS,
+                     export_multi_timeline,
+                     export_multi_timeline_ics, export_plan,
+                     export_timeline, media_for,
                      validate_multi_timelines)
 from .imports import parse_import_bytes
 from .notify import (MAX_DELIVERIES, MAX_WEBHOOKS_PER_FEED,
@@ -2413,8 +2436,10 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             elif path.startswith("/api/multi-feeds/"):
                 rest = unquote(path[len("/api/multi-feeds/"):])
                 if rest.endswith(".ics"):
+                    fmt = parse_qs(urlparse(self.path).query).get(
+                        "format", ["ics"])[0]
                     self._handle_multi_feed_fetch(
-                        rest[:-len(".ics")])
+                        rest[:-len(".ics")], fmt=fmt)
                 elif rest.endswith("/changes") and \
                         "/" not in rest[:-len("/changes")]:
                     self._handle_multi_feed_changes(
@@ -2894,6 +2919,51 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 "Content-Disposition":
                     f'attachment; filename="tastepilot-timeline.{ext}"'})
 
+        def _handle_export_multi_timeline(self, fmt: str):
+            """Multi-timeline bundle as a take-away export
+            (download).
+
+            Body: {"timelines": [...]} — exactly the
+            /api/multi-feeds creation gates (the bundle body
+            reader: count, unique names, every plan shape).
+            The rendered series' verdicts are recomputed by
+            export.export_multi_timeline; a tampered branch
+            exports as a NOT VERIFIED series — a 200 download,
+            like a tampered timeline export — never clean. ics
+            renders one event series per column per timeline;
+            ics-days renders one paced event per dated day per
+            column per timeline. A bundle with no dated leg
+            (ics) or no dated day holding recommendations
+            (ics-days) anywhere is a categorised 400
+            (no_dated_legs)."""
+            if fmt not in MULTI_TIMELINE_FORMATS:
+                self._send_json(
+                    400, {"error": "unsupported multi-timeline "
+                                   "export format"})
+                return
+            payload = self._multi_timeline_body()
+            if payload is None:
+                return
+            try:
+                content, _all_passed, _summaries = \
+                    export_multi_timeline(payload["timelines"], fmt)
+            except ValueError as exc:  # categorised refusal
+                self._send_json(
+                    400, {"error": f"multi-timeline export failed: "
+                                   f"{exc}"})
+                return
+            except (KeyError, TypeError, AttributeError, IndexError):
+                self._send_json(
+                    400, {"error": "multi-timeline export failed: "
+                                   "bad_plan"})
+                return
+            _ctype, ext = media_for(fmt)
+            self._send(200, content.encode("utf-8"), _ctype, extra={
+                "Cache-Control": "no-store",
+                "Content-Disposition":
+                    f'attachment; filename='
+                    f'"tastepilot-multi-timeline.{ext}"'})
+
         def _timeline_body(self):
             """Read and shape-gate a {"base", "branches"} body under
             exactly the /api/timeline gates. Returns the payload, or
@@ -3156,6 +3226,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 **meta,
                 "url": f"/api/multi-feeds/{feed_id}.ics",
                 "feed_url": f"/api/multi-feeds/{feed_id}.ics",
+                "paced_url":
+                    f"/api/multi-feeds/{feed_id}.ics?format=ics-days",
                 "changes_url": f"/api/multi-feeds/{feed_id}/changes",
                 "notifications_url":
                     f"/api/multi-feeds/{feed_id}/notifications",
@@ -3200,6 +3272,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 **meta,
                 "url": f"/api/multi-feeds/{feed_id}.ics",
                 "feed_url": f"/api/multi-feeds/{feed_id}.ics",
+                "paced_url":
+                    f"/api/multi-feeds/{feed_id}.ics?format=ics-days",
                 "changes_url": f"/api/multi-feeds/{feed_id}/changes",
                 "notifications_url":
                     f"/api/multi-feeds/{feed_id}/notifications",
@@ -3209,7 +3283,7 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 "notifications": deliveries,
             })
 
-        def _handle_multi_feed_fetch(self, feed_id):
+        def _handle_multi_feed_fetch(self, feed_id, fmt="ics"):
             """Serve a multi-feed's calendar: GET
             /api/multi-feeds/<id>.ics. The stored bundle renders
             fresh on every fetch (verdicts recomputed per
@@ -3217,12 +3291,26 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             the feed's ETag; a poller presenting that etag in
             If-None-Match gets a cheap 304 until an update
             changes it — then the next poll gets the new series
-            and the new etag."""
+            and the new etag.
+
+            ?format=ics-days serves the paced variant (one
+            event per dated day per column per timeline) under
+            its own etag — the feed etag with a -days suffix —
+            so a leg-level poller and a paced poller never
+            answer each other's conditional requests with a
+            304 for a calendar they did not ask for. Any other
+            format is a categorised 400."""
+            if fmt not in MULTI_TIMELINE_FORMATS:
+                self._send_json(
+                    400, {"error": "unsupported multi-feed format"})
+                return
             payload = multi_feed_store.get(feed_id) if feed_id else None
             if payload is None:
                 self._send_json(404, {"error": "unknown multi-feed id"})
                 return
             etag = multi_feed_store.etag(feed_id)
+            if fmt == "ics-days" and etag is not None:
+                etag = f"{etag}-days"
             quoted = f'"{etag}"'
             presented = (self.headers.get("If-None-Match") or "")
             presented = {p.strip().strip('"')
@@ -3238,8 +3326,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 self.end_headers()
                 return
             try:
-                content, _all, _summaries = export_multi_timeline_ics(
-                    payload["timelines"])
+                content, _all, _summaries = export_multi_timeline(
+                    payload["timelines"], fmt)
             except ValueError as exc:
                 self._send_json(
                     400, {"error": f"multi-feed failed: {exc}"})
@@ -3271,6 +3359,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 **meta,
                 "url": f"/api/multi-feeds/{feed_id}.ics",
                 "feed_url": f"/api/multi-feeds/{feed_id}.ics",
+                "paced_url":
+                    f"/api/multi-feeds/{feed_id}.ics?format=ics-days",
                 "changes_url": f"/api/multi-feeds/{feed_id}/changes",
                 "notifications_url":
                     f"/api/multi-feeds/{feed_id}/notifications",
@@ -3292,6 +3382,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 self._send_json(404, {"error": "unknown multi-feed id"})
                 return
             result["url"] = f"/api/multi-feeds/{feed_id}.ics"
+            result["paced_url"] = \
+                f"/api/multi-feeds/{feed_id}.ics?format=ics-days"
             self._send_json(200, result)
 
         def _notify_multi_feed(self, feed_id, kind, all_passed,
@@ -4084,6 +4176,11 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 fmt = parse_qs(urlparse(self.path).query).get(
                     "format", ["markdown"])[0]
                 self._handle_export_timeline(fmt)
+                return
+            if path == "/api/export-multi-timeline":
+                fmt = parse_qs(urlparse(self.path).query).get(
+                    "format", ["ics"])[0]
+                self._handle_export_multi_timeline(fmt)
                 return
             if path == "/api/multi-feeds":
                 self._handle_multi_feed_create()

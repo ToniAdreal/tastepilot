@@ -118,7 +118,11 @@ tastepilot/
                no_dated_legs;
                export_multi_timeline_ics renders a bundle of named
                timelines as one calendar (one series per timeline
-               per branch) under the same doctrine
+               per branch) under the same doctrine, and
+               export_multi_timeline_paced_ics renders the same
+               bundle by day (one paced event per dated day per
+               timeline per branch; export_multi_timeline
+               dispatches both bundle formats)
   notify.py    push change notifications for calendar
                subscriptions: subscriber-registered webhooks on
                multi-feeds — a URL is validated (http(s), no
@@ -684,7 +688,20 @@ baked into the image or the repo.
   stable feed id, and `GET /api/multi-feeds/<id>.ics` renders
   the whole bundle fresh as ONE calendar on every fetch — one
   event series per timeline per branch, summaries naming both
-  (`TastePilot [Japan-France / Museum]: Kyoto`). Change
+  (`TastePilot [Japan-France / Museum]: Kyoto`). The same feed
+  URL with `?format=ics-days` (also returned as the feed's
+  `paced_url`) renders the bundle by day instead — one paced
+  event per dated day per timeline per branch, summaries
+  naming timeline, branch, and day — under its own ETag (the
+  feed etag with a `-days` suffix), so the two variants never
+  answer each other's conditional polls. The bundle also
+  downloads without a subscription: `POST
+  /api/export-multi-timeline?format=ics|ics-days` with the
+  same `{"timelines": [...]}` body renders it as a take-away
+  file (`tastepilot-multi-timeline.ics`) under the same
+  gates, and the timeline view's "Download bundle
+  (iCalendar)" / "Download bundle (iCalendar by day)" buttons
+  drive it. Change
   notification is poll-based and explicit: the feed carries a
   version (incremented by every in-place update via `POST
   /api/multi-feeds/<id>`) and a capped change log (`GET

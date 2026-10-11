@@ -47,6 +47,23 @@ verdict. A timeline with no dated day holding recommendations in
 any column raises ``no_dated_legs``; paced timeline UIDs are
 namespaced apart from both the leg-level timeline UIDs and the
 single-plan paced UIDs.
+
+Multi-timeline bundles (several named timelines in one file)
+export in the two calendar formats: the leg-level bundle calendar
+(``export_multi_timeline_ics``: one event series per column per
+timeline) and its paced counterpart
+(``export_multi_timeline_paced_ics``): for every timeline, one
+paced event series per column — for every dated day of that
+column's own pacing, one all-day event naming timeline, branch,
+and day and carrying only that day's recommendations in that
+branch, under that column's recomputed verdict — so a whole
+bundle can be compared day by day on one calendar. A timeline
+with no paced day contributes no events; a bundle with no paced
+day anywhere raises ``no_dated_legs``. Paced bundle UIDs hash
+the timeline name too and are namespaced apart from the
+leg-level bundle UIDs, the paced timeline UIDs, and the
+single-plan paced UIDs, so all four calendars import side by
+side without collisions.
 """
 from __future__ import annotations
 
@@ -985,6 +1002,148 @@ def export_multi_timeline_ics(timelines) -> tuple[str, bool, list[dict]]:
     still renders, its series NOT VERIFIED — never clean."""
     content, summaries = render_multi_timeline_ics(timelines)
     return content, all(s["all_passed"] for s in summaries), summaries
+
+
+MULTI_TIMELINE_FORMATS = ("ics", "ics-days")
+
+
+def render_multi_timeline_paced_ics(timelines) -> tuple[str, list[dict]]:
+    """Render a bundle of branch timelines as ONE paced
+    iCalendar: for every timeline, one event series per column
+    (base + each branch) at day granularity — for every dated
+    day of that column's own day-by-day pacing
+    (pacing.plan_itinerary, recomputed here; a stored
+    ``itinerary`` field is never read back), one all-day VEVENT
+    whose summary names timeline, branch, and day and whose
+    description carries that column's recomputed verdict and
+    only that day's recommendations in that branch, so a
+    recipient can compare every swap path in the bundle day by
+    day on their own calendar. Returns (content, summaries)
+    where summaries carry each timeline's recomputed
+    all_passed + paced event count.
+
+    Every verdict is recomputed per plan from its own sealed
+    record; a tampered branch's days read NOT VERIFIED. A
+    timeline with no dated day holding recommendations
+    contributes no events; a bundle with no such day anywhere
+    raises no_dated_legs instead of inventing dates.
+    Deterministic: UIDs hash the timeline name + column name +
+    plan content (request + item ids/affinities, deliberately
+    excluding the evidence record's wall-clock) + leg + day,
+    namespaced with a ``paced:`` prefix apart from the
+    leg-level bundle UIDs, the paced timeline UIDs, and the
+    single-plan paced UIDs; DTSTAMP derives from the day
+    itself, exactly as the other paced exporters."""
+    from .pacing import plan_itinerary
+    validate_multi_timelines(timelines)
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0",
+             "PRODID:-//TastePilot//Multi Timeline Export//EN",
+             "CALSCALE:GREGORIAN",
+             "X-WR-CALNAME:TastePilot multi-timeline bundle by day"]
+    summaries: list[dict] = []
+    total_events = 0
+    for timeline in timelines:
+        tname = timeline["name"].strip()
+        base, branches = timeline["base"], timeline["branches"]
+        doc = _timeline_doc(base, branches)  # validates + verdicts
+        plans = [base] + [b["plan"] for b in branches]
+        events = 0
+        for column, plan in zip(doc["columns"], plans):
+            verdict = recomputed_verdict(plan)
+            itinerary = plan_itinerary(plan)
+            days = [(leg.get("location"), day)
+                    for leg in itinerary["legs"] for day in leg["days"]
+                    if day["date"] is not None and day["items"]]
+            if not days:
+                continue
+            fingerprint = {
+                "timeline": tname, "branch": column["name"],
+                "request": plan.get("request"),
+                "items": [[i.get("entity", {}).get("id"),
+                           i.get("domain"), i.get("location"),
+                           i.get("affinity")]
+                          for i in plan.get("items") or []],
+            }
+            canonical = json.dumps(
+                fingerprint, sort_keys=True, ensure_ascii=False,
+                separators=(",", ":")).encode()
+            plan_hash = hashlib.sha256(canonical).hexdigest()[:24]
+            for location, day in days:
+                where = location or "Anywhere"
+                day_date = date.fromisoformat(day["date"])
+                next_day = day_date + timedelta(days=1)
+                uid_src = (f"paced:{plan_hash}:{location}:"
+                           f"{day['date']}")
+                uid = hashlib.sha256(uid_src.encode()).hexdigest()[:32]
+                desc = [f"Timeline: {tname}",
+                        f"Branch: {column['name']} "
+                        f"({'PASS' if verdict['passed'] else 'FAIL'} — "
+                        f"recomputed from this plan's sealed evidence)",
+                        _banner_lines(plan, verdict)[0], "",
+                        "Today's recommendations:"]
+                for ref in day["items"]:
+                    head = _one_line(ref.get("name", "Untitled"))
+                    if ref.get("affinity") is not None:
+                        head += f" (affinity {ref['affinity']:.2f})"
+                    desc.append(f"- {head} [{ref.get('domain', '')}]")
+                lines += [
+                    "BEGIN:VEVENT",
+                    f"UID:{uid}@tastepilot-multi-timeline",
+                    f"DTSTAMP:{day_date.strftime('%Y%m%d')}T000000Z",
+                    f"DTSTART;VALUE=DATE:{day_date.strftime('%Y%m%d')}",
+                    f"DTEND;VALUE=DATE:{next_day.strftime('%Y%m%d')}",
+                    "SUMMARY:" + _ics_escape(
+                        f"TastePilot [{tname} / {column['name']}]: "
+                        f"{where} · {day['date']}"),
+                    "DESCRIPTION:" + _ics_escape("\n".join(desc)),
+                    "END:VEVENT",
+                ]
+                events += 1
+        summaries.append({
+            "name": tname,
+            "all_passed": bool(doc["summary"]["all_passed"]),
+            "events": events,
+            "columns": [c["name"] for c in doc["columns"]]})
+        total_events += events
+    if not total_events:
+        raise ValueError("no_dated_legs: no timeline in the bundle "
+                         "has a dated day with recommendations to "
+                         "put on a calendar")
+    lines.append("END:VCALENDAR")
+    folded: list[str] = []
+    for line in lines:
+        folded.extend(_ics_fold(line))
+    return "\r\n".join(folded) + "\r\n", summaries
+
+
+def export_multi_timeline_paced_ics(timelines) -> tuple[str, bool, list[dict]]:
+    """Render a multi-timeline bundle as one paced iCalendar
+    file; returns (content, all_passed, summaries) — all_passed
+    is every timeline's every column recomputing as PASS. A
+    tampered branch still renders, its days NOT VERIFIED —
+    never clean."""
+    content, summaries = render_multi_timeline_paced_ics(timelines)
+    return content, all(s["all_passed"] for s in summaries), summaries
+
+
+_MULTI_TIMELINE_RENDERERS = {"ics": export_multi_timeline_ics,
+                             "ics-days": export_multi_timeline_paced_ics}
+
+
+def export_multi_timeline(timelines, fmt: str) -> tuple[str, bool, list[dict]]:
+    """Render a multi-timeline bundle in *fmt* (ics: one event
+    series per column per timeline at leg granularity, or
+    ics-days: one paced event series per column per timeline at
+    day granularity); returns (content, all_passed, summaries).
+    Raises ValueError with a category for an unsupported format,
+    a malformed bundle (from validate_multi_timelines /
+    branch_timeline), or a bundle with no dated leg (ics) / no
+    dated day holding recommendations (ics-days) anywhere."""
+    if fmt not in MULTI_TIMELINE_FORMATS:
+        raise ValueError(
+            f"unsupported: multi-timeline export format {fmt!r} "
+            f"(ics or ics-days only)")
+    return _MULTI_TIMELINE_RENDERERS[fmt](timelines)
 
 
 _TIMELINE_RENDERERS = {"markdown": render_timeline_markdown,

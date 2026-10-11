@@ -466,6 +466,26 @@ the reason recorded (the demo never goes down because the LLM did).
     dateless timeline is refused with `no_dated_legs`, and
     the paced timeline's UIDs never collide with the leg-level
     timeline calendar's or the single-plan paced calendar's.
+38. Paced bundle calendar probe: build a bundle of two dated
+    timelines in the branch explorer and download it with
+    "Download bundle (iCalendar by day)" (or `POST
+    /api/export-multi-timeline?format=ics-days`) → one all-day
+    event per dated day per timeline per branch, each naming
+    its timeline, branch, and day and carrying only that day's
+    recommendations in that branch, under that column's
+    recomputed verdict; the event count equals the sum of
+    every column's paced days. Create the multi-timeline
+    subscription → the response's `paced_url` serves the same
+    paced bundle calendar under an ETag ending in `-days`:
+    a conditional poll with that etag returns `304`, while
+    presenting the leg-level feed etag to the paced URL
+    returns the full `200` calendar (the variants never
+    answer each other's polls). A tampered branch's paced
+    days read NOT VERIFIED, a bundle with no dated day
+    anywhere is refused with `no_dated_legs`, and the paced
+    bundle's UIDs never collide with the leg-level bundle
+    calendar's, the paced timeline calendar's, or the
+    single-plan paced calendar's.
 
 ## Notes
 

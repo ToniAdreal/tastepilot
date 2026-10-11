@@ -758,7 +758,9 @@ async function doTimeline(basePlan, okBranches, outEl) {
     multiOut.textContent = 'Multi-timeline subscription (version ' +
       d.version + ', etag ' + d.etag + '): ' + location.origin + d.url +
       ' — one calendar subscription carrying every timeline in the ' +
-      'bundle. Changes: ' + location.origin + d.changes_url +
+      'bundle. Paced by day: ' + location.origin + d.paced_url +
+      ' — the same bundle as one event per paced day. Changes: ' +
+      location.origin + d.changes_url +
       ' — poll it (or the feed URL with If-None-Match) to learn ' +
       'when the bundle changes. Expires ' +
       new Date(d.expires_at).toLocaleString() + ' unless updated.';
@@ -768,6 +770,30 @@ async function doTimeline(basePlan, okBranches, outEl) {
   outEl.appendChild(bundleOut);
   outEl.appendChild(multiBtn);
   outEl.appendChild(multiOut);
+  // Take-away downloads of the bundle itself (no subscription):
+  // the leg-level calendar and its paced by-day counterpart,
+  // rendered on the spot by /api/export-multi-timeline with
+  // every verdict recomputed.
+  for (const fmt of ['ics', 'ics-days']) {
+    const dl = document.createElement('button');
+    dl.type = 'button'; dl.className = 'multiexportbtn';
+    dl.textContent = fmt === 'ics-days'
+      ? 'Download bundle (iCalendar by day)'
+      : 'Download bundle (iCalendar)';
+    dl.addEventListener('click', async () => {
+      if (!multiBundle.length) { showBundle(); return; }
+      const r = await fetch('/api/export-multi-timeline?format=' + fmt,
+        {method: 'POST', headers: {'Content-Type': 'application/json'},
+         body: JSON.stringify({timelines: multiBundle})});
+      if (!r.ok) { dl.textContent = 'Bundle export failed'; return; }
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'tastepilot-multi-timeline.ics';
+      a.click(); URL.revokeObjectURL(a.href);
+    });
+    outEl.appendChild(dl);
+  }
   // Push notifications: register a webhook on the multi-feed —
   // TastePilot POSTs a multi_feed.subscribed test delivery on
   // registration and a multi_feed.updated delivery on every

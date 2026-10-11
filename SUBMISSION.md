@@ -207,6 +207,17 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    bundle of named timelines stored under a single feed URL
    whose calendar carries every timeline's branch series at
    once, each timeline's verdicts recomputed on every poll.
+   The bundle has a paced form too: a paced bundle calendar
+   with one event series per timeline per branch at day
+   granularity — for every dated day of that branch's own
+   pacing, an all-day event naming the timeline, the branch,
+   and the day and carrying only that day's recommendations
+   in that branch — served by the same feed URL with
+   `?format=ics-days` under its own ETag, and downloadable
+   without a subscription as a take-away export; a tampered
+   branch's paced days read NOT VERIFIED, and a bundle with
+   no dated day holding recommendations anywhere is refused
+   rather than assigned invented dates.
    The bundle feed is versioned and keeps a change log —
    one entry per creation and per in-place update, naming
    the timelines it carries and the verdict recomputed at
