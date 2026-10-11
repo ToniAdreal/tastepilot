@@ -76,6 +76,17 @@ instead of a named service's API:
   the same route with ``/pause``), which clears the count;
   resuming is the subscriber's deliberate act, exactly like
   a feed update renewing a feed's expiry.
+- an auto-pause is a circuit breaker, not a life sentence:
+  the store stamps it with its reason (``auto``) and the
+  moment it paused, and after ``PAUSE_COOLDOWN_SECONDS``
+  the next feed update *probes* the endpoint with that
+  update's own push (the delivery record is stamped
+  ``probe``). A delivered probe closes the breaker — the
+  webhook resumes with its count cleared; a failed probe
+  re-pauses it and restarts the cooldown from that moment.
+  A webhook paused *by hand* (reason ``manual``) is never
+  probed: only the subscriber's resume restarts it, because
+  a deliberate pause is an instruction, not a symptom.
 
 Email notifications are deliberately absent: sending mail needs
 an account and credentials, both outside the build's hard
@@ -98,6 +109,7 @@ MAX_WEBHOOKS_PER_FEED = 4
 MAX_DELIVERIES = 20
 MAX_ATTEMPTS = 3
 PAUSE_AFTER_CONSECUTIVE_FAILURES = 3
+PAUSE_COOLDOWN_SECONDS = 3600
 TRANSIENT_STATUSES = frozenset({429, 500, 502, 503, 504})
 MIN_SIGNING_SECRET_CHARS = 16
 MAX_SIGNING_SECRET_CHARS = 200

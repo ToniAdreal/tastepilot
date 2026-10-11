@@ -833,7 +833,11 @@ async function doTimeline(basePlan, okBranches, outEl) {
   // recorded as skipped (webhook_paused) instead of attempted,
   // and redelivery to it is refused until it is resumed.
   // Resuming is the subscriber's deliberate act and clears the
-  // failure count; missed pushes stay redeliverable.
+  // failure count; missed pushes stay redeliverable. An
+  // auto-paused webhook is also probed by the next update
+  // push once its cooldown (probe_eligible_at) has passed —
+  // a delivered probe revives it, a failed one restarts the
+  // cooldown — while a manually paused one is never probed.
   const resumeBtn = document.createElement('button');
   resumeBtn.type = 'button'; resumeBtn.className = 'webhookresumebtn';
   resumeBtn.textContent = 'Resume paused webhooks';
@@ -865,7 +869,11 @@ async function doTimeline(basePlan, okBranches, outEl) {
       const dd = await rr.json().catch(() => ({}));
       lines.push(w.host + (rr.ok
         ? ' resumed (failure count cleared)'
-        : ' resume failed: ' + (dd.error || rr.status)));
+        : ' resume failed: ' + (dd.error || rr.status)) +
+        (w.paused_reason === 'auto'
+          ? ' [was auto-paused; a probe was due ' +
+            w.probe_eligible_at + ']'
+          : ' [was paused manually]'));
     }
     resumeOut.textContent = 'Webhooks: ' + lines.join('; ') +
       '. Pushes that were skipped while a webhook was paused ' +

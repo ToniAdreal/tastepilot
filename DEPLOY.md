@@ -300,6 +300,23 @@ the reason recorded (the demo never goes down because the LLM did).
     skipped delivery now redelivers `delivered`, and
     `.../pause` pauses by hand the same way. On an owned
     feed, pause/resume without the owner's token → `403`.
+27. Webhook probe probe (auto-paused webhooks are probed
+    after a cooldown): continuing probe 26, the webhook
+    listing now reports `paused_reason: "auto"`, the
+    `paused_at` moment, and a `probe_eligible_at` one hour
+    later. Before that moment an update is still recorded
+    `skipped` and the receiver is not hit. After it, the
+    next update IS attempted as a probe (delivery record
+    stamped `probe: true`): with the receiver still at
+    `500` the webhook stays paused and
+    `probe_eligible_at` moves one hour past the probe;
+    with the receiver at `200` the probe delivery is
+    `delivered` and the listing reports `paused: false`
+    with `consecutive_failures: 0`. Pause a webhook by
+    hand instead (`.../pause`, `paused_reason: "manual"`,
+    `probe_eligible_at: null`) → updates stay `skipped`
+    no matter how long has passed; only `.../resume`
+    restarts it.
 
 ## Notes
 

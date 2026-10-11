@@ -729,8 +729,20 @@ baked into the image or the repo.
   it with that reason. The subscriber resumes it with
   `POST .../webhooks/<id>/resume` (or pauses by hand with
   `.../pause`) under the same owner rule; resuming clears
-  the count. Webhook listings report `paused` and
-  `consecutive_failures`. Webhooks are
+  the count. Webhook listings report `paused`,
+  `consecutive_failures`, and the pause provenance
+  (`paused_reason`, `paused_at`, `probe_eligible_at`).
+  An auto-pause is a circuit breaker with a half-open
+  probe: after a 1-hour cooldown
+  (`PAUSE_COOLDOWN_SECONDS`), the next update push is
+  attempted against the auto-paused webhook as a probe
+  (its delivery record is stamped `probe`) — a delivered
+  probe revives the webhook with its count cleared, a
+  failed probe restarts the cooldown from that moment.
+  A webhook paused by hand (reason `manual`) is never
+  probed: a deliberate pause is an instruction, not a
+  symptom, and only the subscriber's resume restarts it.
+  Webhooks are
   listed (`GET .../webhooks`, host labels only) and removed
   (`DELETE .../webhooks/<id>`) under the same owner rule, and
   persist with the feed in file mode. Bundles expire after 30 days

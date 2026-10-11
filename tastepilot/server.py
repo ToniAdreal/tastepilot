@@ -198,7 +198,12 @@ Routes:
                                are recorded as skipped, never
                                attempted. A webhook also pauses
                                itself after 3 consecutive failed
-                               deliveries.
+                               deliveries (reason "auto",
+                               stamped with the moment); after
+                               a 1-hour cooldown the next update
+                               push probes an auto-paused
+                               webhook — a hand pause (reason
+                               "manual") is never probed.
   POST /api/multi-feeds/<id>/webhooks/<webhook_id>/resume
                                resume a paused webhook (owner
                                rule as for the feed), clearing
@@ -369,6 +374,7 @@ from .export import (TIMELINE_FORMATS, export_multi_timeline_ics,
 from .imports import parse_import_bytes
 from .notify import (MAX_DELIVERIES, MAX_WEBHOOKS_PER_FEED,
                      PAUSE_AFTER_CONSECUTIVE_FAILURES,
+                     PAUSE_COOLDOWN_SECONDS,
                      build_notification, deliver_to_webhooks,
                      delivery_id_for, generate_signing_secret,
                      skipped_record, validate_signing_secret,
@@ -557,6 +563,21 @@ def verification_report(payload: dict) -> dict:
 
 def _iso(epoch_seconds: float) -> str:
     return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).isoformat()
+
+
+def _epoch_of(iso_value) -> float | None:
+    """Epoch seconds for an ``_iso`` timestamp, or None when
+    the stored value is missing or malformed — a bad stored
+    stamp means 'no known moment', never a guessed one."""
+    if not isinstance(iso_value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(iso_value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.timestamp()
 
 
 def owner_token_hash(token) -> str | None:
@@ -1099,6 +1120,20 @@ class MultiTimelineFeedStore:
             if isinstance(failures, int) \
             and not isinstance(failures, bool) and failures >= 0 \
             else 0
+        # Pause provenance, coerced the same way: only a
+        # stamped "auto"/"manual" reason survives, and only
+        # alongside its moment. A paused legacy row carries
+        # neither, so it reads as reason None — and a reason
+        # that is not "auto" is never probe-eligible, which
+        # keeps pre-probe rows (and hand pauses) manual-only.
+        reason = row.get("paused_reason")
+        row["paused_reason"] = reason \
+            if row["paused"] and reason in ("auto", "manual") \
+            else None
+        paused_at = row.get("paused_at")
+        row["paused_at"] = paused_at \
+            if row["paused"] and _epoch_of(paused_at) is not None \
+            else None
         return row
 
     def __init__(self, max_feeds: int = MAX_MULTI_TIMELINE_FEEDS,
@@ -1380,15 +1415,25 @@ class MultiTimelineFeedStore:
     @staticmethod
     def _webhook_meta(webhook: dict) -> dict:
         failures = webhook.get("consecutive_failures")
+        paused = webhook.get("paused") is True
+        reason = webhook.get("paused_reason") if paused else None
+        paused_at = webhook.get("paused_at") if paused else None
+        epoch = _epoch_of(paused_at)
+        probe_eligible_at = _iso(epoch + PAUSE_COOLDOWN_SECONDS) \
+            if paused and reason == "auto" and epoch is not None \
+            else None
         return {"webhook_id": webhook.get("webhook_id"),
                 "host": webhook.get("host"),
                 "created_at": webhook.get("created_at"),
                 "signed": bool(webhook.get("signing_secret")),
-                "paused": webhook.get("paused") is True,
+                "paused": paused,
                 "consecutive_failures": failures
                 if isinstance(failures, int)
                 and not isinstance(failures, bool) and failures >= 0
-                else 0}
+                else 0,
+                "paused_reason": reason,
+                "paused_at": paused_at,
+                "probe_eligible_at": probe_eligible_at}
 
     def add_webhook(self, feed_id: str, url, owner_token=None,
                     signing_secret="generate", secret_out=None):
@@ -1424,7 +1469,8 @@ class MultiTimelineFeedStore:
             webhook = {"webhook_id": webhook_id, "url": url,
                        "host": webhook_host_label(url),
                        "created_at": _iso(self._clock()),
-                       "paused": False, "consecutive_failures": 0}
+                       "paused": False, "consecutive_failures": 0,
+                       "paused_reason": None, "paused_at": None}
             generated = signing_secret == "generate"
             secret = generate_signing_secret() if generated \
                 else signing_secret
@@ -1475,20 +1521,27 @@ class MultiTimelineFeedStore:
             self._save()
             return "removed"
 
-    @staticmethod
-    def _note_delivery_outcomes(entry: dict, records) -> None:
+    def _note_delivery_outcomes(self, entry: dict, records) -> None:
         """Fold recorded delivery outcomes into each webhook's
         delivery health (called with the store lock held, from
         record_deliveries — the one path every push takes, so
         registration pings, update pushes, and redeliveries all
         count the same way). A delivered record resets its
-        webhook's consecutive-failure count; a failed record
-        increments it, and at
+        webhook's consecutive-failure count — and revives a
+        paused webhook outright, because a delivery that just
+        landed is the endpoint proving itself alive (this is
+        how a successful half-open probe closes the breaker);
+        a failed record increments it, and at
         notify.PAUSE_AFTER_CONSECUTIVE_FAILURES the webhook is
-        paused — later pushes to it are recorded as skipped
-        instead of attempted, until the subscriber resumes it.
-        A skipped record is not an attempt and never counts.
-        Records naming no registered webhook change nothing."""
+        auto-paused, stamped with the reason and the moment —
+        later pushes to it are recorded as skipped instead of
+        attempted, until the subscriber resumes it or a probe
+        succeeds. A failed record recorded while a webhook is
+        already auto-paused can only be a probe: the failure
+        count grows and the cooldown restarts from that
+        moment. A skipped record is not an attempt and never
+        counts. Records naming no registered webhook change
+        nothing."""
         webhooks = {w.get("webhook_id"): w
                     for w in entry.get("webhooks", [])
                     if isinstance(w, dict)}
@@ -1501,15 +1554,26 @@ class MultiTimelineFeedStore:
             status = record.get("status")
             if status == "delivered":
                 webhook["consecutive_failures"] = 0
+                if webhook.get("paused") is True:
+                    webhook["paused"] = False
+                    webhook["paused_reason"] = None
+                    webhook["paused_at"] = None
             elif status == "failed":
+                was_paused = webhook.get("paused") is True
                 failures = webhook.get("consecutive_failures")
                 failures = failures + 1 \
                     if isinstance(failures, int) \
                     and not isinstance(failures, bool) \
                     and failures >= 0 else 1
                 webhook["consecutive_failures"] = failures
-                if failures >= PAUSE_AFTER_CONSECUTIVE_FAILURES:
+                if was_paused and \
+                        webhook.get("paused_reason") == "auto":
+                    webhook["paused_at"] = _iso(self._clock())
+                elif not was_paused and \
+                        failures >= PAUSE_AFTER_CONSECUTIVE_FAILURES:
                     webhook["paused"] = True
+                    webhook["paused_reason"] = "auto"
+                    webhook["paused_at"] = _iso(self._clock())
 
     def set_webhook_paused(self, feed_id: str, webhook_id: str,
                            paused: bool, owner_token=None):
@@ -1519,7 +1583,10 @@ class MultiTimelineFeedStore:
         webhook_not_found. Resuming also clears the
         consecutive-failure count — the subscriber's
         deliberate act starts the endpoint fresh; pausing by
-        hand leaves the count as the record of why."""
+        hand leaves the count as the record of why, stamps
+        the pause as ``manual`` (converting even an auto
+        pause — a deliberate instruction replaces the
+        symptom), and is therefore never probe-eligible."""
         with self._lock:
             entry, status = self._webhook_gate(feed_id, owner_token)
             if entry is None:
@@ -1530,10 +1597,41 @@ class MultiTimelineFeedStore:
             if webhook is None:
                 return "webhook_not_found", None
             webhook["paused"] = bool(paused)
-            if not paused:
+            if paused:
+                webhook["paused_reason"] = "manual"
+                webhook["paused_at"] = _iso(self._clock())
+            else:
                 webhook["consecutive_failures"] = 0
+                webhook["paused_reason"] = None
+                webhook["paused_at"] = None
             self._save()
             return "ok", self._webhook_meta(webhook)
+
+    def probe_due_ids(self, feed_id: str) -> list:
+        """The feed's webhooks whose auto-pause cooldown has
+        elapsed at the store clock: paused with reason
+        ``auto`` and a known pause moment at least
+        notify.PAUSE_COOLDOWN_SECONDS ago. These — and only
+        these — are attempted as half-open probes by the next
+        push; a manual pause (or a legacy paused row with no
+        stamped reason/moment) is never due. Unknown feed →
+        empty list."""
+        with self._lock:
+            entry = self._entries.get(feed_id)
+            if entry is None:
+                return []
+            now = self._clock()
+            due = []
+            for webhook in entry.get("webhooks", []):
+                if not isinstance(webhook, dict) \
+                        or webhook.get("paused") is not True \
+                        or webhook.get("paused_reason") != "auto":
+                    continue
+                epoch = _epoch_of(webhook.get("paused_at"))
+                if epoch is not None and \
+                        now >= epoch + PAUSE_COOLDOWN_SECONDS:
+                    due.append(webhook.get("webhook_id"))
+            return due
 
     def record_deliveries(self, feed_id: str, records,
                           payload=None, redelivery_of=None) -> list:
@@ -2860,14 +2958,31 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             # threshold) is not attempted: its push is recorded
             # as a skipped delivery carrying the payload, so
             # the missed change stays redeliverable after a
-            # resume. Records stay in registration order.
-            active = [e for e in entries
-                      if e.get("paused") is not True]
+            # resume. One exception — the half-open probe: an
+            # auto-paused webhook whose cooldown has elapsed
+            # IS attempted with this push, its record stamped
+            # "probe"; a delivered probe revives it and a
+            # failed one restarts its cooldown (both folded in
+            # at record time). A manually paused webhook is
+            # never probed. Records stay in registration order.
+            due = set(multi_feed_store.probe_due_ids(feed_id))
+
+            def _attempted(entry):
+                return entry.get("paused") is not True \
+                    or entry.get("webhook_id") in due
+
+            active = [e for e in entries if _attempted(e)]
             delivered = iter(deliver_to_webhooks(
                 active, payload, **kwargs))
-            records = [next(delivered) if e.get("paused") is not True
-                       else skipped_record(e, payload)
-                       for e in entries]
+            records = []
+            for e in entries:
+                if _attempted(e):
+                    record = next(delivered)
+                    if e.get("paused") is True:
+                        record = {**record, "probe": True}
+                    records.append(record)
+                else:
+                    records.append(skipped_record(e, payload))
             return multi_feed_store.record_deliveries(
                 feed_id, records, payload=payload)
 

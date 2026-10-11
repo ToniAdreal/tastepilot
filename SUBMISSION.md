@@ -237,7 +237,15 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    count), later pushes are recorded as skipped with their
    payload kept — so the missed change can be redelivered
    once the subscriber resumes the webhook, which clears
-   the count.
+   the count. An auto-pause is a circuit breaker, not a
+   life sentence: it is stamped with its reason and the
+   moment it paused, and after a one-hour cooldown the
+   next update push probes the endpoint with that push
+   itself — a delivered probe revives the webhook with
+   its count cleared, a failed probe restarts the
+   cooldown — while a webhook the subscriber paused by
+   hand is never probed, because a deliberate pause is
+   an instruction, not a symptom.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -381,7 +389,8 @@ stops being a liability and becomes pure upside.
   deliveries HMAC-signed with a per-webhook secret the
   subscriber supplies or has generated and shown once, and
   a webhook auto-paused after consecutive failures until
-  the subscriber resumes it)
+  the subscriber resumes it or a half-open probe — the
+  next update push after a one-hour cooldown — revives it)
   graduating to a hosted notification service with
   subscriber accounts — managed endpoints, email delivery,
   and provider-side delivery guarantees — instead of
