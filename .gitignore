@@ -14,3 +14,11 @@ tastepilot-shares.json
 # owner-token hashes and derived profiles — never commit them either
 *.profiles.json
 tastepilot-profiles.json
+
+# Calendar-feed persistence files (TASTEPILOT_FEED_FILE /
+# TASTEPILOT_MULTI_FEED_FILE) hold stored timelines and owner-token
+# hashes — never commit them either
+*.feeds.json
+tastepilot-feeds.json
+*.multifeeds.json
+tastepilot-multifeeds.json

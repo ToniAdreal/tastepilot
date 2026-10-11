@@ -36,6 +36,8 @@
                              [--profile-file profiles.json]
                              [--feed-file feeds.json]
                              [--feed-ttl-days 30]
+                             [--multi-feed-file multifeeds.json]
+                             [--multi-feed-ttl-days 30]
 
 For hosted deployments the port defaults to the platform's ``PORT``
 environment variable when ``--port`` is not given (see DEPLOY.md).
@@ -54,7 +56,12 @@ Timeline calendar feeds are in-memory unless ``--feed-file`` (or
 the ``TASTEPILOT_FEED_FILE`` env var) names a JSON file they
 persist to; every feed expires after ``--feed-ttl-days`` unless
 its owner updates it, and can be revoked with
-``DELETE /api/feeds/<id>``.
+``DELETE /api/feeds/<id>``. Multi-timeline feeds (one subscription
+carrying many timelines, versioned with a change log and an ETag
+for poll-based change notification) follow the same pattern via
+``--multi-feed-file`` / ``TASTEPILOT_MULTI_FEED_FILE`` and
+``--multi-feed-ttl-days``, revoked with
+``DELETE /api/multi-feeds/<id>``.
 """
 from __future__ import annotations
 
@@ -251,6 +258,13 @@ def main(argv: list[str] | None = None) -> int:
                         "else in-memory)")
     s.add_argument("--feed-ttl-days", type=float, default=30.0,
                    help="timeline feed lifetime in days (default 30)")
+    s.add_argument("--multi-feed-file", default=None,
+                   help="persist multi-timeline feeds to this "
+                        "JSON file (default: "
+                        "$TASTEPILOT_MULTI_FEED_FILE, else in-memory)")
+    s.add_argument("--multi-feed-ttl-days", type=float, default=30.0,
+                   help="multi-timeline feed lifetime in days "
+                        "(default 30)")
     args = ap.parse_args(argv)
 
     if args.cmd == "serve":
@@ -260,6 +274,10 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if args.feed_ttl_days <= 0:
             print("error: --feed-ttl-days must be > 0", file=sys.stderr)
+            return 2
+        if args.multi_feed_ttl_days <= 0:
+            print("error: --multi-feed-ttl-days must be > 0",
+                  file=sys.stderr)
             return 2
         try:
             agent = _agent_for(args.mode, args.llm)
@@ -272,7 +290,9 @@ def main(argv: list[str] | None = None) -> int:
               share_ttl_seconds=args.share_ttl_days * 24 * 3600,
               profile_file=args.profile_file,
               feed_file=args.feed_file,
-              feed_ttl_seconds=args.feed_ttl_days * 24 * 3600)
+              feed_ttl_seconds=args.feed_ttl_days * 24 * 3600,
+              multi_feed_file=args.multi_feed_file,
+              multi_feed_ttl_seconds=args.multi_feed_ttl_days * 24 * 3600)
         return 0
     if args.cmd == "profile":
         from .profiles import ProfileStore, owner_token_hash

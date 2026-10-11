@@ -37,6 +37,7 @@ No build/install step is required — there are no dependencies.
 | `TASTEPILOT_SHARE_FILE` | no | Path of a JSON file the share-link store persists to (atomic writes), so verification links survive restarts. Needs a writable, persistent volume; unset = in-memory links. The CLI equivalent is `serve --share-file <path>`, and `--share-ttl-days` tunes the 7-day default link lifetime. The file holds only shared plan payloads (fictional demo data) and, for owner-managed links, SHA-256 hashes of owner tokens — never the tokens themselves, and never the Qloo key. |
 | `TASTEPILOT_FEED_FILE` | no | Path of a JSON file the timeline calendar-feed store persists to (atomic writes), so subscription URLs survive restarts. Needs a writable, persistent volume; unset = in-memory feeds. The CLI equivalent is `serve --feed-file <path>`, and `--feed-ttl-days` tunes the 30-day default feed lifetime (an owner's in-place update renews it). The file holds only stored timeline payloads (fictional demo data) and, for owner-managed feeds, SHA-256 hashes of owner tokens — never the tokens themselves, and never the Qloo key. |
 | `TASTEPILOT_PROFILE_FILE` | no | Path of a JSON file the persistent preference-profile store persists to (atomic writes), so learned suggestion profiles survive restarts. Needs a writable, persistent volume; unset = in-memory profiles. The CLI equivalent is `serve --profile-file <path>`. The file holds only owner-token SHA-256 hashes and profiles derived from sealed swap histories — never the tokens themselves, never caller-supplied weights, and never the Qloo key. |
+| `TASTEPILOT_MULTI_FEED_FILE` | no | Path of a JSON file the multi-timeline calendar-feed store persists to (atomic writes), so bundle subscription URLs (with their versions and change logs) survive restarts. Needs a writable, persistent volume; unset = in-memory multi-feeds. The CLI equivalent is `serve --multi-feed-file <path>`, and `--multi-feed-ttl-days` tunes the 30-day default lifetime (an owner's in-place update renews it). The file holds only stored timeline bundles (fictional demo data), change-log entries, and, for owner-managed feeds, SHA-256 hashes of owner tokens — never the tokens themselves, and never the Qloo key. |
 
 For live Nemotron explanations instead of the deterministic template,
 append `--llm nebius` to the start command; every explanation records
@@ -192,6 +193,27 @@ the reason recorded (the demo never goes down because the LLM did).
     process — a restart clears them; with it set (on a
     persistent volume) they survive restarts. `GET /api/health`
     reports the feed store's mode, count, and TTL.
+21. Multi-feed probe (multi-timeline subscriptions + change
+    notification): add two dated timelines to the bundle in
+    the timeline view and "Create multi-timeline
+    subscription" → `POST /api/multi-feeds` returns `201`
+    with version 1, an etag, and a stable
+    `/api/multi-feeds/<id>.ics` URL; fetching it returns
+    `200` `text/calendar` carrying every timeline's series
+    (summaries name timeline and branch) with an `ETag`
+    header and `Cache-Control: public, max-age=300`.
+    Re-fetch with `If-None-Match: "<etag>"` → `304` with an
+    empty body. `GET /api/multi-feeds/<id>/changes` shows
+    the creation entry; `POST /api/multi-feeds/<id>` with a
+    changed bundle → `200` version 2 with a new etag, the
+    old etag no longer matches (the same URL serves the new
+    series), and the change log gains an `updated` entry.
+    A bundle with no dated leg anywhere → `400`
+    (`no_dated_legs`); `DELETE /api/multi-feeds/<id>` →
+    `200` and the URL then `404`s. Without
+    `TASTEPILOT_MULTI_FEED_FILE` multi-feeds live in the
+    server process; with it set they survive restarts.
+    `GET /api/health` reports the multi-feed store.
 
 ## Notes
 

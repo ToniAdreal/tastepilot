@@ -134,6 +134,34 @@ Routes:
                                on; the ownership rule matches share
                                revocation (an unowned feed may be
                                revoked by whoever holds its URL).
+  POST /api/multi-feeds        {"timelines": [{"name", "base",
+                               "branches"}, ...]} -> create a
+                               multi-timeline subscription feed: one
+                               stable URL whose calendar carries
+                               every timeline in the bundle (each
+                               gated exactly like the ics export).
+                               The feed is versioned (version 1 at
+                               creation) with a capped change log.
+  GET  /api/multi-feeds/<id>.ics
+                               the bundle rendered fresh as ONE
+                               iCalendar on every fetch, with an
+                               ETag: a poller presenting the etag in
+                               If-None-Match gets 304 while nothing
+                               changed — the poll-based change
+                               notification. No subscriber registry
+                               is kept and nothing is pushed.
+  GET  /api/multi-feeds/<id>   metadata + per-timeline recomputed
+                               verdicts + version + etag.
+  GET  /api/multi-feeds/<id>/changes
+                               the change log: one entry per
+                               creation/update (version, time,
+                               timeline names, verdict at write).
+  POST /api/multi-feeds/<id>   replace the bundle in place (same
+                               id, version incremented, change
+                               logged, expiry renewed; owner rule
+                               as for feeds).
+  DELETE /api/multi-feeds/<id> revoke a multi-feed (owner rule as
+                               for feeds).
   GET  /api/shares             the caller's own share links (dashboard):
                                requires an ``X-Owner-Token`` header and
                                returns only the shares that token owns —
@@ -218,6 +246,15 @@ Persistence, expiry, revocation:
     response is the one API response that is not ``no-store`` — it
     carries a short public cache lifetime so calendar apps re-poll
     instead of caching the series forever.
+  * Multi-timeline feeds follow the same pattern in a
+    MultiTimelineFeedStore: file-backed via ``serve(...,
+    multi_feed_file=...)``, ``--multi-feed-file``, or
+    ``TASTEPILOT_MULTI_FEED_FILE``; bounded
+    (``MAX_MULTI_TIMELINE_FEEDS``); same 30-day expiry/renewal and
+    revocation. Each entry additionally carries a version and a
+    capped change log (persisted with the entry), and its .ics
+    response carries an ETag so pollers can detect changes with
+    If-None-Match instead of downloading the calendar.
 
 Hardening (Oct 21–24 milestone):
   * Request bodies are capped (``MAX_BODY_BYTES``) and plan text is capped
@@ -254,7 +291,9 @@ from urllib.parse import parse_qs, unquote, urlparse
 from .checker import check_plan, item_reports
 from .diff import diff_plans
 from .evidence import qloo_responses, verify_chain
-from .export import TIMELINE_FORMATS, export_plan, export_timeline, media_for
+from .export import (TIMELINE_FORMATS, export_multi_timeline_ics,
+                     export_plan, export_timeline, media_for,
+                     validate_multi_timelines)
 from .imports import parse_import_bytes
 from .profiles import ProfileStore
 from .timeline import branch_timeline
@@ -287,6 +326,12 @@ DEFAULT_FEED_TTL_SECONDS = 30 * 24 * 3600  # feeds live for 30 days;
                                  # because a subscription is long-lived
                                  # by design (unlike a share link)
 FEED_FILE_ENV_VAR = "TASTEPILOT_FEED_FILE"  # opt-in persistence path
+MAX_MULTI_TIMELINE_FEEDS = 32    # multi-timeline feeds kept at once
+MAX_MULTI_FEED_BODY_BYTES = 2 * 1024 * 1024  # a bundle carries up to
+                                 # six timelines, each a base plan plus
+                                 # branch plans — bounded, but larger
+                                 # than the single-plan verify cap
+MULTI_FEED_FILE_ENV_VAR = "TASTEPILOT_MULTI_FEED_FILE"  # persistence
 PROFILE_FILE_ENV_VAR = "TASTEPILOT_PROFILE_FILE"  # opt-in profile store
 MAX_PROFILES = 256               # owners with a persistent profile
 OWNER_TOKEN_HEADER = "X-Owner-Token"  # per-browser owner credential
@@ -905,6 +950,287 @@ class TimelineFeedStore:
     def revoke(self, feed_id: str, owner_token=None) -> bool:
         return self.revoke_status(feed_id, owner_token) == "revoked"
 
+
+def multi_feed_etag(payload: dict, version: int) -> str:
+    """Change detector for a multi-timeline feed: a truncated
+    SHA-256 of the canonical payload + version. Any update — a
+    replaced timeline, an added one — changes the etag, so a
+    subscriber polling with If-None-Match learns "changed" (200
+    with a new etag) vs "unchanged" (304) without downloading
+    the calendar. The etag reveals nothing beyond the payload
+    the feed URL already serves."""
+    canonical = json.dumps({"version": version, "payload": payload},
+                           sort_keys=True, ensure_ascii=False,
+                           separators=(",", ":")).encode()
+    return hashlib.sha256(canonical).hexdigest()[:32]
+
+
+class MultiTimelineFeedStore:
+    """Bounded store behind multi-timeline calendar subscriptions
+    with change notification.
+
+    One feed carries a whole bundle — {"timelines": [{"name",
+    "base", "branches"}, ...]} — under one stable, unguessable
+    id, so a single calendar subscription can carry many trips
+    at once instead of one feed per timeline. Change notification
+    is poll-based and explicit: every entry carries a version
+    (incremented on each in-place update) and a capped change
+    log (version, timestamp, kind, timeline names, recomputed
+    all_passed), and the feed's etag (see multi_feed_etag) lets
+    a poller — a calendar app or the changes endpoint — detect
+    a change cheaply. There is no push channel and no subscriber
+    registry: TastePilot keeps no list of who polls, and sends
+    nothing to anyone.
+
+    Everything else mirrors TimelineFeedStore: 30-day expiry
+    renewed only by an explicit owner update, DELETE revocation,
+    optional owner token stored only as its SHA-256 hash, and
+    optional atomic JSON file persistence (a missing/corrupt
+    file starts an empty store; malformed rows are skipped).
+    Payloads are deep-copied in and out."""
+
+    MAX_CHANGES = 20
+
+    def __init__(self, max_feeds: int = MAX_MULTI_TIMELINE_FEEDS,
+                 ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS,
+                 path: str | Path | None = None, clock=time.time):
+        if max_feeds < 1:
+            raise ValueError("max_feeds must be >= 1")
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be > 0")
+        self.max_feeds = max_feeds
+        self.ttl_seconds = ttl_seconds
+        self.path = Path(path) if path is not None else None
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._entries: OrderedDict[str, dict] = OrderedDict()
+        self._load()
+
+    @staticmethod
+    def _timelines_of(payload) -> list:
+        timelines = payload.get("timelines") if isinstance(
+            payload, dict) else None
+        return timelines if isinstance(timelines, list) else []
+
+    @classmethod
+    def _names(cls, payload) -> list:
+        return [t.get("name") if isinstance(t, dict) else None
+                for t in cls._timelines_of(payload)]
+
+    def _load(self) -> None:
+        if self.path is None:
+            return
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+            entries = data["entries"]
+            if not isinstance(entries, list):
+                return
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            return
+        now = self._clock()
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            feed_id = entry.get("feed_id")
+            payload = entry.get("payload")
+            expires_at = entry.get("expires_at")
+            if not isinstance(feed_id, str) or \
+                    not isinstance(payload, dict) or \
+                    not self._timelines_of(payload) or \
+                    not isinstance(expires_at, (int, float)) or \
+                    expires_at <= now:
+                continue
+            created_at = entry.get("created_at")
+            updated_at = entry.get("updated_at")
+            version = entry.get("version")
+            changes = entry.get("changes")
+            loaded = {
+                "payload": copy.deepcopy(payload),
+                "created_at": created_at if isinstance(
+                    created_at, (int, float)) else expires_at,
+                "updated_at": updated_at if isinstance(
+                    updated_at, (int, float)) else expires_at,
+                "expires_at": float(expires_at),
+                "version": version if isinstance(version, int)
+                and version >= 1 else 1,
+                "changes": [c for c in changes
+                            if isinstance(c, dict)][-self.MAX_CHANGES:]
+                if isinstance(changes, list) else [],
+            }
+            if isinstance(entry.get("owner_hash"), str):
+                loaded["owner_hash"] = entry["owner_hash"]
+            self._entries[feed_id] = loaded
+            self._entries.move_to_end(feed_id)
+        while len(self._entries) > self.max_feeds:
+            self._entries.popitem(last=False)
+
+    def _save(self) -> None:
+        if self.path is None:
+            return
+        data = {"version": 1, "entries": [
+            {"feed_id": feed_id, **entry}
+            for feed_id, entry in self._entries.items()]}
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp.write_text(json.dumps(data, ensure_ascii=False),
+                           encoding="utf-8")
+            os.replace(tmp, self.path)
+        except OSError:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    def _prune_expired(self) -> bool:
+        now = self._clock()
+        expired = [fid for fid, e in self._entries.items()
+                   if e["expires_at"] <= now]
+        for fid in expired:
+            del self._entries[fid]
+        return bool(expired)
+
+    def _change(self, entry: dict, kind: str, all_passed) -> dict:
+        return {"version": entry["version"],
+                "at": _iso(entry["updated_at"]), "kind": kind,
+                "timelines": self._names(entry["payload"]),
+                "all_passed": all_passed}
+
+    def _meta(self, feed_id: str, entry: dict) -> dict:
+        owner_hash = entry.get("owner_hash")
+        return {"feed_id": feed_id,
+                "created_at": _iso(entry["created_at"]),
+                "updated_at": _iso(entry["updated_at"]),
+                "expires_at": _iso(entry["expires_at"]),
+                "owned": owner_hash is not None,
+                "owner_fingerprint": owner_hash[:12]
+                if owner_hash is not None else None,
+                "timelines": self._names(entry["payload"]),
+                "version": entry["version"],
+                "etag": multi_feed_etag(entry["payload"],
+                                         entry["version"]),
+                "changes": len(entry["changes"])}
+
+    def _new_id(self) -> str:
+        for _ in range(100):
+            feed_id = secrets.token_hex(16)
+            if feed_id not in self._entries:
+                return feed_id
+        raise ValueError("feed_id_exhausted")
+
+    @property
+    def persistent(self) -> bool:
+        return self.path is not None
+
+    def info(self) -> dict:
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            return {"persistent": self.persistent,
+                    "count": len(self._entries),
+                    "max": self.max_feeds,
+                    "ttl_seconds": self.ttl_seconds}
+
+    def create(self, payload: dict, owner_token=None,
+               all_passed=None) -> dict:
+        with self._lock:
+            self._prune_expired()
+            feed_id = self._new_id()
+            now = self._clock()
+            entry = {"payload": copy.deepcopy(payload),
+                     "created_at": now, "updated_at": now,
+                     "expires_at": now + self.ttl_seconds,
+                     "version": 1, "changes": []}
+            digest = owner_token_hash(owner_token)
+            if digest is not None:
+                entry["owner_hash"] = digest
+            entry["changes"].append(
+                self._change(entry, "created", all_passed))
+            self._entries[feed_id] = entry
+            while len(self._entries) > self.max_feeds:
+                self._entries.popitem(last=False)
+            self._save()
+            return self._meta(feed_id, entry)
+
+    def get(self, feed_id: str) -> dict | None:
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            entry = self._entries.get(feed_id)
+            if entry is None:
+                return None
+            return copy.deepcopy(entry["payload"])
+
+    def meta(self, feed_id: str) -> dict | None:
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            entry = self._entries.get(feed_id)
+            return None if entry is None else self._meta(feed_id, entry)
+
+    def changes(self, feed_id: str) -> dict | None:
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            entry = self._entries.get(feed_id)
+            if entry is None:
+                return None
+            return {"feed_id": feed_id,
+                    "version": entry["version"],
+                    "etag": multi_feed_etag(entry["payload"],
+                                             entry["version"]),
+                    "updated_at": _iso(entry["updated_at"]),
+                    "changes": copy.deepcopy(entry["changes"])}
+
+    def etag(self, feed_id: str) -> str | None:
+        with self._lock:
+            entry = self._entries.get(feed_id)
+            if entry is None or entry["expires_at"] <= self._clock():
+                return None
+            return multi_feed_etag(entry["payload"], entry["version"])
+
+    def update_status(self, feed_id: str, payload: dict,
+                      owner_token=None, all_passed=None):
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            entry = self._entries.get(feed_id)
+            if entry is None:
+                return "not_found", None
+            digest = entry.get("owner_hash")
+            if digest is not None and \
+                    owner_token_hash(owner_token) != digest:
+                return "forbidden", None
+            now = self._clock()
+            entry["payload"] = copy.deepcopy(payload)
+            entry["updated_at"] = now
+            entry["expires_at"] = now + self.ttl_seconds
+            entry["version"] += 1
+            entry["changes"].append(
+                self._change(entry, "updated", all_passed))
+            entry["changes"] = entry["changes"][-self.MAX_CHANGES:]
+            self._entries.move_to_end(feed_id)
+            self._save()
+            return "updated", self._meta(feed_id, entry)
+
+    def revoke_status(self, feed_id: str, owner_token=None) -> str:
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            entry = self._entries.get(feed_id)
+            if entry is None:
+                return "not_found"
+            digest = entry.get("owner_hash")
+            if digest is not None and \
+                    owner_token_hash(owner_token) != digest:
+                return "forbidden"
+            del self._entries[feed_id]
+            self._save()
+            return "revoked"
+
+    def revoke(self, feed_id: str, owner_token=None) -> bool:
+        return self.revoke_status(feed_id, owner_token) == "revoked"
+
 def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                  max_shared_plans: int = MAX_SHARED_PLANS,
                  share_ttl_seconds: float = DEFAULT_SHARE_TTL_SECONDS,
@@ -916,7 +1242,11 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                  max_feeds: int = MAX_TIMELINE_FEEDS,
                  feed_ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS,
                  feed_file: str | Path | None = None,
-                 feed_clock=None):
+                 feed_clock=None,
+                 max_multi_feeds: int = MAX_MULTI_TIMELINE_FEEDS,
+                 multi_feed_ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS,
+                 multi_feed_file: str | Path | None = None,
+                 multi_feed_clock=None):
     # response_id -> (record, response) for plans produced by this server,
     # bounded FIFO: the oldest sealed responses are evicted first.
     evidence_cache: OrderedDict[str, tuple[dict, dict]] = OrderedDict()
@@ -946,6 +1276,16 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
     if feed_clock is not None:
         feed_kwargs["clock"] = feed_clock
     feed_store = TimelineFeedStore(**feed_kwargs)
+    # Multi-timeline feeds live in a MultiTimelineFeedStore: the
+    # same contract, carrying a whole bundle of timelines under
+    # one id, versioned with a change log + etag for poll-based
+    # change notification.
+    multi_feed_kwargs = {"max_feeds": max_multi_feeds,
+                         "ttl_seconds": multi_feed_ttl_seconds,
+                         "path": multi_feed_file}
+    if multi_feed_clock is not None:
+        multi_feed_kwargs["clock"] = multi_feed_clock
+    multi_feed_store = MultiTimelineFeedStore(**multi_feed_kwargs)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):  # keep demo logs clean
@@ -1114,7 +1454,9 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                                       "explainer": agent.explainer_info,
                                       "shares": share_store.info(),
                                       "profiles": profile_store.info(),
-                                      "feeds": feed_store.info()})
+                                      "feeds": feed_store.info(),
+                                      "multi_feeds":
+                                          multi_feed_store.info()})
             elif path == "/api/profile":
                 self._handle_profile_get()
             elif path == "/api/shares":
@@ -1142,6 +1484,20 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 if meta is not None:
                     report["expires_at"] = meta["expires_at"]
                 self._send_json(200, report)
+            elif path.startswith("/api/multi-feeds/"):
+                rest = unquote(path[len("/api/multi-feeds/"):])
+                if rest.endswith(".ics"):
+                    self._handle_multi_feed_fetch(
+                        rest[:-len(".ics")])
+                elif rest.endswith("/changes") and \
+                        "/" not in rest[:-len("/changes")]:
+                    self._handle_multi_feed_changes(
+                        rest[:-len("/changes")])
+                elif rest and "/" not in rest:
+                    self._handle_multi_feed_meta(rest)
+                else:
+                    self._send_json(
+                        404, {"error": "unknown multi-feed id"})
             elif path.startswith("/api/feeds/"):
                 rest = unquote(path[len("/api/feeds/"):])
                 if rest.endswith(".ics"):
@@ -1768,6 +2124,228 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 "all_passed": all_passed,
             })
 
+        def _multi_timeline_body(self):
+            """Read and shape-gate a {"timelines": [...]} body.
+            Returns the payload, or None after sending the
+            categorised error. Each timeline is gated exactly as
+            /api/timeline gates one (base + every branch plan via
+            validate_plan_payload), plus the bundle gate in
+            export.validate_multi_timelines (count, unique
+            names). The body cap is the multi-feed cap — a bundle
+            holds up to six timelines, each a full plan set."""
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return None
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return None
+            if length > MAX_MULTI_FEED_BODY_BYTES:
+                self._send_json(413, {"error": "bundle too large"})
+                return None
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return None
+            if not isinstance(payload, dict) or \
+                    not isinstance(payload.get("timelines"), list):
+                self._send_json(
+                    400, {"error": "timelines are required"})
+                return None
+            try:
+                validate_multi_timelines(payload["timelines"])
+            except ValueError as exc:
+                self._send_json(
+                    400, {"error": f"multi-feed failed: {exc}"})
+                return None
+            for timeline in payload["timelines"]:
+                error = validate_plan_payload(timeline["base"])
+                if error is not None:
+                    self._send_json(400, {"error": error})
+                    return None
+                for branch in timeline["branches"]:
+                    if isinstance(branch, dict) and \
+                            isinstance(branch.get("plan"), dict):
+                        error = validate_plan_payload(branch["plan"])
+                        if error is not None:
+                            self._send_json(400, {"error": error})
+                            return None
+            return payload
+
+        def _multi_feed_gate(self, payload):
+            """Prove a bundle can be a calendar feed: rendering it
+            as one iCalendar recomputes every timeline's verdicts
+            and refuses a bundle with no dated leg anywhere
+            (no_dated_legs). Returns (all_passed, summaries), or
+            None after sending a categorised 400 — a tampered
+            branch passes the gate and its series reads NOT
+            VERIFIED, exactly as in the single-timeline feed."""
+            try:
+                _content, all_passed, summaries = \
+                    export_multi_timeline_ics(payload["timelines"])
+            except ValueError as exc:  # categorised refusal
+                self._send_json(
+                    400, {"error": f"multi-feed failed: {exc}"})
+                return None
+            except (KeyError, TypeError, AttributeError, IndexError):
+                self._send_json(
+                    400, {"error": "multi-feed failed: bad_plan"})
+                return None
+            return all_passed, summaries
+
+        def _handle_multi_feed_create(self):
+            """Create a multi-timeline subscription feed:
+            POST /api/multi-feeds {"timelines": [...]}. One stable
+            URL serves every timeline in the bundle as one
+            calendar; version starts at 1 and the change log
+            records the creation."""
+            payload = self._multi_timeline_body()
+            if payload is None:
+                return
+            gated = self._multi_feed_gate(payload)
+            if gated is None:
+                return
+            all_passed, summaries = gated
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            meta = multi_feed_store.create(
+                payload, owner_token=token, all_passed=all_passed)
+            feed_id = meta["feed_id"]
+            self._send_json(201, {
+                **meta,
+                "url": f"/api/multi-feeds/{feed_id}.ics",
+                "feed_url": f"/api/multi-feeds/{feed_id}.ics",
+                "changes_url": f"/api/multi-feeds/{feed_id}/changes",
+                "all_passed": all_passed,
+                "timelines_summary": summaries,
+            })
+
+        def _handle_multi_feed_update(self, feed_id):
+            """Replace a multi-feed's bundle in place (POST
+            /api/multi-feeds/<id>): same URL, version incremented,
+            a change-log entry appended, expiry renewed — how
+            subscribers learn a timeline changed. An owned feed
+            requires its owner's token."""
+            payload = self._multi_timeline_body()
+            if payload is None:
+                return
+            gated = self._multi_feed_gate(payload)
+            if gated is None:
+                return
+            all_passed, summaries = gated
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            status, meta = multi_feed_store.update_status(
+                feed_id, payload, owner_token=token,
+                all_passed=all_passed)
+            if status == "not_found":
+                self._send_json(404, {"error": "unknown multi-feed id"})
+                return
+            if status == "forbidden":
+                self._send_json(
+                    403, {"error": "only the owner can update "
+                                   "this multi-feed"})
+                return
+            self._send_json(200, {
+                **meta,
+                "url": f"/api/multi-feeds/{feed_id}.ics",
+                "feed_url": f"/api/multi-feeds/{feed_id}.ics",
+                "changes_url": f"/api/multi-feeds/{feed_id}/changes",
+                "all_passed": all_passed,
+                "timelines_summary": summaries,
+                "updated": True,
+            })
+
+        def _handle_multi_feed_fetch(self, feed_id):
+            """Serve a multi-feed's calendar: GET
+            /api/multi-feeds/<id>.ics. The stored bundle renders
+            fresh on every fetch (verdicts recomputed per
+            timeline). Change notification: the response carries
+            the feed's ETag; a poller presenting that etag in
+            If-None-Match gets a cheap 304 until an update
+            changes it — then the next poll gets the new series
+            and the new etag."""
+            payload = multi_feed_store.get(feed_id) if feed_id else None
+            if payload is None:
+                self._send_json(404, {"error": "unknown multi-feed id"})
+                return
+            etag = multi_feed_store.etag(feed_id)
+            quoted = f'"{etag}"'
+            presented = (self.headers.get("If-None-Match") or "")
+            presented = {p.strip().strip('"')
+                         for p in presented.split(",")}
+            if etag is not None and etag in presented:
+                self.send_response(304)
+                self.send_header("ETag", quoted)
+                self.send_header("Cache-Control",
+                                 "public, max-age=300")
+                for name, value in SECURITY_HEADERS.items():
+                    self.send_header(name, value)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            try:
+                content, _all, _summaries = export_multi_timeline_ics(
+                    payload["timelines"])
+            except ValueError as exc:
+                self._send_json(
+                    400, {"error": f"multi-feed failed: {exc}"})
+                return
+            except (KeyError, TypeError, AttributeError, IndexError):
+                self._send_json(
+                    400, {"error": "multi-feed failed: bad_plan"})
+                return
+            self._send(200, content.encode("utf-8"), "text/calendar",
+                       extra={"Cache-Control": "public, max-age=300",
+                              "ETag": quoted})
+
+        def _handle_multi_feed_meta(self, feed_id):
+            """Multi-feed metadata + per-timeline recomputed
+            verdicts."""
+            payload = multi_feed_store.get(feed_id) if feed_id else None
+            meta = multi_feed_store.meta(feed_id) \
+                if payload is not None else None
+            if payload is None or meta is None:
+                self._send_json(404, {"error": "unknown multi-feed id"})
+                return
+            try:
+                _content, all_passed, summaries = \
+                    export_multi_timeline_ics(payload["timelines"])
+            except (ValueError, KeyError, TypeError, AttributeError,
+                    IndexError):
+                all_passed, summaries = None, []
+            self._send_json(200, {
+                **meta,
+                "url": f"/api/multi-feeds/{feed_id}.ics",
+                "feed_url": f"/api/multi-feeds/{feed_id}.ics",
+                "changes_url": f"/api/multi-feeds/{feed_id}/changes",
+                "all_passed": all_passed,
+                "timelines_summary": summaries,
+            })
+
+        def _handle_multi_feed_changes(self, feed_id):
+            """The feed's change log: GET
+            /api/multi-feeds/<id>/changes — the notification
+            surface a subscriber (or their calendar tooling) polls
+            to learn what changed and when, without downloading
+            the calendar: version, etag, and one entry per
+            creation/update with its timeline names and its
+            recomputed-at-write-time verdict."""
+            result = multi_feed_store.changes(feed_id) \
+                if feed_id else None
+            if result is None:
+                self._send_json(404, {"error": "unknown multi-feed id"})
+                return
+            result["url"] = f"/api/multi-feeds/{feed_id}.ics"
+            self._send_json(200, result)
+
         def _handle_suggest(self):
             """Guided branch suggestions for one base plan.
 
@@ -1905,6 +2483,17 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                     "format", ["markdown"])[0]
                 self._handle_export_timeline(fmt)
                 return
+            if path == "/api/multi-feeds":
+                self._handle_multi_feed_create()
+                return
+            if path.startswith("/api/multi-feeds/"):
+                feed_id = unquote(path[len("/api/multi-feeds/"):])
+                if feed_id and "/" not in feed_id:
+                    self._handle_multi_feed_update(feed_id)
+                else:
+                    self._send_json(
+                        404, {"error": "unknown multi-feed id"})
+                return
             if path == "/api/feeds":
                 self._handle_feed_create()
                 return
@@ -2023,6 +2612,29 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 else:
                     self._send_json(404, {"error": "no profile stored"})
                 return
+            if path.startswith("/api/multi-feeds/"):
+                feed_id = unquote(path[len("/api/multi-feeds/"):])
+                if not feed_id or "/" in feed_id:
+                    self._send_json(
+                        404, {"error": "unknown multi-feed id"})
+                    return
+                token, invalid = self._owner_token()
+                if invalid:
+                    self._send_json(400, {"error": "invalid owner token"})
+                    return
+                status = multi_feed_store.revoke_status(
+                    feed_id, owner_token=token)
+                if status == "revoked":
+                    self._send_json(200, {"revoked": True,
+                                          "feed_id": feed_id})
+                    return
+                if status == "forbidden":
+                    self._send_json(
+                        403, {"error": "only the owner can revoke "
+                                       "this multi-feed"})
+                    return
+                self._send_json(404, {"error": "unknown multi-feed id"})
+                return
             if path.startswith("/api/feeds/"):
                 feed_id = unquote(path[len("/api/feeds/"):])
                 if not feed_id or "/" in feed_id:
@@ -2077,24 +2689,32 @@ def serve(agent, port: int = 8765, host: str = "127.0.0.1",
           share_ttl_seconds: float = DEFAULT_SHARE_TTL_SECONDS,
           profile_file: str | Path | None = None,
           feed_file: str | Path | None = None,
-          feed_ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS) -> None:
+          feed_ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS,
+          multi_feed_file: str | Path | None = None,
+          multi_feed_ttl_seconds: float = DEFAULT_FEED_TTL_SECONDS) -> None:
     if share_file is None:
         share_file = os.environ.get(SHARE_FILE_ENV_VAR) or None
     if profile_file is None:
         profile_file = os.environ.get(PROFILE_FILE_ENV_VAR) or None
     if feed_file is None:
         feed_file = os.environ.get(FEED_FILE_ENV_VAR) or None
+    if multi_feed_file is None:
+        multi_feed_file = os.environ.get(MULTI_FEED_FILE_ENV_VAR) or None
     handler = make_handler(agent, share_file=share_file,
                            share_ttl_seconds=share_ttl_seconds,
                            profile_file=profile_file,
                            feed_file=feed_file,
-                           feed_ttl_seconds=feed_ttl_seconds)
+                           feed_ttl_seconds=feed_ttl_seconds,
+                           multi_feed_file=multi_feed_file,
+                           multi_feed_ttl_seconds=multi_feed_ttl_seconds)
     server = ThreadingHTTPServer((host, port), handler)
     shares = "persistent" if share_file else "in-memory"
     profiles = "persistent" if profile_file else "in-memory"
     feeds = "persistent" if feed_file else "in-memory"
+    multi_feeds = "persistent" if multi_feed_file else "in-memory"
     print(f"TastePilot listening on http://{host}:{port} "
           f"(mode={agent.mode}, explainer={agent.explainer_info['source']}, "
-          f"shares={shares}, profiles={profiles}, feeds={feeds})",
+          f"shares={shares}, profiles={profiles}, feeds={feeds}, "
+          f"multi_feeds={multi_feeds})",
           flush=True)  # hosted log streams must see startup immediately
     server.serve_forever()

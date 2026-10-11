@@ -639,6 +639,143 @@ def render_timeline_ics(base, branches) -> str:
     return "\r\n".join(folded) + "\r\n"
 
 
+MAX_MULTI_TIMELINES = 6
+
+
+def validate_multi_timelines(timelines) -> None:
+    """Shape-gate a multi-timeline bundle; categorised ValueError.
+
+    A bundle is a list of 1..MAX_MULTI_TIMELINES timelines, each
+    {"name": str (1-60 chars, unique), "base": {...plan...},
+    "branches": [{"name", "plan"}, ...]} — exactly the /api/timeline
+    payload shape, named. Each timeline's own shape is proved by
+    branch_timeline when the bundle renders; this gate checks the
+    bundle level only (count, names, container shapes)."""
+    if not isinstance(timelines, list) or not timelines:
+        raise ValueError("bad_timelines")
+    if len(timelines) > MAX_MULTI_TIMELINES:
+        raise ValueError("too_many_timelines")
+    names = []
+    for timeline in timelines:
+        if not isinstance(timeline, dict):
+            raise ValueError("bad_timelines")
+        name = timeline.get("name")
+        if not isinstance(name, str) or not 1 <= len(name.strip()) <= 60:
+            raise ValueError("bad_timelines")
+        if name.strip() in names:
+            raise ValueError("duplicate_timeline_name")
+        names.append(name.strip())
+        if not isinstance(timeline.get("base"), dict) or \
+                not isinstance(timeline.get("branches"), list):
+            raise ValueError("bad_timelines")
+
+
+def render_multi_timeline_ics(timelines) -> tuple[str, list[dict]]:
+    """Render a bundle of branch timelines as ONE iCalendar file:
+    for every timeline, one event series per column (base + each
+    branch), exactly as render_timeline_ics renders a single
+    timeline — except summaries name timeline and branch
+    ("TastePilot [Trip / Museum]: Kyoto") and UIDs hash the
+    timeline name too, so the same leg in two timelines never
+    collides. Returns (content, summaries) where summaries carry
+    each timeline's recomputed all_passed + event count.
+
+    Every verdict is recomputed per plan from its own sealed
+    record; a tampered branch's series reads NOT VERIFIED. A
+    timeline with no dated leg contributes no events; a bundle
+    with no dated leg anywhere raises no_dated_legs instead of
+    inventing dates. Deterministic, like every export."""
+    validate_multi_timelines(timelines)
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0",
+             "PRODID:-//TastePilot//Multi Timeline Export//EN",
+             "CALSCALE:GREGORIAN",
+             "X-WR-CALNAME:TastePilot multi-timeline bundle"]
+    summaries: list[dict] = []
+    total_events = 0
+    for timeline in timelines:
+        tname = timeline["name"].strip()
+        base, branches = timeline["base"], timeline["branches"]
+        doc = _timeline_doc(base, branches)  # validates + verdicts
+        plans = [base] + [b["plan"] for b in branches]
+        events = 0
+        for column, plan in zip(doc["columns"], plans):
+            verdict = recomputed_verdict(plan)
+            dated = [e for e in plan.get("schedule") or []
+                     if e.get("start")]
+            if not dated:
+                continue
+            fingerprint = {
+                "timeline": tname, "branch": column["name"],
+                "request": plan.get("request"),
+                "items": [[i.get("entity", {}).get("id"),
+                           i.get("domain"), i.get("location"),
+                           i.get("affinity")]
+                          for i in plan.get("items") or []],
+            }
+            canonical = json.dumps(
+                fingerprint, sort_keys=True, ensure_ascii=False,
+                separators=(",", ":")).encode()
+            plan_hash = hashlib.sha256(canonical).hexdigest()[:24]
+            items = plan.get("items") or []
+            for entry in dated:
+                location = entry.get("location") or "Anywhere"
+                start = date.fromisoformat(entry["start"])
+                end_raw = entry.get("end") or entry["start"]
+                end = date.fromisoformat(end_raw) + timedelta(days=1)
+                uid_src = (f"{plan_hash}:{location}:"
+                           f"{entry['start']}:{end_raw}")
+                uid = hashlib.sha256(uid_src.encode()).hexdigest()[:32]
+                leg_items = [i for i in items
+                             if (i.get("location") or None) ==
+                             (entry.get("location") or None)] or items
+                desc = [f"Timeline: {tname}",
+                        f"Branch: {column['name']} "
+                        f"({'PASS' if verdict['passed'] else 'FAIL'} — "
+                        f"recomputed from this plan's sealed evidence)",
+                        _banner_lines(plan, verdict)[0], "",
+                        "Recommendations:"]
+                for item in leg_items:
+                    head, _, _ = _item_lines(item)
+                    desc.append(f"- {head} [{item.get('domain', '')}]")
+                lines += [
+                    "BEGIN:VEVENT",
+                    f"UID:{uid}@tastepilot-multi-timeline",
+                    f"DTSTAMP:{start.strftime('%Y%m%d')}T000000Z",
+                    f"DTSTART;VALUE=DATE:{start.strftime('%Y%m%d')}",
+                    f"DTEND;VALUE=DATE:{end.strftime('%Y%m%d')}",
+                    "SUMMARY:" + _ics_escape(
+                        f"TastePilot [{tname} / {column['name']}]: "
+                        f"{location}"),
+                    "DESCRIPTION:" + _ics_escape("\n".join(desc)),
+                    "END:VEVENT",
+                ]
+                events += 1
+        summaries.append({
+            "name": tname,
+            "all_passed": bool(doc["summary"]["all_passed"]),
+            "events": events,
+            "columns": [c["name"] for c in doc["columns"]]})
+        total_events += events
+    if not total_events:
+        raise ValueError("no_dated_legs: no timeline in the bundle "
+                         "has a leg with a start date to put on "
+                         "a calendar")
+    lines.append("END:VCALENDAR")
+    folded: list[str] = []
+    for line in lines:
+        folded.extend(_ics_fold(line))
+    return "\r\n".join(folded) + "\r\n", summaries
+
+
+def export_multi_timeline_ics(timelines) -> tuple[str, bool, list[dict]]:
+    """Render a multi-timeline bundle as one iCalendar file;
+    returns (content, all_passed, summaries) — all_passed is every
+    timeline's every column recomputing as PASS. A tampered branch
+    still renders, its series NOT VERIFIED — never clean."""
+    content, summaries = render_multi_timeline_ics(timelines)
+    return content, all(s["all_passed"] for s in summaries), summaries
+
+
 _TIMELINE_RENDERERS = {"markdown": render_timeline_markdown,
                        "text": render_timeline_text,
                        "ics": render_timeline_ics}

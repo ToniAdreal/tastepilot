@@ -90,7 +90,14 @@ tastepilot/
                URLs — a TimelineFeedStore (bounded, 30-day expiry,
                DELETE revocation, owner-managed updates, optional
                file persistence) whose every fetch re-renders the
-               stored timeline with verdicts recomputed);
+               stored timeline with verdicts recomputed;
+               multi-timeline subscription feeds under stable
+               /api/multi-feeds/<id>.ics URLs — a
+               MultiTimelineFeedStore carrying a bundle of named
+               timelines under one id, versioned with a capped
+               change log and an ETag for poll-based change
+               notification (If-None-Match → 304 while unchanged),
+               same expiry/revocation/ownership/persistence rules);
                hardened: input caps, security headers, bounded caches,
                leak-free 500s)
   export.py    take-away itinerary exports (Markdown / plain text /
@@ -104,7 +111,10 @@ tastepilot/
                recomputed-verdict doctrine — a tampered branch is a
                FAIL column under a NOT VERIFIED banner; ics renders
                one event series per branch (see the Demo section),
-               and a dateless timeline refuses with no_dated_legs
+               and a dateless timeline refuses with no_dated_legs;
+               export_multi_timeline_ics renders a bundle of named
+               timelines as one calendar (one series per timeline
+               per branch) under the same doctrine
   handoff.py   native handoffs: one-tap links into the user's own
                apps — a Google Calendar template URL per dated leg
                (all-day, exclusive end; a dateless leg gets none —
@@ -628,6 +638,35 @@ baked into the image or the repo.
   button creates or updates the feed for the timeline on screen.
   Every fetch recomputes the verdicts: a tampered branch's series
   reads NOT VERIFIED under the same URL, never PASS.
+* Many timelines also share one subscription: `POST
+  /api/multi-feeds` stores a bundle of named timelines
+  (`{"timelines": [{"name", "base", "branches"}, ...]}`, each
+  gated exactly like the iCalendar export — a bundle with no
+  dated leg anywhere is refused `no_dated_legs`) under one
+  stable feed id, and `GET /api/multi-feeds/<id>.ics` renders
+  the whole bundle fresh as ONE calendar on every fetch — one
+  event series per timeline per branch, summaries naming both
+  (`TastePilot [Japan-France / Museum]: Kyoto`). Change
+  notification is poll-based and explicit: the feed carries a
+  version (incremented by every in-place update via `POST
+  /api/multi-feeds/<id>`) and a capped change log (`GET
+  /api/multi-feeds/<id>/changes` — one entry per creation and
+  update, with the timeline names and the verdict recomputed
+  at write time), and the calendar response carries an ETag —
+  a poller presenting it in `If-None-Match` gets a cheap `304`
+  until an update changes the etag, so subscribers learn a
+  feed changed without downloading it. No subscriber registry
+  is kept and nothing is pushed. Bundles expire after 30 days
+  (an update renews), can be revoked (`DELETE
+  /api/multi-feeds/<id>`), follow the same owner-token rules
+  as feeds, and persist across restarts with `serve
+  --multi-feed-file <path>` (or the `TASTEPILOT_MULTI_FEED_FILE`
+  env var); `GET /api/health` reports the multi-feed store,
+  and the timeline view's bundle controls ("Add this timeline
+  to a multi-timeline bundle" + "Create multi-timeline
+  subscription") build and publish a bundle from the timelines
+  explored on the page. A tampered branch in any timeline
+  renders its series NOT VERIFIED under the same URL.
 * A plan also hands off to the user's own apps in one tap: every
   plan carries `handoffs` — per leg, a Google Calendar template
   link (dated legs only; a dateless leg gets no calendar link

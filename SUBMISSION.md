@@ -193,7 +193,20 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    when a branch is re-sealed, so subscribers see the new
    series under the same URL instead of importing a new file;
    feeds expire, can be revoked, and follow the same
-   owner-token rules as share links.
+   owner-token rules as share links. And several timelines
+   travel together as one multi-timeline subscription: a
+   bundle of named timelines stored under a single feed URL
+   whose calendar carries every timeline's branch series at
+   once, each timeline's verdicts recomputed on every poll.
+   The bundle feed is versioned and keeps a change log —
+   one entry per creation and per in-place update, naming
+   the timelines it carries and the verdict recomputed at
+   write time — and its calendar response carries an ETag,
+   so a subscriber polling with If-None-Match gets a cheap
+   304 while nothing changed and the new series (with a new
+   etag) the first poll after an update: poll-based change
+   notification, with no subscriber registry kept and
+   nothing pushed to anyone.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -327,13 +340,14 @@ stops being a liability and becomes pure upside.
   the user across devices without them carrying a token, with
   conflict resolution when two devices save lessons offline,
   instead of the single-server store the built profile uses.
-- Hosted multi-timeline calendar subscriptions — the built
-  live calendar subscription feed (one stable, subscribable
-  URL per timeline, re-rendered on every poll, updatable in
-  place by its owner) graduating to a hosted service where one
-  calendar subscription can carry many timelines at once and
-  subscribers are notified when a feed changes, instead of one
-  feed per timeline that calendar apps poll silently.
+- Push change notifications for calendar subscriptions — the
+  built multi-timeline feed (one stable, subscribable URL
+  carrying many timelines at once, versioned with a change
+  log subscribers poll — or detect via its ETag — to learn
+  when the bundle changes) graduating to a hosted service
+  that pushes a notification (webhook or email) to
+  subscribers the moment a feed changes, instead of
+  subscribers polling the change log silently.
 
 ## Built with
 

@@ -136,6 +136,7 @@ const evdetail = document.getElementById('evdetail');
 const sharebtn = document.getElementById('sharebtn');
 const shareout = document.getElementById('shareout');
 let lastPlan = null;
+let multiBundle = [];
 
 // Owner token: a per-browser bearer credential, generated locally
 // and kept in localStorage. The server stores only its hash; links
@@ -670,6 +671,69 @@ async function doTimeline(basePlan, okBranches, outEl) {
   });
   outEl.appendChild(feedBtn);
   outEl.appendChild(feedOut);
+  // Multi-timeline bundle: collect several timelines (from any
+  // plans explored in this page) into one subscription — a
+  // single /api/multi-feeds URL whose calendar carries them
+  // all, versioned with a change log subscribers can poll.
+  const bundleName = document.createElement('input');
+  bundleName.type = 'text'; bundleName.className = 'bundlename';
+  bundleName.placeholder = 'Timeline name for the bundle';
+  bundleName.value = 'Trip ' + (multiBundle.length + 1);
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button'; addBtn.className = 'bundlebtn';
+  addBtn.textContent = 'Add this timeline to a multi-timeline bundle';
+  const bundleOut = document.createElement('div');
+  bundleOut.className = 'meta bundleout';
+  const showBundle = () => {
+    bundleOut.textContent = multiBundle.length
+      ? 'Multi-timeline bundle: ' +
+        multiBundle.map(t => t.name).join(' · ')
+      : 'Multi-timeline bundle is empty — add a timeline first.';
+  };
+  showBundle();
+  addBtn.addEventListener('click', () => {
+    const name = bundleName.value.trim() || ('Trip ' + (multiBundle.length + 1));
+    if (multiBundle.some(t => t.name === name)) {
+      bundleOut.textContent = 'Bundle already has a timeline named ' + name + '.';
+      return;
+    }
+    multiBundle.push(JSON.parse(JSON.stringify({name, base: basePlan,
+      branches: okBranches.map(b => ({name: b.name, plan: b.plan}))})));
+    bundleName.value = 'Trip ' + (multiBundle.length + 1);
+    showBundle();
+  });
+  let multiFeedId = null;
+  const multiBtn = document.createElement('button');
+  multiBtn.type = 'button'; multiBtn.className = 'multifeedbtn';
+  multiBtn.textContent = 'Create multi-timeline subscription';
+  const multiOut = document.createElement('div');
+  multiOut.className = 'meta multiout';
+  multiBtn.addEventListener('click', async () => {
+    if (!multiBundle.length) { showBundle(); return; }
+    const r = await fetch(multiFeedId ? '/api/multi-feeds/' + multiFeedId : '/api/multi-feeds',
+      {method: 'POST',
+       headers: {'Content-Type': 'application/json', ...ownerHeaders()},
+       body: JSON.stringify({timelines: multiBundle})});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      multiOut.textContent = 'Multi-feed error: ' + (d.error || r.status);
+      return;
+    }
+    multiFeedId = d.feed_id;
+    multiBtn.textContent = 'Update multi-timeline subscription';
+    multiOut.textContent = 'Multi-timeline subscription (version ' +
+      d.version + ', etag ' + d.etag + '): ' + location.origin + d.url +
+      ' — one calendar subscription carrying every timeline in the ' +
+      'bundle. Changes: ' + location.origin + d.changes_url +
+      ' — poll it (or the feed URL with If-None-Match) to learn ' +
+      'when the bundle changes. Expires ' +
+      new Date(d.expires_at).toLocaleString() + ' unless updated.';
+  });
+  outEl.appendChild(bundleName);
+  outEl.appendChild(addBtn);
+  outEl.appendChild(bundleOut);
+  outEl.appendChild(multiBtn);
+  outEl.appendChild(multiOut);
 }
 
 async function doExplore(basePlan, branches, resultsEl) {
