@@ -41,16 +41,46 @@ class EvidenceLog:
         self._prev = _sha(self._prev + _canonical(header))
         self._entries.append({"kind": "header", "hash": self._prev, **header})
 
-    def add_qloo_call(self, response_dict: dict) -> str:
-        payload = {"response": response_dict}
+    def _append(self, kind: str, payload: dict) -> str:
         self._prev = _sha(self._prev + _canonical(payload))
-        self._entries.append({"kind": "qloo_call", "hash": self._prev, **payload})
+        self._entries.append({"kind": kind, "hash": self._prev, **payload})
         return self._prev
 
+    def add_qloo_call(self, response_dict: dict) -> str:
+        return self._append("qloo_call", {"response": response_dict})
+
     def add_llm_call(self, call: dict) -> None:
-        payload = {"call": call}
-        self._prev = _sha(self._prev + _canonical(payload))
-        self._entries.append({"kind": "llm_call", "hash": self._prev, **payload})
+        self._append("llm_call", {"call": call})
+
+    def add_swap_event(self, event: dict) -> str:
+        """Seal a plan mutation (an item/alternative swap) into the
+        chain. The swap introduces no new Qloo data — it is recorded
+        so the re-sealed record attests exactly which recommendations
+        were exchanged, and any later edit to the event breaks the
+        chain like any other entry."""
+        return self._append("swap_event", {"swap": event})
+
+    @classmethod
+    def from_record(cls, record: dict) -> "EvidenceLog":
+        """Rebuild a log by replaying a sealed record's entries.
+
+        Every entry is re-hashed in order, so the rebuilt log's chain
+        head equals the original's exactly when the record is intact
+        (callers verify_chain first). New entries (e.g. a swap event)
+        can then be appended and re-sealed with seal()."""
+        inst = cls.__new__(cls)
+        inst._entries = []
+        inst._prev = _sha(GENESIS)
+        entries = record["entries"]
+        header = {k: entries[0][k] for k in ("request_text", "mode")}
+        inst._prev = _sha(inst._prev + _canonical(header))
+        inst._entries.append({"kind": "header", "hash": inst._prev,
+                              **header})
+        for entry in entries[1:]:
+            payload = {k: v for k, v in entry.items()
+                       if k not in ("kind", "hash")}
+            inst._append(entry["kind"], payload)
+        return inst
 
     def seal(self, verdict: str) -> dict:
         record_hash = _sha(self._prev + _canonical({"verdict": verdict}))

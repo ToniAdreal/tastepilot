@@ -94,6 +94,13 @@ the reason recorded (the demo never goes down because the LLM did).
    legs, per-leg items, and a `Verification: PASS` line) to the
    browser's share sheet — on a browser without the Web Share
    API the same payload is copied to the clipboard instead.
+11. Swap probe: on a plan with alternatives (e.g. the Kyoto
+   weekend), click an alternative card's "Swap in for …" button →
+   the plan re-renders with the two items exchanged, the status
+   line shows `Swaps: 1 (…, re-sealed)`, and the evidence index
+   names a new record hash whose verdict is PASS; pasting the
+   swapped plan into the verify panel still PASSes, and editing
+   any affinity in it FAILs.
 
 ## Notes
 

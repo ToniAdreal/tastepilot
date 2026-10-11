@@ -416,7 +416,26 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   const res = await fetch('/api/plan', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   const data = await res.json();
   if (!res.ok) { statusEl.textContent = 'Error: ' + (data.error || res.status); return; }
+  renderPlan(data);
+});
+
+async function doSwap(primary, alternative) {
+  if (!lastPlan) return;
+  statusEl.textContent = 'Swapping…';
+  const sel = (i) => ({name: i.entity.name, domain: i.domain,
+                       location: i.location || null});
+  const res = await fetch('/api/swap', {method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({plan: lastPlan, primary: sel(primary),
+                          alternative: sel(alternative)})});
+  const data = await res.json();
+  if (!res.ok) { statusEl.textContent = 'Error: ' + (data.error || res.status); return; }
+  renderPlan(data);
+}
+
+function renderPlan(data) {
   lastPlan = data;
+  out.innerHTML = '';
   sharebtn.style.display = '';
   document.getElementById('ossharebtn').style.display = '';
   document.getElementById('exportrow').hidden = false;
@@ -453,7 +472,10 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   const travelWarnSum = data.travel_warnings && data.travel_warnings.length
     ? ` · Travel warnings: ${data.travel_warnings.length}`
     : '';
-  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${importSum}${timetableSum}${exclusionSum}${legsSum}${warnSum}${transferSum}${travelWarnSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
+  const swapSum = data.swaps && data.swaps.length
+    ? ` · Swaps: ${data.swaps.length} (last: ${data.swaps[data.swaps.length - 1].primary.name} → ${data.swaps[data.swaps.length - 1].alternative.name}, re-sealed)`
+    : '';
+  statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${importSum}${timetableSum}${exclusionSum}${legsSum}${warnSum}${transferSum}${travelWarnSum}${swapSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
   const mapsByKey = {};
   for (const hi of (data.handoffs && data.handoffs.items) || []) {
     mapsByKey[hi.name + '|' + (hi.location || '')] = hi.maps_url;
@@ -531,8 +553,18 @@ document.getElementById('f').addEventListener('submit', async (e) => {
     h.textContent = 'Alternatives (evidence-backed swap options)';
     out.appendChild(h);
     for (const alt of data.alternatives) {
-      out.appendChild(card(alt,
-        mapsByKey[alt.entity.name + '|' + (alt.location || '')]));
+      const altCard = card(alt,
+        mapsByKey[alt.entity.name + '|' + (alt.location || '')]);
+      const primary = (data.items || []).find(i => i.domain === alt.domain
+        && (i.location || null) === (alt.location || null));
+      if (primary) {
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'swapbtn';
+        btn.textContent = `Swap in for ${primary.entity.name}`;
+        btn.addEventListener('click', () => doSwap(primary, alt));
+        altCard.appendChild(btn);
+      }
+      out.appendChild(altCard);
     }
   }
   if (data.date_warnings && data.date_warnings.length) {
@@ -580,7 +612,7 @@ document.getElementById('f').addEventListener('submit', async (e) => {
     out.appendChild(div);
   }
   renderEvidenceIndex(data);
-});
+}
 
 document.getElementById('vbtn').addEventListener('click', async () => {
   const vout = document.getElementById('vout');

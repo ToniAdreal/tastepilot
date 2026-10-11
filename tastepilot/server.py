@@ -149,6 +149,7 @@ from .checker import check_plan, item_reports
 from .evidence import qloo_responses, verify_chain
 from .export import export_plan, media_for
 from .imports import parse_import_bytes
+from .swap import swap_plan
 from .timetable import parse_timetable_bytes
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -789,6 +790,65 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 "Content-Disposition":
                     f'attachment; filename="tastepilot-itinerary.{ext}"'})
 
+        def _handle_swap(self):
+            """Exchange a primary item with a verified alternative.
+
+            Body: {"plan": {...}, "primary": <selector>,
+            "alternative": <selector>} where a selector is a name or
+            {name/entity_id/domain/location/evidence_ref}. The plan
+            is untrusted input held to the verify endpoint's gates;
+            swap.swap_plan recomputes the chain + checker verdicts,
+            refuses anything unverified, and re-seals the evidence
+            record around the swap — the response is the new plan.
+            Refusals are categorised 400s, never a 500 or traceback.
+            """
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else 0
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            if length > MAX_VERIFY_BODY_BYTES:
+                self._send_json(413, {"error": "plan too large"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "invalid JSON body"})
+                return
+            if not isinstance(payload, dict) or \
+                    not isinstance(payload.get("plan"), dict):
+                self._send_json(400, {"error": "plan is required"})
+                return
+            if "primary" not in payload or "alternative" not in payload:
+                self._send_json(
+                    400, {"error": "primary and alternative are required"})
+                return
+            plan = payload["plan"]
+            error = validate_plan_payload(plan)
+            if error is not None:
+                self._send_json(400, {"error": error})
+                return
+            try:
+                result = swap_plan(plan, payload["primary"],
+                                   payload["alternative"])
+            except ValueError as exc:  # categorised refusal
+                self._send_json(400, {"error": f"swap failed: {exc}"})
+                return
+            except (KeyError, TypeError, AttributeError, IndexError):
+                self._send_json(400, {"error": "swap failed: bad_plan"})
+                return
+            record = result.get("evidence") or {}
+            for rid, resp in qloo_responses(record).items():
+                evidence_cache[rid] = (record, resp)
+                evidence_cache.move_to_end(rid)
+                while len(evidence_cache) > max_evidence_records:
+                    evidence_cache.popitem(last=False)
+            self._send_json(200, result)
+
         def _handle_share(self):
             """Store a plan under its content-addressed share id.
 
@@ -844,6 +904,9 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 return
             if path == "/api/share":
                 self._handle_share()
+                return
+            if path == "/api/swap":
+                self._handle_swap()
                 return
             if path != "/api/plan":
                 self._send(404, b"not found", "text/plain")

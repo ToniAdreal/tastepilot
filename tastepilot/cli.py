@@ -10,6 +10,8 @@
   python -m tastepilot verify --record plan.json
   python -m tastepilot export --plan plan.json
                              [--format markdown|text|ics] [--out file]
+  python -m tastepilot swap --plan plan.json --primary NAME
+                             --alternative NAME [--out swapped.json]
   python -m tastepilot serve [--host 127.0.0.1] [--port 8765]
                              [--mode mock|auto] [--llm template|nebius]
                              [--share-file shares.json]
@@ -94,6 +96,15 @@ def main(argv: list[str] | None = None) -> int:
                    choices=list(EXPORT_FORMATS),
                    help="itinerary format (ics needs a dated leg)")
     e.add_argument("--out", help="write the export here instead of stdout")
+    w = sub.add_parser("swap")
+    w.add_argument("--plan", required=True,
+                   help="a saved plan JSON (e.g. from plan --out)")
+    w.add_argument("--primary", required=True,
+                   help="name of the primary item to swap out")
+    w.add_argument("--alternative", required=True,
+                   help="name of the verified alternative to swap in")
+    w.add_argument("--out",
+                   help="write the swapped plan here (default: stdout)")
     s = sub.add_parser("serve")
     s.add_argument("--host", default="127.0.0.1",
                    help="bind host (hosted deployments: 0.0.0.0)")
@@ -169,6 +180,36 @@ def main(argv: list[str] | None = None) -> int:
         # Mirror the plan/verify contract: an unverified plan still
         # exports (with its NOT VERIFIED banner) but exits 1.
         return 0 if verified else 1
+    if args.cmd == "swap":
+        from .swap import swap_plan
+        try:
+            plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: swap failed: cannot read plan "
+                  f"({type(exc).__name__})", file=sys.stderr)
+            return 2
+        if not isinstance(plan, dict):
+            print("error: swap failed: bad_plan", file=sys.stderr)
+            return 2
+        try:
+            result = swap_plan(plan, args.primary, args.alternative)
+        except ValueError as exc:  # categorised refusal, no traceback
+            print(f"error: swap failed: {exc}", file=sys.stderr)
+            return 2
+        event = result["swaps"][-1]
+        if args.out:
+            Path(args.out).write_text(
+                json.dumps(result, indent=1, ensure_ascii=False),
+                encoding="utf-8")
+            print(f"swap: [{event['primary']['domain']}] "
+                  f"{event['primary']['name']} -> "
+                  f"{event['alternative']['name']} "
+                  f"checker_passed={result['checker']['passed']} "
+                  f"chain_valid={result['checker']['chain_valid']} "
+                  f"swaps={len(result['swaps'])} out={args.out}")
+        else:
+            print(json.dumps(result, indent=1, ensure_ascii=False))
+        return 0 if result["checker"]["passed"] else 1
     if args.cmd == "verify":
         data = json.loads(Path(args.record).read_text(encoding="utf-8"))
         record = data.get("evidence", data)

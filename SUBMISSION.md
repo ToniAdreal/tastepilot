@@ -100,7 +100,14 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    against the sealed record before it is kept, filtered by the
    same exclusions, and covered by every verification surface, so
    tampering with an alternative fails verification exactly as
-   tampering with a primary item does.
+   tampering with a primary item does. An alternative is also a
+   one-tap swap: its card's swap button exchanges it with the
+   primary for its domain and leg, but only after the swap module
+   recomputes the plan's preconditions (sealed chain valid, whole
+   plan passing, both items traced) — a tampered plan is refused,
+   never re-sealed — and the exchange itself is then sealed into
+   the evidence record as a swap event, so the re-signed record
+   attests the original Qloo calls and every swap at once.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -227,10 +234,10 @@ stops being a liability and becomes pure upside.
   and platform maps links, with two-way calendar sync, instead
   of the one-tap template/search links and one-way share
   payload the handoff layer already produces.
-- One-tap swapping of a primary item with one of its verified
-  alternatives in the UI (re-running the checker and re-sealing
-  the plan around the swap), instead of the read-only swap
-  options the plan already surfaces.
+- Undo and swap history in the UI — walking back through a
+  plan's sealed swap events (and exporting the full swap audit
+  trail) instead of only the latest state the re-sealed record
+  already attests.
 
 ## Built with
 

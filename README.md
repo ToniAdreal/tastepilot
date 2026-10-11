@@ -104,6 +104,12 @@ tastepilot/
                never read back from a stored plan field; no account,
                no credential, no network — the user's own browser
                completes the action
+  swap.py      one-tap swapping of a primary item with a verified
+               alternative (same domain, same leg): preconditions
+               recomputed (chain + full-plan checker + both items),
+               checker re-run over the swapped plan, and the evidence
+               record re-sealed around a swap_event entry (original
+               Qloo calls replayed byte-identically)
   smoke.py     real-mode smoke check: one search + one insights call,
                payload-shape validation, both sealed + chain re-verified
   imports.py   external taste-file imports: Spotify playlist-export JSON,
@@ -337,6 +343,21 @@ baked into the image or the repo.
   primary items: they stay out of `items`, the domain groups, the
   per-leg groups, and the handoffs. A domain whose Qloo response
   holds no overflow simply has no alternatives.
+* An alternative can be swapped in with one tap (the alternative
+  card's "Swap in for …" button, `POST /api/swap`, or
+  `tastepilot swap --plan plan.json --primary NAME --alternative
+  NAME`): the primary and the alternative exchange places — same
+  domain and same leg only — under the plan's own rules. The swap
+  module recomputes the preconditions first (the sealed chain must
+  verify, the whole plan must pass the checker, both items must
+  trace to their responses; a tampered plan is refused, never
+  re-sealed), re-runs the checker over the swapped plan, and then
+  re-seals the evidence record around the exchange: the original
+  Qloo calls are replayed byte-identically, a `swap_event` entry
+  naming both items and the previous record hash is appended to
+  the chain, and the record is re-signed with the recomputed
+  verdict — so `verify` attests the original calls and every swap
+  at once, and swapping back is just another sealed event.
 * Anyone holding a plan JSON can re-verify it in the browser: the UI's
   "Verify a shared plan" panel posts it to `POST /api/verify`, which
   recomputes the hash chain and every per-item checker verdict from the
