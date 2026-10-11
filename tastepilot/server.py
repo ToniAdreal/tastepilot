@@ -6,7 +6,23 @@ nothing but Python 3.11+:  python -m tastepilot serve --port 8765
 Routes:
   GET  /                       demo UI (chat + grouped plan + evidence viewer)
   GET  /api/health             {"ok": true, "mode": ..., "explainer": {...}}
-  POST /api/plan               {"text": ...} -> full plan result (agent.run)
+  POST /api/plan               {"text": ...} -> full plan result (agent.run).
+                               The body may also carry browser-supplied
+                               file contents — "imports": [{"filename",
+                               "content"}, ...] (taste exports) and
+                               "timetables": [{"filename", "content"}, ...]
+                               (scheduled services) — parsed by the same
+                               byte parsers as the CLI's --import-file /
+                               --timetable-file, so the hosted demo offers
+                               the import paths without any upload store:
+                               contents are parsed for this plan only and
+                               never persisted; only basename + format +
+                               items are recorded as plan provenance.
+                               A plain plan body stays capped at
+                               MAX_BODY_BYTES; a body carrying attachments
+                               may reach MAX_PLAN_BODY_BYTES. Malformed
+                               attachments are categorised 400s that never
+                               echo the submitted content.
   GET  /api/evidence/<id>      one sealed Qloo response from a plan this
                                server produced, plus its record's hash and
                                chain validity — the evidence-record viewer
@@ -132,6 +148,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 from .checker import check_plan, item_reports
 from .evidence import qloo_responses, verify_chain
 from .export import export_plan, media_for
+from .imports import parse_import_bytes
+from .timetable import parse_timetable_bytes
 
 STATIC = Path(__file__).resolve().parent / "static"
 
@@ -140,6 +158,13 @@ MAX_VERIFY_BODY_BYTES = 524_288  # a submitted plan + sealed record (~25 KiB
                                  # for the shipped samples) needs more room,
                                  # but stays bounded like every other input
 MAX_TEXT_CHARS = 2_000           # matches the agent-level guard
+MAX_PLAN_BODY_BYTES = MAX_VERIFY_BODY_BYTES  # a plan request carrying
+                                 # browser-supplied taste/timetable file
+                                 # contents needs the verify cap, not the
+                                 # plain-body cap (which still applies to
+                                 # any body without attachments)
+MAX_PLAN_ATTACHMENTS = 4         # import (and timetable) files per plan
+MAX_ATTACHMENT_NAME_CHARS = 120  # a filename is a label, not a document
 MAX_EVIDENCE_RECORDS = 512       # sealed responses kept for the viewer
 MAX_SHARED_PLANS = 128           # shared plans kept for link verification
 MAX_SHARE_BODY_BYTES = MAX_VERIFY_BODY_BYTES  # a shared plan is a plan
@@ -158,6 +183,51 @@ SECURITY_HEADERS = {
     "Content-Security-Policy":
         "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'",
 }
+
+
+def parse_plan_attachments(payload: dict):
+    """Parse a plan body's browser-supplied file contents.
+
+    ``payload["imports"]`` / ``payload["timetables"]`` are lists of
+    ``{"filename", "content"}`` objects — the file contents the demo
+    page read in the browser (File.text()), not an upload store: they
+    are parsed here by the exact byte parsers the CLI uses for
+    --import-file / --timetable-file and are never persisted. Returns
+    ``(imported, timetables)`` in the shapes agent.run consumes.
+    Raises ValueError with a categorised, content-free message on any
+    malformed shape or unparseable file (the parsers' own categories —
+    bad_json / no_items / too_large / ... — never echo file contents).
+    """
+    imported: list[dict] = []
+    timetables: list[dict] = []
+    for key, parser, label in (
+            ("imports", parse_import_bytes, "import"),
+            ("timetables", parse_timetable_bytes, "timetable")):
+        raw = payload.get(key)
+        if raw is None:
+            continue
+        if not isinstance(raw, list):
+            raise ValueError(f"{label} attachments must be a list")
+        if len(raw) > MAX_PLAN_ATTACHMENTS:
+            raise ValueError(f"too_many: at most {MAX_PLAN_ATTACHMENTS} "
+                             f"{label} files per plan")
+        for entry in raw:
+            if not isinstance(entry, dict) or \
+                    not isinstance(entry.get("filename"), str) or \
+                    not isinstance(entry.get("content"), str):
+                raise ValueError(
+                    f"bad_attachment: each {label} file needs a string "
+                    f"filename and string content")
+            filename = entry["filename"]
+            if len(filename) > MAX_ATTACHMENT_NAME_CHARS:
+                raise ValueError("bad_attachment: filename too long")
+            try:
+                parsed = parser(entry["content"].encode("utf-8"),
+                                filename=filename)
+            except ValueError as exc:
+                raise ValueError(f"{label} failed: {exc}") from exc
+            (imported if key == "imports" else timetables).append(parsed)
+    return imported, timetables
 
 
 def share_id_for(payload: dict) -> str:
@@ -773,7 +843,7 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
             if length < 0:
                 self._send_json(400, {"error": "invalid Content-Length"})
                 return
-            if length > MAX_BODY_BYTES:
+            if length > MAX_PLAN_BODY_BYTES:
                 # Reject on the declared size alone; never read the body.
                 self._send_json(413, {"error": "request body too large"})
                 return
@@ -786,6 +856,14 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                     not isinstance(payload.get("text"), str):
                 self._send_json(400, {"error": "text is required"})
                 return
+            if length > MAX_BODY_BYTES and "imports" not in payload \
+                    and "timetables" not in payload:
+                # The plain-body cap still applies in full: only a body
+                # actually carrying file attachments may use the larger
+                # plan cap (checked on the declared length, enforced
+                # after parsing because the keys live inside the body).
+                self._send_json(413, {"error": "request body too large"})
+                return
             text = payload["text"].strip()
             if not text:
                 self._send_json(400, {"error": "text is required"})
@@ -794,7 +872,13 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 self._send_json(413, {"error": "text too long"})
                 return
             try:
-                result = agent.run(text)
+                imported, timetables = parse_plan_attachments(payload)
+            except ValueError as exc:  # categorised, never echoes content
+                self._send_json(400, {"error": str(exc)})
+                return
+            try:
+                result = agent.run(text, imported=imported,
+                                   timetables=timetables)
             except ValueError as exc:  # caller-fixable input problem
                 self._send_json(400, {"error": str(exc)})
                 return

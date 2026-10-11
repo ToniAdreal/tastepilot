@@ -81,6 +81,11 @@ the reason recorded (the demo never goes down because the LLM did).
    exclusive) and every card shows an "open in Maps" link; a
    dateless plan shows Maps links only — no calendar link is
    ever rendered for a leg without dates.
+10. Attachment probe: attach a taste export (e.g. a Letterboxd-style
+   CSV) on the demo page and plan → the status line names the import
+   (basename + format) and the plan's `imports` carries it; attach a
+   malformed file → a categorised `400` (`import failed: …`) with no
+   file content echoed.
 9. Native-integration probe: each leg also shows an "Open in
    Apple Maps" link (the plan JSON's legs/items also carry
    `maps_geo_url` Android `geo:` intents for the same queries),

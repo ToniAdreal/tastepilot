@@ -285,6 +285,17 @@ baked into the image or the repo.
   no plan, summary line, or error message, and fetch failures are
   categorised (`http_error`, `network_error`, `unsupported`, plus
   the file parse categories) with exit code 2, never a traceback.
+* Taste and timetable files can also be attached in the browser: the
+  demo page's file inputs read the file in the browser and send its
+  contents with the plan request (`POST /api/plan` `imports` /
+  `timetables`), where the server parses them with the same byte
+  parsers as the CLI file options — for that plan only, with no
+  upload store and nothing persisted. Provenance in the plan is
+  unchanged (basename, format, items); malformed attachments are
+  categorised 400s that never echo the submitted content. A plain
+  plan body keeps the 16 KiB cap; only a body carrying attachments
+  may reach the 512 KiB plan cap, and at most 4 files of each kind
+  attach per plan.
 * Seeds can arrive as a pasted list, not just prose: a request like
   *"a weekend in Kyoto. Watchlist: Spirited Away, An Obscure Reel.
   Playlist: Kind of Blue; Bon Iver"* contributes every list item as a

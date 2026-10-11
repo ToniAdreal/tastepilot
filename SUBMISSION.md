@@ -44,6 +44,11 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    library CSV (or a generic CSV/JSON/text list) — parsed entirely
    offline by `plan --import-file`, with the file's format and items
    recorded as provenance in the plan; no account login is involved.
+   The same files can be attached directly on the demo page: the
+   browser reads the file and sends its contents with the plan
+   request, the server parses them with the same parsers for that
+   plan only (no upload store, nothing persisted), and a timetable
+   file attaches the same way for the feasibility check below.
    The same schema can also arrive from a taste-feed endpoint
    serving it over HTTP (`plan --import-url`): fetched once with
    bounded retries, no credential ever sent, with only the
