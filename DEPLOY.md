@@ -426,6 +426,19 @@ the reason recorded (the demo never goes down because the LLM did).
     receiver that already applied the change can drop
     it. Push a further update → its deliveries carry a
     different key.
+34. Subscriber directory probe (a subscriber sees all
+    of their webhooks at once): with the browser's
+    owner token, `GET /api/subscriber/webhooks` (the
+    subscriber directory; the demo page's "Your
+    webhook subscriptions" panel) → 200 listing the
+    probe-22 webhook with its feed id, version,
+    timeline names, signed state, and delivery tallies
+    matching the feed's notifications log. Without a
+    token → `401`; with a malformed token → `400`;
+    with a different valid token → `200` with an empty
+    directory. A webhook registered on an unowned feed
+    appears in no token's directory. No stored webhook
+    URL or signing secret appears in the response.
 
 ## Notes
 

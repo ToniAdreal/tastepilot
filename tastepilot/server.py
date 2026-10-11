@@ -312,6 +312,19 @@ Routes:
                                returns only the shares that token owns —
                                id, url, expiry, item count, and the
                                recomputed checker verdict per link.
+  GET  /api/subscriber/webhooks
+                               the caller's subscriber directory: every
+                               push webhook registered on a multi-feed
+                               the presenting token owns, across all of
+                               that owner's feeds — feed id, version,
+                               timeline names, and expiry beside the
+                               webhook's host label, signed/paused
+                               state, event filter, and its delivery
+                               tallies from the feed's log. Requires
+                               an ``X-Owner-Token`` header; read-only
+                               (management stays on the per-feed
+                               routes); webhooks on unowned or other
+                               owners' feeds never appear.
   GET  /api/profile            the caller's persistent preference
                                profile: requires an ``X-Owner-Token``
                                header; returns the stored profile (the
@@ -1615,6 +1628,59 @@ class MultiTimelineFeedStore:
             return "ok", [self._webhook_meta(w)
                           for w in entry.get("webhooks", [])]
 
+    def webhooks_for_owner(self, owner_token) -> list[dict]:
+        """The subscriber directory: every webhook registered
+        on a multi-feed the presenting token owns, oldest feed
+        first, each row naming its feed (id, version, timeline
+        names, expiry) beside the webhook's own meta, plus that
+        webhook's delivery counts from its feed's capped log
+        (delivered / failed / skipped tallies and the most
+        recent delivery's status). An absent or invalid token
+        owns nothing (empty list) — and webhooks on unowned
+        feeds, or on another owner's feeds, never appear in any
+        subscriber's directory: a feed's webhooks are visible
+        across feeds only to the token that owns the feed,
+        exactly as its shares are visible only to their owner.
+        Rows carry host labels only — never a stored URL, never
+        a signing secret, never the token or its full hash."""
+        digest = owner_token_hash(owner_token)
+        if digest is None:
+            return []
+        with self._lock:
+            if self._prune_expired():
+                self._save()
+            out = []
+            for feed_id, entry in self._entries.items():
+                if entry.get("owner_hash") != digest:
+                    continue
+                deliveries = entry.get("deliveries", [])
+                for webhook in entry.get("webhooks", []):
+                    row = self._webhook_meta(webhook)
+                    wid = webhook.get("webhook_id")
+                    mine = [d for d in deliveries
+                            if isinstance(d, dict)
+                            and d.get("webhook_id") == wid]
+                    row["feed_id"] = feed_id
+                    row["feed_version"] = entry["version"]
+                    row["feed_timelines"] = self._names(
+                        entry["payload"])
+                    row["feed_expires_at"] = _iso(
+                        entry["expires_at"])
+                    row["deliveries"] = len(mine)
+                    row["delivered"] = sum(
+                        1 for d in mine
+                        if d.get("status") == "delivered")
+                    row["failed"] = sum(
+                        1 for d in mine
+                        if d.get("status") == "failed")
+                    row["skipped"] = sum(
+                        1 for d in mine
+                        if d.get("status") == "skipped")
+                    row["last_delivery_status"] = \
+                        mine[-1].get("status") if mine else None
+                    out.append(row)
+            return out
+
     def webhook_entries(self, feed_id: str) -> list:
         """The raw webhook entries (URLs included) for delivery.
         Internal only: handlers call this after the operation
@@ -2183,6 +2249,36 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                                   "owner_fingerprint":
                                       owner_fingerprint(token)})
 
+        def _handle_subscriber_webhooks(self):
+            """The subscriber directory: every push webhook
+            registered on a multi-feed the presenting token
+            owns, across all of that owner's feeds — the
+            cross-feed view a subscriber otherwise lacks (each
+            feed's own webhook list is reachable only feed by
+            feed, feed id in hand). Read-only: listing grants
+            nothing and changes nothing; management stays on
+            the per-feed routes under the same owner rule.
+            No token → 401; a malformed one → 400."""
+            token, invalid = self._owner_token()
+            if invalid:
+                self._send_json(400, {"error": "invalid owner token"})
+                return
+            if token is None:
+                self._send_json(401, {"error": "owner token required"})
+                return
+            rows = []
+            for meta in multi_feed_store.webhooks_for_owner(token):
+                entry = dict(meta)
+                entry["feed_url"] = \
+                    f"/api/multi-feeds/{meta['feed_id']}.ics"
+                entry["notifications_url"] = \
+                    f"/api/multi-feeds/{meta['feed_id']}/notifications"
+                rows.append(entry)
+            self._send_json(200, {
+                "webhooks": rows, "count": len(rows),
+                "feeds": len({r["feed_id"] for r in rows}),
+                "owner_fingerprint": owner_fingerprint(token)})
+
         def _profile_token(self):
             """Owner-token gate for the profile routes, mirroring
             the shares dashboard: no token → 401, malformed → 400.
@@ -2287,6 +2383,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                 self._handle_profile_get()
             elif path == "/api/shares":
                 self._handle_shares()
+            elif path == "/api/subscriber/webhooks":
+                self._handle_subscriber_webhooks()
             elif path.startswith("/api/share/"):
                 rest = unquote(path[len("/api/share/"):])
                 want_verify = rest.endswith("/verify")

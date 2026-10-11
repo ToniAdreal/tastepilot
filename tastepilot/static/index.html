@@ -127,6 +127,18 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
   <button type="button" id="profileclearbtn">Clear my profile</button></div>
   <div id="profileout" class="meta" style="margin-top:.4rem"></div>
 </section>
+<section id="subscriberbox" aria-label="Your webhook subscriptions">
+  <h2 style="margin-top:0">Your webhook subscriptions</h2>
+  <p class="meta">Push webhooks are registered per multi-timeline
+  feed — this directory is the cross-feed view: every webhook on
+  every feed this browser's owner token owns, with its host,
+  signed/paused state, event filter, and delivery tallies from its
+  feed's log. Webhooks on feeds owned by another token — or by no
+  token — never appear here. Listing is read-only; manage each
+  webhook from its own feed's controls above.</p>
+  <div style="margin-top:.5rem"><button type="button" id="subscriberbtn">List my webhook subscriptions</button></div>
+  <div id="subscriberout" class="meta" style="margin-top:.4rem"></div>
+</section>
 <script>
 const statusEl = document.getElementById('status');
 const out = document.getElementById('out');
@@ -303,6 +315,27 @@ document.getElementById('profileshowbtn').addEventListener('click', async () => 
   if (!res.ok) { out.textContent = 'Error: ' + (data.error || res.status); return; }
   out.textContent = data.exists ? profileLine(data)
     : 'No persistent preference profile stored for this browser yet — save a plan\u2019s swap learning first.';
+});
+
+document.getElementById('subscriberbtn').addEventListener('click', async () => {
+  const out = document.getElementById('subscriberout');
+  out.textContent = 'Loading…';
+  const res = await fetch('/api/subscriber/webhooks', {headers: ownerHeaders()});
+  const data = await res.json();
+  if (!res.ok) { out.textContent = 'Error: ' + (data.error || res.status); return; }
+  if (!data.count) {
+    out.textContent = 'No webhook subscriptions on feeds this browser owns yet — ' +
+      'create a multi-timeline subscription above and register a push webhook on it.';
+    return;
+  }
+  out.textContent = data.count + ' webhook subscription(s) across ' + data.feeds +
+    ' feed(s) owned by this browser (fingerprint ' + data.owner_fingerprint + '): ' +
+    data.webhooks.map(w => w.host + ' on feed ' + w.feed_id.slice(0, 8) +
+      ' (' + (w.feed_timelines || []).join(' · ') + ', v' + w.feed_version + ')' +
+      (w.signed ? ', signed' : ', unsigned') +
+      (w.paused ? ', PAUSED' : '') +
+      ' — deliveries: ' + w.deliveries + ' (' + w.delivered + ' delivered, ' +
+      w.failed + ' failed, ' + w.skipped + ' skipped)').join(' | ');
 });
 
 document.getElementById('profileclearbtn').addEventListener('click', async () => {

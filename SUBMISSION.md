@@ -296,6 +296,17 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    is paused, so a subscriber who rotated an endpoint
    or a secret can verify the endpoint — and the
    signature — without forcing a feed update.
+   And a subscriber can see every one of their
+   webhooks at once: the subscriber directory
+   (`GET /api/subscriber/webhooks`, owner token
+   required) lists each webhook registered on a
+   multi-feed that token owns, across all of the
+   owner's feeds, with its feed's version, timeline
+   names, and expiry, its signed/paused state and
+   event filter, and its delivery tallies from the
+   feed's log — read-only, host labels only, and
+   webhooks on unowned or other owners' feeds never
+   appear in it.
 5. **Evidence-verifies** the result. Every Qloo call is sealed in a
    hash-chained, HMAC-signed evidence log. A deterministic checker
    admits an item only if its cited response exists in the sealed log,
@@ -461,7 +472,9 @@ stops being a liability and becomes pure upside.
   a duplicate push instead of applying a change twice —
   and a webhook auto-paused after consecutive failures until
   the subscriber resumes it or a half-open probe — the
-  next update push after a one-hour cooldown — revives it)
+  next update push after a one-hour cooldown — revives it,
+  and a subscriber directory listing a token's webhooks
+  across all of its feeds with their delivery tallies)
   graduating to a hosted notification service with
   subscriber accounts — managed endpoints, email delivery,
   and provider-side delivery guarantees — instead of

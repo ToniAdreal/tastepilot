@@ -860,7 +860,23 @@ baked into the image or the repo.
   counts toward the webhook's delivery health like any
   push. The timeline view's "Test webhooks" button
   test-pushes each webhook on the feed and reports each
-  outcome. Webhooks are
+  outcome. A subscriber can also see all of their
+  webhooks at once: the subscriber directory
+  (`GET /api/subscriber/webhooks`, owner token required)
+  lists every webhook registered on a multi-feed the
+  presenting token owns, across all of that owner's
+  feeds — each row naming its feed (id, version,
+  timeline names, expiry) beside the webhook's host
+  label, signed/paused state, and event filter, plus
+  its delivery tallies (delivered / failed / skipped
+  and the most recent status) from the feed's log.
+  The directory is read-only — management stays on the
+  per-feed routes under the same owner rule — and
+  webhooks on unowned feeds, or on another owner's
+  feeds, never appear in it; listings carry host labels
+  only, never a stored URL or secret. The demo page's
+  "Your webhook subscriptions" panel renders it.
+  Webhooks are
   listed (`GET .../webhooks`, host labels only) and removed
   (`DELETE .../webhooks/<id>`) under the same owner rule, and
   persist with the feed in file mode. Bundles expire after 30 days
