@@ -42,6 +42,10 @@ Qloo taste-graph response — sealed in a hash-chained evidence log and checked 
   <input id="q" placeholder='e.g. a slow weekend in Kyoto — I love Spirited Away and Kind of Blue' size="60">
   <button type="submit">Plan</button>
 </form>
+<div class="meta" style="margin:.4rem 0" id="examples">Try an example:
+  <span id="examplebtns">loading…</span>
+  <span id="exampleinfo"></span>
+</div>
 <div class="meta" style="margin:.4rem 0">
   <div><label for="impfiles">Taste files (Spotify / Letterboxd / Goodreads exports, .json/.csv/.txt):</label>
   <input type="file" id="impfiles" multiple accept=".json,.csv,.txt,.md"></div>
@@ -653,6 +657,32 @@ async function readAttachments(inputId) {
   for (const f of files) out.push({filename: f.name, content: await f.text()});
   return out;
 }
+
+(async () => {
+  const wrap = document.getElementById('examplebtns');
+  try {
+    const res = await fetch('/api/examples');
+    const data = await res.json();
+    wrap.textContent = '';
+    for (const ex of data.examples || []) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = ex.title;
+      b.title = ex.demonstrates.join(', ');
+      b.addEventListener('click', () => {
+        document.getElementById('q').value = ex.request;
+        document.getElementById('exampleinfo').textContent =
+          'Demonstrates: ' + ex.demonstrates.join(', ');
+        document.getElementById('f').requestSubmit();
+      });
+      wrap.appendChild(b);
+      wrap.appendChild(document.createTextNode(' '));
+    }
+    if (!wrap.childNodes.length) wrap.textContent = 'none available';
+  } catch (err) {
+    wrap.textContent = 'unavailable';
+  }
+})();
 
 document.getElementById('f').addEventListener('submit', async (e) => {
   e.preventDefault();

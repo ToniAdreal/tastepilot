@@ -83,6 +83,7 @@ from pathlib import Path
 from .agent import TastePilotAgent
 from .checker import check_plan, plan_recommendations
 from .evidence import verify_chain
+from .examples import list_examples
 from .export import (FORMATS as EXPORT_FORMATS, export_multi_timeline,
                      export_plan, export_timeline)
 from .imports import fetch_import, load_import
@@ -130,6 +131,10 @@ def main(argv: list[str] | None = None) -> int:
                         "over HTTP; fetched once (bounded retries), "
                         "only its host is recorded; repeatable")
     p.add_argument("--out")
+    sub.add_parser("examples",
+                   help="list the curated demo example requests "
+                        "(the same catalogue the web UI's example "
+                        "buttons and GET /api/examples serve)")
     k = sub.add_parser("smoke")
     k.add_argument("--mode", default="real", choices=["mock", "real", "auto"])
     k.add_argument("--query", default=DEFAULT_QUERY)
@@ -324,6 +329,13 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--rate-window-seconds", type=float, default=60.0,
                    help="rate-limit window in seconds (default 60)")
     args = ap.parse_args(argv)
+
+    if args.cmd == "examples":
+        for example in list_examples():
+            print(f"{example['id']}: {example['title']}")
+            print(f"  request: {example['request']}")
+            print(f"  demonstrates: {', '.join(example['demonstrates'])}")
+        return 0
 
     if args.cmd == "serve":
         from .server import serve

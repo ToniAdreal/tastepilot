@@ -589,6 +589,15 @@ the reason recorded (the demo never goes down because the LLM did).
     `GET /api/health` from the same client still returns
     `200` while the client is throttled, and POSTs succeed
     again once the window has passed.
+46. Examples probe:
+    `GET /api/examples` → `200` with the curated catalogue
+    (7 examples, each with an id, title, request, and the
+    features it demonstrates) plus the usual security
+    headers and `Cache-Control: no-store`; the demo page's
+    example buttons render from that response, and clicking
+    the first one ("Slow weekend in Kyoto") fills the request
+    box, runs the plan, and lands on a checker PASS verdict
+    with a valid evidence chain.
 
 ## Notes
 

@@ -469,7 +469,13 @@ rate limiting: every POST route is capped per client — 30 requests
 per 60 seconds by default — and a client over the limit gets a 429
 with a `Retry-After` header, while GETs and the health check stay
 unlimited) and ships with a Dockerfile,
-a PaaS Procfile, and a deployment guide.
+a PaaS Procfile, and a deployment guide. The demo opens with a
+curated catalogue of example requests — one per headline feature,
+served from a single source (`examples.py`) to the web UI's example
+buttons, `GET /api/examples`, and the `examples` CLI subcommand —
+and the test suite runs every example end-to-end in mock mode
+asserting checker PASS with a valid evidence chain, so the demo
+script judges follow is verified, not aspirational.
 
 ## Challenges we ran into
 

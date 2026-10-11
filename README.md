@@ -110,6 +110,13 @@ tastepilot/
                limited"} with a Retry-After header; tracked client
                state is bounded (512 clients, least-recently-seen
                evicted first)
+  examples.py  the curated demo example catalogue: the canonical
+               Judge Mode requests (one per headline feature), each
+               naming what it demonstrates; served by
+               GET /api/examples, the web UI's example buttons, and
+               the `examples` CLI subcommand — and every example is
+               run end-to-end by the test suite, so the demo script
+               cannot silently rot
   export.py    take-away itinerary exports (Markdown / plain text /
                iCalendar, one all-day event per dated leg): every
                export carries a verification banner recomputed from
@@ -313,6 +320,16 @@ baked into the image or the repo.
 
 ## Demo
 
+* One-click examples: the demo page opens with a row of example
+  buttons — the curated catalogue in `examples.py`, served at
+  `GET /api/examples` and listed by `tastepilot examples`. Each
+  example is one canonical request (a Kyoto weekend, a New York first
+  date, a gift shortlist, pasted taste lists, an exclusion, a
+  multi-city trip, a dated two-city trip) labelled with the feature
+  it demonstrates; clicking one fills the request box and runs it.
+  The test suite runs every example end-to-end in mock mode and
+  asserts checker PASS with a valid evidence chain, so the catalogue
+  is a pinned demo script, not a pile of stale suggestions.
 * The hosted demo rate-limits its POST routes per client: every POST
   (planning, verification, sharing, exports, bundles, feeds, webhooks,
   profiles — anything that invokes the agent or stores state) counts

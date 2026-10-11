@@ -6,6 +6,9 @@ nothing but Python 3.11+:  python -m tastepilot serve --port 8765
 Routes:
   GET  /                       demo UI (chat + grouped plan + evidence viewer)
   GET  /api/health             {"ok": true, "mode": ..., "explainer": {...}}
+  GET  /api/examples           {"examples": [...]} — the curated demo
+                               request catalogue (examples.py); the UI's
+                               example buttons are built from it.
   POST /api/plan               {"text": ...} -> full plan result (agent.run).
                                The body may also carry browser-supplied
                                file contents — "imports": [{"filename",
@@ -566,6 +569,7 @@ from .bundle import build_bundle
 from .checker import check_plan, item_reports
 from .diff import diff_plans
 from .evidence import qloo_responses, verify_chain
+from .examples import list_examples
 from .export import (MULTI_FEED_FORMATS, MULTI_TIMELINE_FORMATS,
                      TIMELINE_FORMATS,
                      export_multi_timeline,
@@ -2850,6 +2854,8 @@ def make_handler(agent, max_evidence_records: int = MAX_EVIDENCE_RECORDS,
                                           multi_feed_store.info(),
                                       "rate_limit":
                                           self._rate_limit_info()})
+            elif path == "/api/examples":
+                self._send_json(200, {"examples": list_examples()})
             elif path == "/api/profile":
                 self._handle_profile_get()
             elif path == "/api/profile/export":
