@@ -185,6 +185,15 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    swap paths on their own calendar; a tampered branch's series
    reads NOT VERIFIED, and a timeline with no dated leg in any
    column is refused rather than assigned invented dates.
+   And that calendar has a paced form too: a paced iCalendar
+   timeline export with one event series per branch at day
+   granularity — for every dated day of that branch's own
+   day-by-day pacing, an all-day event naming its branch and
+   the day and carrying only that day's recommendations in
+   that branch — so a recipient can compare swap paths day by
+   day; a tampered branch's days read NOT VERIFIED, and a
+   timeline with no dated day holding recommendations in any
+   column is refused rather than assigned invented dates.
    And that calendar also travels as live calendar subscriptions,
    not just a file: a timeline can be stored as a feed under a stable
    URL that a calendar app subscribes to and polls — every poll

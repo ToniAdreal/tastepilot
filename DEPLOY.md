@@ -454,6 +454,18 @@ the reason recorded (the demo never goes down because the LLM did).
     equals the number of dated days that hold at least one
     recommendation. The leg-level `ics` export still emits one
     event per leg, and the two calendars' UIDs never collide.
+37. Paced timeline calendar probe: export a dated branch
+    timeline with format `ics-days` (branch explorer's
+    "Download timeline (iCalendar by day)" button, CLI
+    `export --branch`, or `POST /api/export-timeline?format=
+    ics-days`) → one all-day event per dated day per branch,
+    each naming its branch and day and carrying only that
+    day's recommendations in that branch, under that branch's
+    recomputed verdict. A tampered branch's days read NOT
+    VERIFIED while the base column's days still read PASS, a
+    dateless timeline is refused with `no_dated_legs`, and
+    the paced timeline's UIDs never collide with the leg-level
+    timeline calendar's or the single-plan paced calendar's.
 
 ## Notes
 

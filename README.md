@@ -112,8 +112,10 @@ tastepilot/
                into Markdown/text take-away exports under the same
                recomputed-verdict doctrine — a tampered branch is a
                FAIL column under a NOT VERIFIED banner; ics renders
-               one event series per branch (see the Demo section),
-               and a dateless timeline refuses with no_dated_legs;
+               one event series per branch and ics-days one paced
+               event per dated day per branch (see the Demo
+               section), and a dateless timeline refuses with
+               no_dated_legs;
                export_multi_timeline_ics renders a bundle of named
                timelines as one calendar (one series per timeline
                per branch) under the same doctrine
@@ -611,7 +613,7 @@ baked into the image or the repo.
   `POST /api/export?format=...` all render the same exporter.
   A branch timeline leaves the same way — a branch-timeline export:
   `tastepilot export --plan base.json --branch NAME=branch.json
-  [--format markdown|text|ics]`, `POST /api/export-timeline?format=...`,
+  [--format markdown|text|ics|ics-days]`, `POST /api/export-timeline?format=...`,
   and the branch explorer's "Download timeline" buttons render the
   timeline grid (slots grouped by leg, one column per branch,
   kept/added/removed/re-scored cells with affinities) as a Markdown
@@ -629,6 +631,18 @@ baked into the image or the repo.
   (byte-identical re-exports), and a timeline with no dated leg in
   any column refuses with `no_dated_legs` instead of inventing
   dates — the single-plan ICS rule, per timeline.
+  The timeline also exports as a paced iCalendar
+  (`export_timeline` with format `ics-days`): one event series per
+  branch at day granularity — for every dated day of that
+  branch's own day-by-day pacing, an all-day event naming its
+  branch and the day and carrying only that day's recommendations
+  in that branch, under that branch's recomputed verdict, so a
+  recipient can compare swap paths day by day. A tampered
+  branch's days read NOT VERIFIED, paced timeline UIDs are
+  namespaced apart from both the leg-level timeline UIDs and the
+  single-plan paced UIDs, and a timeline with no dated day holding
+  recommendations in any column refuses with `no_dated_legs` —
+  the single-plan paced rule, per timeline.
   Markdown and plain-text exports carry the request, schedule and
   transfer warnings, per-leg domain sections (item, affinity, why,
   evidence reference), rejected items with their reasons, and a

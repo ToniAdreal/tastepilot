@@ -35,6 +35,18 @@ none, and a plan with no dated day at all raises ``no_dated_legs``
 exactly like the leg-level format. Paced UIDs are namespaced apart
 from leg UIDs, so both calendars can be imported side by side
 without collisions.
+
+Branch timelines export in the same four formats: the grid as
+Markdown/text, the leg-level calendar (one event series per
+branch), and a paced timeline calendar (``ics-days`` on
+``export_timeline``): one event series per branch at day
+granularity — for every dated day of that branch's own pacing,
+one all-day event naming its branch and carrying only that day's
+recommendations in that branch, under that branch's recomputed
+verdict. A timeline with no dated day holding recommendations in
+any column raises ``no_dated_legs``; paced timeline UIDs are
+namespaced apart from both the leg-level timeline UIDs and the
+single-plan paced UIDs.
 """
 from __future__ import annotations
 
@@ -46,7 +58,7 @@ from .checker import check_plan, plan_recommendations
 from .timeline import branch_timeline
 
 FORMATS = ("markdown", "text", "ics", "ics-days")
-TIMELINE_FORMATS = ("markdown", "text", "ics")
+TIMELINE_FORMATS = ("markdown", "text", "ics", "ics-days")
 
 _MEDIA = {
     "markdown": ("text/markdown; charset=utf-8", "md"),
@@ -746,6 +758,98 @@ def render_timeline_ics(base, branches) -> str:
     return "\r\n".join(folded) + "\r\n"
 
 
+def render_timeline_paced_ics(base, branches) -> str:
+    """Render a branch timeline as a paced iCalendar: one event
+    series per column (the base plan plus each branch) at day
+    granularity — for every dated day of that column's own
+    day-by-day pacing (pacing.plan_itinerary, recomputed here; a
+    stored ``itinerary`` field is never read back), one all-day
+    VEVENT whose summary names the branch and the day and whose
+    description carries that column's recomputed verdict and only
+    that day's recommendations in that branch, so a recipient can
+    compare swap paths day by day on their own calendar (same
+    days, different items per branch).
+
+    Doctrine matches every other export: each column's verdict is
+    recomputed from its own sealed record — a tampered branch's
+    days read NOT VERIFIED, never PASS. Days the pacing leaves
+    empty and undated legs produce no event. Deterministic: UIDs
+    hash the column name + plan content (request + item
+    ids/affinities, deliberately excluding the evidence record's
+    wall-clock) + leg + day, namespaced with a ``paced:`` prefix
+    apart from the leg-level timeline UIDs, and DTSTAMP derives
+    from the day itself, exactly as the single-plan paced
+    exporter. A timeline in which no column has any dated day
+    holding recommendations raises ``no_dated_legs`` instead of
+    inventing dates; a column with no such day contributes no
+    events while dated columns still render."""
+    from .pacing import plan_itinerary
+    doc = _timeline_doc(base, branches)
+    plans = [base] + [b["plan"] for b in branches]
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0",
+             "PRODID:-//TastePilot//Timeline Export//EN",
+             "CALSCALE:GREGORIAN",
+             "X-WR-CALNAME:TastePilot branch timeline by day"]
+    events = 0
+    for column, plan in zip(doc["columns"], plans):
+        verdict = recomputed_verdict(plan)
+        itinerary = plan_itinerary(plan)
+        days = [(leg.get("location"), day)
+                for leg in itinerary["legs"] for day in leg["days"]
+                if day["date"] is not None and day["items"]]
+        if not days:
+            continue
+        fingerprint = {
+            "branch": column["name"],
+            "request": plan.get("request"),
+            "items": [[i.get("entity", {}).get("id"), i.get("domain"),
+                       i.get("location"), i.get("affinity")]
+                      for i in plan.get("items") or []],
+        }
+        canonical = json.dumps(fingerprint, sort_keys=True,
+                               ensure_ascii=False,
+                               separators=(",", ":")).encode()
+        plan_hash = hashlib.sha256(canonical).hexdigest()[:24]
+        for location, day in days:
+            where = location or "Anywhere"
+            day_date = date.fromisoformat(day["date"])
+            next_day = day_date + timedelta(days=1)
+            uid_src = f"paced:{plan_hash}:{location}:{day['date']}"
+            uid = hashlib.sha256(uid_src.encode()).hexdigest()[:32]
+            desc = [f"Branch: {column['name']} "
+                    f"({'PASS' if verdict['passed'] else 'FAIL'} — "
+                    f"recomputed from this plan's sealed evidence)",
+                    _banner_lines(plan, verdict)[0], "",
+                    "Today's recommendations:"]
+            for ref in day["items"]:
+                head = _one_line(ref.get("name", "Untitled"))
+                if ref.get("affinity") is not None:
+                    head += f" (affinity {ref['affinity']:.2f})"
+                desc.append(f"- {head} [{ref.get('domain', '')}]")
+            lines += [
+                "BEGIN:VEVENT",
+                f"UID:{uid}@tastepilot-timeline",
+                f"DTSTAMP:{day_date.strftime('%Y%m%d')}T000000Z",
+                f"DTSTART;VALUE=DATE:{day_date.strftime('%Y%m%d')}",
+                f"DTEND;VALUE=DATE:{next_day.strftime('%Y%m%d')}",
+                "SUMMARY:" + _ics_escape(
+                    f"TastePilot [{column['name']}]: {where} · "
+                    f"{day['date']}"),
+                "DESCRIPTION:" + _ics_escape("\n".join(desc)),
+                "END:VEVENT",
+            ]
+            events += 1
+    if not events:
+        raise ValueError("no_dated_legs: no timeline column has a "
+                         "dated day with recommendations to put on "
+                         "a calendar")
+    lines.append("END:VCALENDAR")
+    folded: list[str] = []
+    for line in lines:
+        folded.extend(_ics_fold(line))
+    return "\r\n".join(folded) + "\r\n"
+
+
 MAX_MULTI_TIMELINES = 6
 
 
@@ -885,22 +989,25 @@ def export_multi_timeline_ics(timelines) -> tuple[str, bool, list[dict]]:
 
 _TIMELINE_RENDERERS = {"markdown": render_timeline_markdown,
                        "text": render_timeline_text,
-                       "ics": render_timeline_ics}
+                       "ics": render_timeline_ics,
+                       "ics-days": render_timeline_paced_ics}
 
 
 def export_timeline(base, branches, fmt: str) -> tuple[str, bool]:
-    """Render a branch timeline in *fmt* (markdown/text grids, or
-    ics: one event series per branch); returns (content,
-    all_passed) where all_passed is every column's recomputed
-    verdict. A tampered branch still renders, as a FAIL column
-    (markdown/text) or a NOT VERIFIED event series (ics) — never
-    clean. Raises ValueError with a category for an unsupported
-    format, a malformed base/branch (from branch_timeline), or
-    (ics) a timeline with no dated leg in any column."""
+    """Render a branch timeline in *fmt* (markdown/text grids, ics:
+    one event series per branch, or ics-days: one paced-day event
+    series per branch); returns (content, all_passed) where
+    all_passed is every column's recomputed verdict. A tampered
+    branch still renders, as a FAIL column (markdown/text) or a
+    NOT VERIFIED event series (ics / ics-days) — never clean.
+    Raises ValueError with a category for an unsupported format, a
+    malformed base/branch (from branch_timeline), or (ics /
+    ics-days) a timeline with no dated leg / dated day in any
+    column."""
     if fmt not in TIMELINE_FORMATS:
         raise ValueError(
             f"unsupported: timeline export format {fmt!r} "
-            f"(markdown, text or ics only)")
+            f"(markdown, text, ics or ics-days only)")
     doc = _timeline_doc(base, branches)
     content = _TIMELINE_RENDERERS[fmt](base, branches)
     return content, bool(doc["summary"]["all_passed"])

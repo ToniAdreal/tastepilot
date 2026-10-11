@@ -141,9 +141,11 @@ def main(argv: list[str] | None = None) -> int:
                    help="export a branch timeline instead of a single "
                         "plan: the --plan plan is the base and each "
                         "--branch names a branch plan file "
-                        "(repeatable, max 6; markdown|text|ics — ics "
-                        "emits one event series per branch and needs "
-                        "a dated leg); every column's verdict is "
+                        "(repeatable, max 6; markdown|text|ics|ics-days "
+                        "— ics emits one event series per branch and "
+                        "needs a dated leg, ics-days emits one paced "
+                        "event per dated day per branch and needs a "
+                        "dated day); every column's verdict is "
                         "recomputed")
     w = sub.add_parser("swap")
     w.add_argument("--plan", required=True,
