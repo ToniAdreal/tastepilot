@@ -72,6 +72,11 @@ the reason recorded (the demo never goes down because the LLM did).
    tampered copy → the banner reads `NOT VERIFIED`. iCalendar export
    of a dated multi-city plan yields one all-day event per leg;
    of a dateless plan → `400 no_dated_legs`.
+8. Handoff probe: generate a dated plan → each leg shows an
+   "Add this leg to Google Calendar" link (all-day, end date
+   exclusive) and every card shows an "open in Maps" link; a
+   dateless plan shows Maps links only — no calendar link is
+   ever rendered for a leg without dates.
 
 ## Notes
 

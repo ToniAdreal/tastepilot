@@ -628,7 +628,7 @@
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-10T23:09:49.299971+00:00",
+  "created_at": "2026-10-11T01:38:25.961959+00:00",
   "verdict": "PASS",
   "entries": [
    {
@@ -815,5 +815,42 @@
   "record_hash": "86cd4177c47309f488a51afcd4e9d16551460cad8d89b4b64d6d9dffe70a863a",
   "signature": "3b8940e2e0da46c53b41bdd3cde52d2e4cdfa4ce180d69076c341525744fbc56",
   "signing_key_is_default_dev_key": true
+ },
+ "handoffs": {
+  "legs": [
+   {
+    "location": null,
+    "start": null,
+    "end": null,
+    "calendar_url": null,
+    "maps_url": null
+   }
+  ],
+  "items": [
+   {
+    "name": "Aesop",
+    "domain": "brand",
+    "location": null,
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Aesop"
+   },
+   {
+    "name": "The Little Prince",
+    "domain": "book",
+    "location": null,
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=The+Little+Prince"
+   },
+   {
+    "name": "Fleetwood Mac",
+    "domain": "music",
+    "location": null,
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Fleetwood+Mac"
+   },
+   {
+    "name": "Midnight in Paris",
+    "domain": "film",
+    "location": null,
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Midnight+in+Paris"
+   }
+  ]
  }
 }

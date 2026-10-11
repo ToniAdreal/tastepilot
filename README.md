@@ -87,6 +87,15 @@ tastepilot/
                export carries a verification banner recomputed from
                the sealed record — a tampered plan exports as NOT
                VERIFIED, never clean; rendering is deterministic
+  handoff.py   native handoffs: one-tap links into the user's own
+               apps — a Google Calendar template URL per dated leg
+               (all-day, exclusive end; a dateless leg gets none —
+               no invented dates) and a Google Maps search URL per
+               leg and per recommendation; links are recomputed
+               from the plan's schedule + items on every surface,
+               never read back from a stored plan field; no account,
+               no credential, no network — the user's own browser
+               completes the action
   smoke.py     real-mode smoke check: one search + one insights call,
                payload-shape validation, both sealed + chain re-verified
   imports.py   external taste-file imports: Spotify playlist-export JSON,
@@ -337,6 +346,18 @@ baked into the image or the repo.
   VERIFIED banner and its violations — never a clean one — and the
   CLI mirrors the verify contract (unverified export still writes,
   exits 1).
+* A plan also hands off to the user's own apps in one tap: every
+  plan carries `handoffs` — per leg, a Google Calendar template
+  link (dated legs only; a dateless leg gets no calendar link
+  rather than an invented date) and a Google Maps link, plus a
+  Maps link per recommendation (its name qualified by its leg
+  location). The demo UI renders them (leg-level calendar/maps
+  links, a per-card "open in Maps" link), the CLI prints the leg
+  links, and Markdown/text exports carry a Handoffs section.
+  Links are recomputed from the plan's schedule and items wherever
+  they render — a `handoffs` field stored in a shared plan JSON is
+  never trusted — and opening one acts entirely in the user's own
+  browser/account: TastePilot signs in nowhere and sends nothing.
 
 ## Hackathon submission
 

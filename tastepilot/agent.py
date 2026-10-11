@@ -205,7 +205,7 @@ class TastePilotAgent:
             "fallback": sum(1 for i in admissible
                             if i["explanation"].get("fallback_from")),
         }
-        return {
+        plan = {
             "request": text,
             "scenario": parsed.scenario,
             "location": parsed.location,
@@ -235,3 +235,9 @@ class TastePilotAgent:
                                   for i in admissible]},
             "evidence": record,
         }
+        # Native handoffs (calendar/maps links) are recomputed from
+        # the plan's own schedule + items — see handoff.py. They are
+        # presentation only: never sealed, never checker inputs.
+        from .handoff import plan_handoffs
+        plan["handoffs"] = plan_handoffs(plan)
+        return plan

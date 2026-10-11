@@ -253,6 +253,14 @@ def main(argv: list[str] | None = None) -> int:
     for item in result["items"]:
         print(f"  [{item['domain']}] {item['entity']['name']} "
               f"(affinity {item['affinity']:.2f}) — {item['why']}")
+    for leg in (result.get("handoffs") or {}).get("legs", []):
+        where = leg.get("location") or "anywhere"
+        if leg.get("calendar_url"):
+            print(f"  handoff: add {where} leg to Google Calendar: "
+                  f"{leg['calendar_url']}")
+        if leg.get("maps_url"):
+            print(f"  handoff: open {where} in Google Maps: "
+                  f"{leg['maps_url']}")
     return 0 if result["checker"]["passed"] else 1
 
 

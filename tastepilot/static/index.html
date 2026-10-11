@@ -238,7 +238,7 @@ async function showEvidence(responseId) {
                                 : 'Error: ' + (data.error || res.status);
 }
 
-function card(item) {
+function card(item, mapsUrl) {
   const div = document.createElement('div');
   div.className = 'card';
   const v = item.verification || {};
@@ -246,7 +246,13 @@ function card(item) {
   div.innerHTML = `<strong></strong> <span class="badge"></span>
     <div class="why"></div>
     <div class="meta"></div>
-    <button type="button" class="evlink">view evidence record</button>`;
+    <button type="button" class="evlink">view evidence record</button>
+    <a class="mapslink" target="_blank" rel="noopener" hidden>open in Maps ↗</a>`;
+  if (mapsUrl) {
+    const a = div.querySelector('.mapslink');
+    a.href = mapsUrl;
+    a.hidden = false;
+  }
   div.querySelector('strong').textContent = item.entity.name;
   const badge = div.querySelector('.badge');
   badge.textContent = ok ? 'Qloo-traced ✓ · checker: ' + v.reason
@@ -330,14 +336,46 @@ document.getElementById('f').addEventListener('submit', async (e) => {
     ? ` · Travel warnings: ${data.travel_warnings.length}`
     : '';
   statusEl.textContent = `Scenario: ${data.scenario} · Seeds: ${data.seeds.join(', ')} · Mode: ${data.mode}${exSum}${listSum}${importSum}${timetableSum}${legsSum}${warnSum}${transferSum}${travelWarnSum} · Evidence chain valid: ${data.checker.chain_valid} · Checker passed: ${data.checker.passed}`;
+  const mapsByKey = {};
+  for (const hi of (data.handoffs && data.handoffs.items) || []) {
+    mapsByKey[hi.name + '|' + (hi.location || '')] = hi.maps_url;
+  }
   const renderGroups = (groups) => {
     for (const group of groups) {
       const h = document.createElement('h3');
       h.className = 'domain';
       h.textContent = group.domain;
       out.appendChild(h);
-      for (const item of group.items) out.appendChild(card(item));
+      for (const item of group.items) {
+        out.appendChild(card(item,
+          mapsByKey[item.entity.name + '|' + (item.location || '')]));
+      }
     }
+  };
+  const renderLegHandoffs = (location) => {
+    const leg = ((data.handoffs && data.handoffs.legs) || [])
+      .find(l => (l.location || null) === (location || null));
+    if (!leg || (!leg.calendar_url && !leg.maps_url)) return;
+    const div = document.createElement('div');
+    div.className = 'meta leghandoff';
+    if (leg.calendar_url) {
+      const a = document.createElement('a');
+      a.href = leg.calendar_url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = 'Add this leg to Google Calendar ↗';
+      div.appendChild(a);
+    }
+    if (leg.maps_url) {
+      if (leg.calendar_url) div.appendChild(document.createTextNode(' · '));
+      const a = document.createElement('a');
+      a.href = leg.maps_url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = 'Open in Google Maps ↗';
+      div.appendChild(a);
+    }
+    out.appendChild(div);
   };
   if (data.legs && data.legs.length > 1) {
     // Multi-city: one section per leg (mention order), each with its
@@ -347,8 +385,14 @@ document.getElementById('f').addEventListener('submit', async (e) => {
       h.className = 'leg';
       h.textContent = legLabel(leg);
       out.appendChild(h);
+      renderLegHandoffs(leg.location);
       renderGroups(leg.groups);
     }
+  } else if (data.legs && data.legs.length === 1) {
+    renderLegHandoffs(data.legs[0].location);
+    renderGroups(data.groups && data.groups.length
+      ? data.groups
+      : [{domain: 'plan', items: data.items}]);
   } else {
     renderGroups(data.groups && data.groups.length
       ? data.groups

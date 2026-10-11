@@ -639,7 +639,7 @@
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-10T23:09:49.329018+00:00",
+  "created_at": "2026-10-11T01:38:26.256608+00:00",
   "verdict": "PASS",
   "entries": [
    {
@@ -829,5 +829,42 @@
   "record_hash": "1579e7e7da7b8ebe809779267ecf33d0ce1fe703327861ee14e6c505f98136ae",
   "signature": "1004311a1944851f8050bb5cd82cf695acd8b9abcb9fe11f610fcd0e0e070a33",
   "signing_key_is_default_dev_key": true
+ },
+ "handoffs": {
+  "legs": [
+   {
+    "location": "New York",
+    "start": null,
+    "end": null,
+    "calendar_url": null,
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=New+York"
+   }
+  ],
+  "items": [
+   {
+    "name": "A basement jazz bar with natural wine",
+    "domain": "food",
+    "location": "New York",
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=A+basement+jazz+bar+with+natural+wine%2C+New+York"
+   },
+   {
+    "name": "West Village, New York",
+    "domain": "place",
+    "location": "New York",
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=West+Village%2C+New+York"
+   },
+   {
+    "name": "Nujabes",
+    "domain": "music",
+    "location": "New York",
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Nujabes%2C+New+York"
+   },
+   {
+    "name": "Lost in Translation",
+    "domain": "film",
+    "location": "New York",
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Lost+in+Translation%2C+New+York"
+   }
+  ]
  }
 }

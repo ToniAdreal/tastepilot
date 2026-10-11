@@ -160,6 +160,27 @@ def _provenance_lines(plan) -> list[str]:
     return lines
 
 
+def _handoff_lines(plan) -> list[tuple[str, str]]:
+    """(label, url) handoff links, recomputed from the plan itself
+    (handoff.plan_handoffs) — a ``handoffs`` field stored in the
+    plan JSON is never trusted or read back."""
+    from .handoff import plan_handoffs
+    handoffs = plan_handoffs(plan)
+    lines: list[tuple[str, str]] = []
+    for leg in handoffs["legs"]:
+        where = leg.get("location") or "Anywhere"
+        if leg.get("calendar_url"):
+            lines.append((f"Add the {where} leg to Google Calendar",
+                          leg["calendar_url"]))
+        if leg.get("maps_url"):
+            lines.append((f"Open {where} in Google Maps",
+                          leg["maps_url"]))
+    for item in handoffs["items"]:
+        lines.append((f"{item['name']} in Google Maps",
+                      item["maps_url"]))
+    return lines
+
+
 def _leg_sections(plan) -> list[tuple[str, list[tuple[str, list[dict]]]]]:
     """[(leg heading, [(domain, items), ...]), ...] in plan order.
 
@@ -227,6 +248,10 @@ def render_markdown(plan: dict) -> str:
         out += ["## Rejected by the evidence checker", ""]
         out += [f"- {r.get('name')} ({r.get('domain')}): {r.get('reason')}"
                 for r in rejected] + [""]
+    handoffs = _handoff_lines(plan)
+    if handoffs:
+        out += ["## Handoffs (your own calendar / maps)", ""]
+        out += [f"- [{label}]({url})" for label, url in handoffs] + [""]
     out += ["## Provenance", ""]
     out += [f"- {line}" for line in _provenance_lines(plan)]
     out += ["",
@@ -263,6 +288,10 @@ def render_text(plan: dict) -> str:
         out += ["Rejected by the evidence checker:"]
         out += [f"  * {r.get('name')} ({r.get('domain')}): "
                 f"{r.get('reason')}" for r in rejected] + [""]
+    handoffs = _handoff_lines(plan)
+    if handoffs:
+        out += ["Handoffs (your own calendar / maps):"]
+        out += [f"  {label}: {url}" for label, url in handoffs] + [""]
     out += ["Provenance:"]
     out += [f"  {line}" for line in _provenance_lines(plan)]
     out += ["", "Re-verify this plan with: python3 -m tastepilot "

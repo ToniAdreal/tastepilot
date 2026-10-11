@@ -1050,7 +1050,7 @@
  "evidence": {
   "tool": "tastepilot",
   "version": "0.1.0",
-  "created_at": "2026-10-10T23:09:49.281135+00:00",
+  "created_at": "2026-10-11T01:38:25.794132+00:00",
   "verdict": "PASS",
   "entries": [
    {
@@ -1347,5 +1347,60 @@
   "record_hash": "712a3f52fb73e7cfbd94a823e06ea0b0b7d8e9313a9a86d89959547141f89730",
   "signature": "b3519c51abf348fb74a10324680be8ee5cceaa3d4280f7d4a166b98b34ca531b",
   "signing_key_is_default_dev_key": true
+ },
+ "handoffs": {
+  "legs": [
+   {
+    "location": "Kyoto",
+    "start": null,
+    "end": null,
+    "calendar_url": null,
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Kyoto"
+   }
+  ],
+  "items": [
+   {
+    "name": "Kyoto",
+    "domain": "destination",
+    "location": "Kyoto",
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Kyoto"
+   },
+   {
+    "name": "Gion, Kyoto",
+    "domain": "place",
+    "location": "Kyoto",
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Gion%2C+Kyoto"
+   },
+   {
+    "name": "Arashiyama Bamboo Grove",
+    "domain": "place",
+    "location": "Kyoto",
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Arashiyama+Bamboo+Grove%2C+Kyoto"
+   },
+   {
+    "name": "A quiet ramen counter in Gion",
+    "domain": "food",
+    "location": "Kyoto",
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=A+quiet+ramen+counter+in+Gion%2C+Kyoto"
+   },
+   {
+    "name": "A lantern-lit izakaya in Pontocho Alley",
+    "domain": "food",
+    "location": "Kyoto",
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=A+lantern-lit+izakaya+in+Pontocho+Alley%2C+Kyoto"
+   },
+   {
+    "name": "Nujabes",
+    "domain": "music",
+    "location": "Kyoto",
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Nujabes%2C+Kyoto"
+   },
+   {
+    "name": "Lost in Translation",
+    "domain": "film",
+    "location": "Kyoto",
+    "maps_url": "https://www.google.com/maps/search/?api=1&query=Lost+in+Translation%2C+Kyoto"
+   }
+  ]
  }
 }
