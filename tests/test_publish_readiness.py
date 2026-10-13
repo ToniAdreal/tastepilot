@@ -66,8 +66,12 @@ def test_submission_draft_complete_and_truthful():
     assert "Toni Adreal" in doc
     assert "AI assistance" in doc
     # The draft must not claim results the build has not produced yet:
-    # real-mode and deployment facts stay in explicit FINALIZE slots.
-    assert doc.count("[FINALIZE:") >= 3
+    # unearned facts stay in explicit FINALIZE slots. The real-mode
+    # example and the test count were filled from the verified
+    # 2026-10-13 real-mode run; the two remaining slots are the repo
+    # URL (Oct 27) and the hosted demo URL (Oct 21-24), both still
+    # unearned at draft time.
+    assert doc.count("[FINALIZE:") >= 2
     assert KEY_ASSIGNMENT.search(doc) is None
 
 

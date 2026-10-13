@@ -69,6 +69,7 @@ from datetime import date as _date
 from datetime import timedelta
 
 from . import fixtures
+from .models import tag_names
 from .travel import assess_transfers
 
 CITIES = ["Kyoto", "New York", "NYC", "Paris", "Tokyo", "London",
@@ -493,7 +494,12 @@ def exclusion_match(item: dict, exclusions: list[str]) -> str | None:
     entity = item.get("entity") or {}
     name = (entity.get("name") or "").lower()
     short = name.split(" (")[0]
-    tags = {t.lower() for t in entity.get("tags") or []}
+    tags = {t.lower() for t in tag_names(entity.get("tags") or [])}
+    # Live tag names are phrases ("Jazz Club"), the mock graph's are
+    # single words ("jazz") — match against the tags' words too, so
+    # "no jazz" finds a "Jazz Club" tag exactly as it finds "jazz".
+    tag_words = {w for t in tags
+                 for w in re.split(r"[^a-z0-9]+", t) if w}
     name_words = {w for w in re.split(r"[^a-z0-9]+", name) if w}
     domain = (item.get("domain") or "").lower()
 
@@ -511,7 +517,8 @@ def exclusion_match(item: dict, exclusions: list[str]) -> str | None:
         for word in phrase.split():
             if len(word) < 3:
                 continue
-            if any(v in tags or v in name_words for v in variants(word)):
+            if any(v in tags or v in tag_words or v in name_words
+                   for v in variants(word)):
                 return phrase
     return None
 

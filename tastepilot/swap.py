@@ -99,6 +99,7 @@ import json
 
 from . import checker
 from .evidence import EvidenceLog, verify_chain
+from .models import tag_names
 
 
 def _canonical(obj) -> str:
@@ -741,8 +742,8 @@ def _tags_of(item: dict) -> set:
     """Every taste tag an item carries: its entity tags plus the
     tags it shares with the seeds that produced it."""
     entity = item.get("entity") or {}
-    tags = set(entity.get("tags") or [])
-    tags.update(item.get("shared_tags") or [])
+    tags = set(tag_names(entity.get("tags") or []))
+    tags.update(tag_names(item.get("shared_tags") or []))
     return tags
 
 

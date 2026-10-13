@@ -25,7 +25,8 @@ import urllib.request
 from pathlib import Path
 
 from . import fixtures
-from .models import DOMAIN_URNS, URN_DOMAINS, Entity, QlooResponse, ScoredEntity
+from .models import (DOMAIN_URNS, URN_DOMAINS, Entity, QlooResponse,
+                     ScoredEntity, tag_names)
 
 HACKATHON_BASE = "https://hackathon.api.qloo.com"
 
@@ -259,7 +260,8 @@ class RealQlooClient:
                                 or (raw_name or "")),
                          name=name,
                          domain=domain,
-                         tags=tuple(merged.get("tags") or props.get("tags") or ()),
+                         tags=tuple(tag_names(
+                             merged.get("tags") or props.get("tags") or ())),
                          location=props.get("location") or merged.get("location"))
             out.append(ScoredEntity(ent, cls._affinity(merged)))
         return out

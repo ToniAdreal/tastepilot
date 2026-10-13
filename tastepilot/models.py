@@ -17,6 +17,37 @@ DOMAIN_URNS: dict[str, str] = {
 URN_DOMAINS: dict[str, str] = {v: k for k, v in DOMAIN_URNS.items()}
 
 
+def tag_name(tag) -> str | None:
+    """Display name of one tag, in either wire shape.
+
+    The internal contract (``Entity.tags``) is plain strings, and the
+    mock graph complies — but the live Qloo API returns tag *objects*
+    (``{"id": ..., "name": ..., "type": ...}``). Anything that is
+    neither a string nor a tag object yields None, so callers drop it
+    instead of crashing on it (found by the 2026-10-13 real-mode run:
+    dict tags crashed ``exclusion_match`` with AttributeError and
+    would have crashed ``swap._tags_of`` with an unhashable-type
+    TypeError — every real-mode plan with an exclusion failed)."""
+    if isinstance(tag, str):
+        return tag
+    if isinstance(tag, dict):
+        for key in ("name", "id", "tag_id"):
+            value = tag.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return None
+
+
+def tag_names(tags) -> list[str]:
+    """The display names of a tag list in either wire shape."""
+    out: list[str] = []
+    for tag in tags or []:
+        name = tag_name(tag)
+        if name is not None:
+            out.append(name)
+    return out
+
+
 @dataclass(frozen=True)
 class Entity:
     id: str

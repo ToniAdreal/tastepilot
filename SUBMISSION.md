@@ -446,8 +446,22 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    manifest hashes and recomputing the packed plan's verdict
    rather than trusting the report packed inside it.
 
-**[FINALIZE: one real-mode example — a plan produced against the live
-Qloo API, with its item count and checker verdict.]**
+**Real mode, verified live (2026-10-13):** against the live Qloo
+hackathon API, "a slow weekend in Kyoto, I love Spirited Away and
+Kind of Blue" produced 9 recommendations (Kyoto as destination;
+ROCK BAR CRUNCH and Mount Kurama as places and food; Brian Wilson
+and Tom Waits for music; Kiki's Delivery Service and My Neighbor
+Totoro for film) plus 8 checker-verified alternatives —
+checker PASS, evidence chain valid, and the saved plan re-verified
+offline with `tastepilot verify`. All seven catalogue examples were
+run end-to-end in real mode the same day (8–19 recommendations each,
+every one checker PASS with a valid chain), including the exclusion
+example, where "no jazz" removed Björk on the live graph's own
+tagging while she kept her passing verification. One honest caveat
+the live run surfaced: the hackathon API returns no per-entity
+affinity score, so real-mode items carry a neutral 0.5 affinity and
+within-domain order is the API's own — the evidence invariant (every
+item traced to a sealed live response) holds unchanged.
 
 ## How we built it
 
@@ -499,7 +513,7 @@ script judges follow is verified, not aspirational.
   `tastepilot verify` re-checks a saved plan against its sealed evidence
   record, and editing any affinity in the file makes verification fail —
   tamper-evidence you can try yourself in the repo samples.
-- **[FINALIZE: test count at submission]** automated tests, all green in
+- **787** automated tests, all green in
   mock mode, covering the mock and real clients, the evidence chain
   (including tamper cases), the checker, the smoke ritual, the hardened
   server, and end-to-end agent runs.

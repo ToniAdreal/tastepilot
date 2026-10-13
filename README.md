@@ -308,6 +308,16 @@ tolerates the API's payload envelopes (flat or nested entity rows,
 `properties` fields, string or missing affinities) without masking
 genuine shape drift, which the smoke check still flags field by field.
 
+Live payload shape (verified 2026-10-13, the first full real-mode run):
+insights rows carry **no affinity/score field** — only a global
+`popularity` — so real-mode items carry the parser's neutral 0.5
+affinity fallback and within-domain order is the API's own; popularity
+is never relabelled as taste affinity. Live tag fields are tag
+*objects* (`{id, name, type}`); they are normalised to their names at
+parse time, restoring the internal string-tag contract. All seven
+catalogue examples run end-to-end in real mode with checker PASS and
+a valid evidence chain (see SUBMISSION.md).
+
 ## Hosted demo
 
 The demo deploys as a single dependency-free process — see
