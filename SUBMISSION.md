@@ -129,7 +129,11 @@ gift shortlist for someone who loves Amélie"*. TastePilot:
    are worth exploring: guided branch suggestions rank every
    verified primary/alternative pair by affinity delta and
    taste coverage (tags the alternative would add that no
-   primary carries), and propose the top single swaps plus a
+   primary carries) — with both non-affinity score components
+   bounded so the ranking stays on the affinity scale against
+   the live graph's hundred-plus keyword tags per entity: the
+   coverage bonus saturates at five tags and the learned
+   adjustment below clamps to ±0.30 per candidate — and propose the top single swaps plus a
    combined guided-tour branch picking the best swap in each
    domain — as branch specs the explorer accepts unchanged,
    with a score and rationale per suggestion. Suggestions

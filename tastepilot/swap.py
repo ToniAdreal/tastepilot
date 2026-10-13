@@ -553,6 +553,22 @@ def explore_branches(plan: dict, branches: list) -> dict:
 
 MAX_SUGGESTIONS = MAX_BRANCHES  # a suggestion list is a branch spec
 COVERAGE_BONUS = 0.05           # score points per newly covered tag
+COVERAGE_GAIN_CAP = 5           # tags counted toward the coverage
+                                # bonus (max +0.25): the live Qloo
+                                # graph returns 100+ keyword tags per
+                                # entity, so an uncapped per-tag bonus
+                                # (0.05 x 237 = +11.85 on the 2026-10-13
+                                # real-mode run) drowned the affinity
+                                # signal the score exists to rank by;
+                                # coverage_gain still reports the
+                                # raw count, only the bonus saturates
+LEARNED_ADJUSTMENT_CAP = 0.30   # |learned adjustment| ceiling per
+                                # candidate: per-tag weights cap at
+                                # +-0.12, but a live-graph alternative
+                                # can match 100+ weighted tags, so the
+                                # sum is clamped to the affinity scale
+RATIONALE_TAG_LIMIT = 5         # tags named in a rationale before
+                                # the rest collapse to "+N more"
 
 MAX_HISTORY_PLANS = 4           # extra plans learned from per suggest
 LEARN_TAG_STEP = 0.04           # weight per kept (or undone) swap tag
@@ -729,13 +745,30 @@ def _learned_adjustment(alternative: dict, domain,
                         profile: dict) -> tuple[float, list]:
     """The learned score adjustment for one candidate: the sum of
     the profile's weights over the alternative's tags, plus its
-    domain weight. Returns (adjustment, matched_tags sorted)."""
+    domain weight, clamped to +-LEARNED_ADJUSTMENT_CAP so a
+    many-tagged live-graph alternative cannot turn a per-tag
+    weight into an unbounded score component. Returns
+    (adjustment, matched_tags sorted) — the matched tags are
+    reported in full; only the summed adjustment is clamped."""
     tags = _tags_of(alternative)
     matched = sorted(t for t in tags
                      if profile["tag_weights"].get(t))
     adjustment = sum(profile["tag_weights"][t] for t in matched) \
         + profile["domain_weights"].get(domain, 0.0)
+    adjustment = max(-LEARNED_ADJUSTMENT_CAP,
+                     min(LEARNED_ADJUSTMENT_CAP, adjustment))
     return round(adjustment, 6), matched
+
+
+def _tag_list(tags: list) -> str:
+    """Tags named for a rationale: the first RATIONALE_TAG_LIMIT,
+    then "+N more" — a live-graph rationale that listed every
+    new tag would run to hundreds of names."""
+    named = ", ".join(tags[:RATIONALE_TAG_LIMIT])
+    rest = len(tags) - RATIONALE_TAG_LIMIT
+    if rest > 0:
+        named += f", +{rest} more"
+    return named
 
 
 def _tags_of(item: dict) -> set:
@@ -771,22 +804,28 @@ def _candidate(primary: dict, alternative: dict,
     """Ranking metrics for one swappable pair.
 
     score = alternative_affinity + affinity_delta
-            + COVERAGE_BONUS * coverage_gain + learned_adjustment,
+            + coverage_bonus + learned_adjustment,
     where the delta is alternative minus primary (negative is a
     loss the score charges in full), coverage_gain counts the
     tags the alternative carries that no primary item in the plan
-    carries — the taste coverage the swap would add — and the
+    carries — the taste coverage the swap would add — and
+    coverage_bonus is COVERAGE_BONUS per newly covered tag,
+    saturating at COVERAGE_GAIN_CAP tags so the bonus stays a
+    tie-breaker on the affinity scale even when the live taste
+    graph returns hundreds of keyword tags per entity. The
     learned adjustment (learn_preferences over the user's past
-    swap choices) is exactly zero when there is no history."""
+    swap choices, itself clamped to +-LEARNED_ADJUSTMENT_CAP)
+    is exactly zero when there is no history."""
     profile = profile or {"tag_weights": {}, "domain_weights": {}}
     p_aff = float(primary.get("affinity") or 0)
     a_aff = float(alternative.get("affinity") or 0)
     delta = round(a_aff - p_aff, 6)
     new_tags = sorted(_tags_of(alternative) - plan_tags)
+    coverage_bonus = round(
+        COVERAGE_BONUS * min(len(new_tags), COVERAGE_GAIN_CAP), 6)
     adjustment, learned_tags = _learned_adjustment(
         alternative, primary.get("domain"), profile)
-    score = round(a_aff + delta + COVERAGE_BONUS * len(new_tags)
-                  + adjustment, 6)
+    score = round(a_aff + delta + coverage_bonus + adjustment, 6)
     return {
         "primary": (primary.get("entity") or {}).get("name"),
         "alternative": (alternative.get("entity") or {}).get("name"),
@@ -796,6 +835,7 @@ def _candidate(primary: dict, alternative: dict,
         "alternative_affinity": a_aff,
         "affinity_delta": delta,
         "coverage_gain": len(new_tags),
+        "coverage_bonus": coverage_bonus,
         "new_tags": new_tags,
         "learned_adjustment": adjustment,
         "learned_tags": learned_tags,
@@ -818,7 +858,12 @@ def suggest_branches(plan: dict, limit: int = 5,
     is the top single-swap branches (at most ``limit``, reserving
     one slot for the combined branch when it exists), each with
     its score, delta, coverage, new tags, the learned adjustment
-    folded into its score, and a plain-language rationale; the
+    folded into its score, and a plain-language rationale; both
+    non-affinity score components are bounded (the coverage
+    bonus saturates at COVERAGE_GAIN_CAP tags and the learned
+    adjustment clamps to +-LEARNED_ADJUSTMENT_CAP) so rankings
+    stay on the affinity scale on the live taste graph, whose
+    entities carry hundreds of keyword tags; the
     combined "Guided tour" branch — the best-scoring swap in
     each (domain, leg) group, applied together — is appended
     when at least two groups offer a swap. ``branches`` is the
@@ -914,13 +959,13 @@ def suggest_branches(plan: dict, limit: int = 5,
             f"({cand['alternative_affinity']:.2f}) in "
             f"{cand['domain']}: affinity delta "
             f"{cand['affinity_delta']:+.2f}"
-            + (f", adds taste coverage: {', '.join(cand['new_tags'])}"
+            + (f", adds taste coverage: {_tag_list(cand['new_tags'])}"
                if cand["new_tags"] else
                ", no new taste tags")
             + (f"; learned from your past swaps: "
                f"{cand['learned_adjustment']:+.2f}"
                + (f" (tags you kept choosing: "
-                  f"{', '.join(cand['learned_tags'])})"
+                  f"{_tag_list(cand['learned_tags'])})"
                   if cand["learned_tags"] else "")
                if cand["learned_adjustment"] else ""))
         suggestions.append({
@@ -963,7 +1008,7 @@ def suggest_branches(plan: dict, limit: int = 5,
                 f"{len(tour)} domain(s) together "
                 f"({', '.join(c['domain'] for c in tour)}): total "
                 f"affinity delta {total_delta:+.2f}"
-                + (f", adds taste coverage: {', '.join(tour_tags)}"
+                + (f", adds taste coverage: {_tag_list(tour_tags)}"
                    if tour_tags else ", no new taste tags")),
         })
     branches = [{"name": s["name"], "swaps": s["swaps"]}

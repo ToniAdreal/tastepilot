@@ -580,7 +580,13 @@ baked into the image or the repo.
   affinity plus its affinity delta against the primary (a loss
   is charged in full) plus a small bonus per taste tag the
   alternative would introduce that no primary item carries
-  (taste coverage). The output is the top single-swap branches
+  (taste coverage). Both non-affinity components are bounded
+  so the ranking stays on the affinity scale on the live taste
+  graph, whose entities carry hundreds of keyword tags: the
+  coverage bonus saturates at five newly covered tags (at most
+  +0.25 — the raw coverage count is still reported in full),
+  and the learned adjustment below clamps to ±0.30 per
+  candidate. The output is the top single-swap branches
   plus, when at least two domains offer a swap, a combined
   "Guided tour: best swap in each domain" branch — each with
   its score, delta, new tags, and a plain-language rationale —
