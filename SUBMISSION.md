@@ -517,7 +517,7 @@ script judges follow is verified, not aspirational.
   `tastepilot verify` re-checks a saved plan against its sealed evidence
   record, and editing any affinity in the file makes verification fail —
   tamper-evidence you can try yourself in the repo samples.
-- **787** automated tests, all green in
+- **794** automated tests, all green in
   mock mode, covering the mock and real clients, the evidence chain
   (including tamper cases), the checker, the smoke ritual, the hardened
   server, and end-to-end agent runs.
