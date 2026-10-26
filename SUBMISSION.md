@@ -616,6 +616,6 @@ stops being a liability and becomes pure upside.
 
 ## Links
 
-- Public repo: **[FINALIZE: repo URL — created Oct 27]**
+- Public repo: https://github.com/ToniAdreal/tastepilot (created Oct 26 by the main agent, one day ahead of plan, to unblock the hosted-demo deployment; HEAD 3a678ae)
 - Hosted demo: **[FINALIZE: demo URL — deployed Oct 21–24 window]**
 - License: MIT
