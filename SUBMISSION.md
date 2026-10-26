@@ -617,5 +617,5 @@ stops being a liability and becomes pure upside.
 ## Links
 
 - Public repo: https://github.com/ToniAdreal/tastepilot (created Oct 26 by the main agent, one day ahead of plan, to unblock the hosted-demo deployment; HEAD 3a678ae)
-- Hosted demo: **[FINALIZE: demo URL — deployed Oct 21–24 window]**
+- Hosted demo: https://tastepilot.onrender.com (Render free web service, Docker, deployed Oct 26 by the main agent from the public repo; /api/health verified {"ok": true, "mode": "mock"} by the browser deploy task and independently by the main agent. Free tier spins down when idle — first load may take ~50s to wake.)
 - License: MIT
